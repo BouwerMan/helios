@@ -1,5 +1,5 @@
 CC = ~/opt/cross/bin/i686-elf-gcc
-CCFLAGS = -Wall -Wextra -std=c17 -O2 -ffreestanding
+CCFLAGS = -Wall -Wextra -std=gnu99 -O2 -ffreestanding
 
 AS = ~/opt/cross/bin/i686-elf-as
 ASFLAGS = 
