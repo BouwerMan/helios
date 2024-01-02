@@ -82,24 +82,46 @@ void terminal_setcolor(uint8_t color)
 
 void terminal_putentryat(char c, uint8_t color, size_t x, size_t y)
 {
-    const size_t index = y * VGA_WIDTH + x;
+    const size_t index = y * VGA_WIDTH + x; // position = (y_position * characters_per_line) + x_position
     terminal_buffer[index] = vga_entry(c, color);
 }
 
 void terminal_putchar(char c)
 {
-    if (c == '\n')
+    switch (c)
     {
+    case '\n':
         terminal_row++;
         terminal_column = 0;
-        return;
+        break;
+    default:
+        terminal_putentryat(c, terminal_color, terminal_column, terminal_row);
+        terminal_column++;
     }
-    terminal_putentryat(c, terminal_color, terminal_column, terminal_row);
-    if (++terminal_column == VGA_WIDTH)
+    // Handle overflowing on right side
+    if (terminal_column >= VGA_WIDTH)
     {
         terminal_column = 0;
-        if (++terminal_row == VGA_HEIGHT)
-            terminal_row = 0;
+        terminal_row++;
+    }
+
+    size_t i, j;
+    if (terminal_row >= VGA_HEIGHT)
+    {
+        for (i = 0; i < VGA_WIDTH; i++)
+        {
+            for (j = 0; j < VGA_HEIGHT; j++)
+            {
+                terminal_buffer[j * VGA_WIDTH + i] = terminal_buffer[(j + 1) * VGA_WIDTH + i];
+            }
+        }
+        // Also clear out the bottom row
+        for (i = 0; i < VGA_WIDTH; i++)
+        {
+            terminal_putentryat(' ', terminal_color, i, VGA_HEIGHT - 1);
+        }
+
+        terminal_row = VGA_HEIGHT - 1;
     }
 }
 
@@ -121,4 +143,12 @@ void kernel_main(void)
 
     /* Newline support is left as an exercise. */
     terminal_writestring("Hello, kernel World!\nNewline Test\n");
+    for (size_t i = 0; i < VGA_HEIGHT - 2; i++)
+    {
+        char test[3];
+        test[0] = i + '0';
+        test[1] = '\n';
+        test[2] = '\0';
+        terminal_writestring(test);
+    }
 }

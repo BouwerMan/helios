@@ -1,11 +1,30 @@
-PREFIX="$(HOME)/opt/cross"
-TARGET=i686-elf
-export PATH := "$(PREFIX)/bin:$(PATH)"
-export PATH := "$(HOME)/opt/cross/bin:$(PATH)"
+CC = ~/opt/cross/bin/i686-elf-gcc
+CCFLAGS = -Wall -Wextra -std=c17 -O2 -ffreestanding
 
-CC=$(PREFIX)/bin/$(TARGET)-gcc
+AS = ~/opt/cross/bin/i686-elf-as
+ASFLAGS = 
 
-CFLAGS := -std=c17 -ffreestanding -O2 -Wall -Wextra
+LD = ~/opt/cross/bin/i686-elf-ld
+LDFLAGS = -m elf_i386 -T linker.ld
 
-all:
-	$(CC) $(CFLAGS) src/kernel.c -o build/kernel.o
+BOOTFILE = bin/boot.o
+KERNELFILE = bin/kernel.o
+OBJ = $(BOOTFILE) $(KERNELFILE)
+OSFILE = bin/osdev.bin
+
+VM = qemu-system-x86_64
+VMFLAGS = -kernel $(OSFILE)
+
+all: build run
+
+build:
+	mkdir -p bin
+	$(AS) $(ASFLAGS) boot/boot.s -o $(BOOTFILE)
+	$(CC) $(CCFLAGS) -c src/kernel.c -o $(KERNELFILE)
+	$(LD) $(LDFLAGS) -o $(OSFILE) $(OBJ)
+
+run:
+	$(VM) $(VMFLAGS)
+
+clean:
+	rm -rf bin
