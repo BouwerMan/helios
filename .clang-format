@@ -2,7 +2,7 @@
 BasedOnStyle: WebKit
 AccessModifierOffset: '-4'
 AllowShortIfStatementsOnASingleLine: WithoutElse
-BreakBeforeBraces: Allman
+BreakBeforeBraces: Linux
 IndentWidth: '4'
 KeepEmptyLinesAtTheStartOfBlocks: 'true'
 Language: Cpp

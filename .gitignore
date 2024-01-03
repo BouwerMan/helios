@@ -1,6 +1,8 @@
 build/
 isodir/
 bin/
+sysroot/
+*.iso
 
 # Prerequisites
 *.d
