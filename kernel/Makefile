@@ -7,7 +7,7 @@ CPPFLAGS?=
 LDFLAGS?=
 LIBS?=
 
-BUILDDIR=../build
+BUILDDIR=build
 
 DESTDIR?=
 PREFIX?=/usr/local
@@ -31,7 +31,7 @@ LIBS:=$(LIBS) $(KERNEL_ARCH_LIBS)
 
 KERNEL_OBJS=\
 $(KERNEL_ARCH_OBJS) \
-kernel/kernel.o \
+$(BUILDDIR)/kernel/kernel.o \
 
 OBJS=\
 $(KERNEL_OBJS) \
@@ -50,27 +50,28 @@ $(LIBS) \
 #$(ARCHDIR)/crtn.o \
 
 .PHONY: all clean install install-headers install-kernel
-.SUFFIXES: .o .c .S
+.SUFFIXES: .o .c .s
 
 all: myos.kernel
 
 myos.kernel: $(OBJS) $(ARCHDIR)/linker.ld
-	$(CC) -T $(ARCHDIR)/linker.ld -o $@ $(CFLAGS) $(LINK_LIST)
-	grub-file --is-x86-multiboot myos.kernel
+	$(CC) -T $(ARCHDIR)/linker.ld -o $(BUILDDIR)/$@ $(CFLAGS) $(LINK_LIST)
+	grub-file --is-x86-multiboot $(BUILDDIR)/myos.kernel
 
 $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 	OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
 
-.c.o:
+$(BUILDDIR)/%.o: %.c
+	@mkdir -p $(@D)
 	$(CC) -MD -c $< -o $@ -std=gnu11 $(CFLAGS) $(CPPFLAGS)
 
-.S.o:
+#.S.o:
+$(BUILDDIR)/%.o: %.s
+	@mkdir -p $(@D)
 	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
 
 clean:
-	rm -f myos.kernel
-	rm -f $(OBJS) *.o */*.o */*/*.o
-	rm -f $(OBJS:.o=.d) *.d */*.d */*/*.d
+	rm -rvf $(BUILDDIR)
 
 install: install-headers install-kernel
 
@@ -80,6 +81,6 @@ install-headers:
 
 install-kernel: myos.kernel
 	mkdir -p $(DESTDIR)$(BOOTDIR)
-	cp myos.kernel $(DESTDIR)$(BOOTDIR)
+	cp $(BUILDDIR)/myos.kernel $(DESTDIR)$(BOOTDIR)
 
 -include $(OBJS:.o=.d)
