@@ -7,6 +7,7 @@ CPPFLAGS?=
 LDFLAGS?=
 LIBS?=
 
+OSNAME?=myos
 BUILDDIR=build
 
 DESTDIR?=
@@ -52,11 +53,11 @@ $(LIBS) \
 .PHONY: all clean install install-headers install-kernel
 .SUFFIXES: .o .c .s .asm
 
-all: myos.kernel
+all: $(OSNAME).kernel
 
-myos.kernel: $(OBJS) $(ARCHDIR)/linker.ld
+$(OSNAME).kernel: $(OBJS) $(ARCHDIR)/linker.ld
 	$(CC) -T $(ARCHDIR)/linker.ld -o $(BUILDDIR)/$@ $(CFLAGS) $(LINK_LIST)
-	grub-file --is-x86-multiboot $(BUILDDIR)/myos.kernel
+	grub-file --is-x86-multiboot $(BUILDDIR)/$(OSNAME).kernel
 
 $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 	OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
@@ -82,8 +83,8 @@ install-headers:
 	mkdir -p $(DESTDIR)$(INCLUDEDIR)
 	cp -R --preserve=timestamps include/. $(DESTDIR)$(INCLUDEDIR)/.
 
-install-kernel: myos.kernel
+install-kernel: $(OSNAME).kernel
 	mkdir -p $(DESTDIR)$(BOOTDIR)
-	cp $(BUILDDIR)/myos.kernel $(DESTDIR)$(BOOTDIR)
+	cp $(BUILDDIR)/$(OSNAME).kernel $(DESTDIR)$(BOOTDIR)
 
 -include $(OBJS:.o=.d)

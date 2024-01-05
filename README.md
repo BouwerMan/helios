@@ -1,7 +1,7 @@
 
-# osdev
+# HELIOS
 
-Development of my own os. Hope this goes somewhere
+Development of my own os. Hope this goes somewhere.
 
 ## Cross Compiler
 
