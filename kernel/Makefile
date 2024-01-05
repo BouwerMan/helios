@@ -50,7 +50,7 @@ $(LIBS) \
 #$(ARCHDIR)/crtn.o \
 
 .PHONY: all clean install install-headers install-kernel
-.SUFFIXES: .o .c .s
+.SUFFIXES: .o .c .s .asm
 
 all: myos.kernel
 
@@ -65,10 +65,13 @@ $(BUILDDIR)/%.o: %.c
 	@mkdir -p $(@D)
 	$(CC) -MD -c $< -o $@ -std=gnu11 $(CFLAGS) $(CPPFLAGS)
 
-#.S.o:
 $(BUILDDIR)/%.o: %.s
 	@mkdir -p $(@D)
 	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
+
+$(BUILDDIR)/%.o: %.asm
+	@mkdir -p $(@D)
+	nasm -felf32 $< -o $@
 
 clean:
 	rm -rvf $(BUILDDIR)

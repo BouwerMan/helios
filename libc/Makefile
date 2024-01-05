@@ -54,7 +54,7 @@ LIBK_OBJS=$(FREEOBJS:.o=.libk.o)
 BINARIES=libk.a
 
 .PHONY: all clean install install-headers install-libs
-.SUFFIXES: .o .libk.o .c .S
+.SUFFIXES: .o .libk.o .c .S .asm
 
 all: $(BINARIES)
 
@@ -69,6 +69,10 @@ $(BUILDDIR)/%.o: %.c
 
 .c.S:
 	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
+
+$(BUILDDIR)/%.o: %.asm
+	@mkdir -p $(@D)
+	nasm -felf32 $< -o $@
 
 $(BUILDDIR)/%.libk.o: %.c
 	@mkdir -p $(@D)
