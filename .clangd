@@ -1,0 +1,5 @@
+CompileFlags:
+  Add:
+    - "-isystem/home/dylan/code/osdev/kernel/include"
+    - "-isystem/home/dylan/code/osdev/libc/include"
+    - "-nostdlibinc"
