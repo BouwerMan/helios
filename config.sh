@@ -1,6 +1,10 @@
 SYSTEM_HEADER_PROJECTS="libc kernel"
 PROJECTS="libc kernel"
 
+export PREFIX="$HOME/opt/cross"
+export TARGET=i686-elf
+export PATH="$PREFIX/bin:$PATH"
+
 export OSNAME='HELIOS'
 
 export MAKE=${MAKE:-make}

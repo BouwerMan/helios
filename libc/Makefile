@@ -32,6 +32,7 @@ LIBK_CPPFLAGS:=$(LIBK_CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS)
 FREEOBJS=\
 $(ARCH_FREEOBJS) \
 $(BUILDDIR)/string/strlen.o \
+$(BUILDDIR)/string/memset.o \
 #stdio/printf.o \
 #stdio/putchar.o \
 #stdio/puts.o \
@@ -39,7 +40,6 @@ $(BUILDDIR)/string/strlen.o \
 #string/memcmp.o \
 #string/memcpy.o \
 #string/memmove.o \
-#string/memset.o \
 
 HOSTEDOBJS=\
 $(ARCH_HOSTEDOBJS) \

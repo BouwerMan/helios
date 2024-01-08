@@ -1,5 +1,6 @@
 #include <gdt.h>
-#include <stddef.h>
+#include <idt.h>
+#include <isr.h>
 #include <sys.h>
 #include <tty.h>
 
@@ -21,4 +22,15 @@ void kernel_main(void)
 
     gdt_init();
     terminal_writestring("GPT initialized(?)\n");
+
+    idt_init();
+    terminal_writestring("IDT initialized(?)\n");
+
+    isr_init();
+    terminal_writestring("ISRs initialized(?)\n");
+
+    // Test for ISRs
+    // Creates an invalid opcode exception when -O2 is set?
+    int test = 10 / 0;
+    terminal_writestring((char*)test);
 }

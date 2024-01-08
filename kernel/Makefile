@@ -34,6 +34,8 @@ KERNEL_OBJS=\
 $(KERNEL_ARCH_OBJS) \
 $(BUILDDIR)/kernel.o \
 $(BUILDDIR)/gdt.o \
+$(BUILDDIR)/idt.o \
+$(BUILDDIR)/isr.o \
 
 OBJS=\
 $(KERNEL_OBJS) \
