@@ -32,7 +32,8 @@ LIBS:=$(LIBS) $(KERNEL_ARCH_LIBS)
 
 KERNEL_OBJS=\
 $(KERNEL_ARCH_OBJS) \
-$(BUILDDIR)/kernel/kernel.o \
+$(BUILDDIR)/kernel.o \
+$(BUILDDIR)/gdt.o \
 
 OBJS=\
 $(KERNEL_OBJS) \

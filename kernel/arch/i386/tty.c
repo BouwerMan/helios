@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <kernel/tty.h>
+#include <tty.h>
 
 #include "vga.h"
 
