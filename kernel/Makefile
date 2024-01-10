@@ -36,6 +36,8 @@ $(BUILDDIR)/kernel.o \
 $(BUILDDIR)/gdt.o \
 $(BUILDDIR)/idt.o \
 $(BUILDDIR)/isr.o \
+$(BUILDDIR)/irq.o \
+$(BUILDDIR)/timer.o \
 
 OBJS=\
 $(KERNEL_OBJS) \

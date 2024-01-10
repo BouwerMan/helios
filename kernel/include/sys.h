@@ -3,7 +3,7 @@
 
 /* Types */
 // #define NULL ((void*)0UL)
-// typedef unsigned long uintptr_t;
+typedef unsigned long uintptr_t;
 // typedef long size_t;
 // typedef unsigned int uint32_t;
 

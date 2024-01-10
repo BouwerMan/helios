@@ -1,5 +1,5 @@
 // TODO: Should this be only in x86_64 arch?
-#include <idt.h>
+#include <interrupts.h>
 #include <string.h>
 
 /* Declare an IDT of 256 entries. Although we will only use the
@@ -18,26 +18,26 @@ extern void idt_load();
  *  than twiddling with the GDT ;) */
 void idt_set_gate(unsigned char index, unsigned long base, unsigned short sel, unsigned char flags)
 {
-    idt[index].base_lo = (base & 0xFFFF);
-    idt[index].base_hi = (base >> 16) & 0xFFFF;
+        idt[index].base_lo = (base & 0xFFFF);
+        idt[index].base_hi = (base >> 16) & 0xFFFF;
 
-    idt[index].sel = sel;
-    idt[index].flags = flags;
-    idt[index].always0 = 0;
+        idt[index].sel = sel;
+        idt[index].flags = flags;
+        idt[index].always0 = 0;
 }
 
 /* Installs the IDT */
 void idt_init()
 {
-    /* Sets the special IDT pointer up, just like in 'gdt.c' */
-    idtp.limit = (sizeof(struct idt_entry) * 256) - 1;
-    idtp.base = (unsigned int)&idt;
+        /* Sets the special IDT pointer up, just like in 'gdt.c' */
+        idtp.limit = (sizeof(struct idt_entry) * 256) - 1;
+        idtp.base = (unsigned int)&idt;
 
-    /* Clear out the entire IDT, initializing it to zeros */
-    memset(&idt, 0, sizeof(struct idt_entry) * 256);
+        /* Clear out the entire IDT, initializing it to zeros */
+        memset((unsigned char*)&idt, 0, sizeof(struct idt_entry) * 256);
 
-    /* Add any new ISRs to the IDT here using idt_set_gate */
+        /* Add any new ISRs to the IDT here using idt_set_gate */
 
-    /* Points the processor's internal register to the new IDT */
-    idt_load();
+        /* Points the processor's internal register to the new IDT */
+        idt_load();
 }

@@ -3,10 +3,10 @@ BasedOnStyle: WebKit
 AccessModifierOffset: '-4'
 AllowShortIfStatementsOnASingleLine: WithoutElse
 BreakBeforeBraces: Linux
-IndentWidth: '4'
+IndentWidth: '8'
 KeepEmptyLinesAtTheStartOfBlocks: 'true'
 Language: Cpp
-TabWidth: '4'
+TabWidth: '8'
 UseTab: Never
 
 ...
