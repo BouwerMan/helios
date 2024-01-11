@@ -33,10 +33,10 @@ FREEOBJS=\
 $(ARCH_FREEOBJS) \
 $(BUILDDIR)/string/strlen.o \
 $(BUILDDIR)/string/memset.o \
-#stdio/printf.o \
-#stdio/putchar.o \
-#stdio/puts.o \
-#stdlib/abort.o \
+$(BUILDDIR)/stdio/printf.o \
+$(BUILDDIR)/stdio/putchar.o \
+$(BUILDDIR)/stdio/puts.o \
+$(BUILDDIR)/stdlib/abort.o \
 #string/memcmp.o \
 #string/memcpy.o \
 #string/memmove.o \

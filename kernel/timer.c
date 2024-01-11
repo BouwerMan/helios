@@ -1,6 +1,6 @@
 #include <asm.h>
 #include <interrupts.h>
-#include <tty.h>
+#include <stdio.h>
 
 const int PIT_CLK = 1193180;
 
@@ -30,7 +30,7 @@ void timer_handler(struct irq_regs* r)
          *  display a message on the screen */
         if (ticks % 18 == 0) {
                 ticker++;
-                terminal_writestring("One second has passed\n");
+                puts("One second has passed");
         }
 }
 

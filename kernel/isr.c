@@ -1,6 +1,6 @@
 #include <interrupts.h>
+#include <stdio.h>
 #include <string.h>
-#include <tty.h>
 
 extern void isr0();
 extern void isr1();
@@ -135,8 +135,8 @@ void fault_handler(struct irq_regs* r)
                 /* Display the description for the Exception that occurred.
                  *  In this tutorial, we will simply halt the system using an
                  *  infinite loop */
-                terminal_write(exception_messages[r->int_no], strlen(exception_messages[r->int_no]));
-                terminal_write(" Exception. System Halted!\n", sizeof(" Exception. System Halted!\n"));
+                puts((char*)exception_messages[r->int_no]);
+                puts(" Exception. System Halted!\n");
                 for (;;)
                         ;
         }
