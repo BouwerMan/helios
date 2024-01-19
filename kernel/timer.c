@@ -30,7 +30,7 @@ void timer_handler(struct irq_regs* r)
          *  display a message on the screen */
         if (ticks % 18 == 0) {
                 ticker++;
-                puts("One second has passed");
+                // puts("One second has passed");
         }
 }
 

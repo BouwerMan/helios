@@ -38,6 +38,7 @@ $(BUILDDIR)/idt.o \
 $(BUILDDIR)/isr.o \
 $(BUILDDIR)/irq.o \
 $(BUILDDIR)/timer.o \
+$(BUILDDIR)/keyboard.o \
 
 OBJS=\
 $(KERNEL_OBJS) \

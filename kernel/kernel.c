@@ -1,5 +1,6 @@
 #include <gdt.h>
 #include <interrupts.h>
+#include <keyboard.h>
 #include <stdio.h>
 #include <sys.h>
 #include <timer.h>
@@ -8,8 +9,9 @@
 void kernel_main(void)
 {
         /* Initialize terminal interface */
-        terminal_initialize();
-        terminal_disable_cursor();
+        tty_initialize();
+        tty_enable_cursor(0, 0);
+        // tty_disable_cursor();
         printf("Welcome to %s. Version: %s\n", KERNEL_NAME, KERNEL_VERSION);
 
         gdt_init();
@@ -26,6 +28,9 @@ void kernel_main(void)
 
         timer_init();
         puts("PIT initialized(?)");
+
+        keyboard_init();
+        puts("Keyboard initialized(?)");
 
         // Stopping us from exiting kernel
         for (;;)
