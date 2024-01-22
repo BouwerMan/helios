@@ -14,23 +14,28 @@ void kernel_main(void)
         // tty_disable_cursor();
         printf("Welcome to %s. Version: %s\n", KERNEL_NAME, KERNEL_VERSION);
 
+        puts("Initializing GDT");
         gdt_init();
-        puts("GPT initialized(?)");
 
+        puts("Initializing IDT");
         idt_init();
-        puts("IDT initialized(?)");
 
+        puts("Initializing ISRs");
         isr_init();
-        puts("ISRs initialized(?)");
 
+        puts("Initializing IRQs");
         irq_init();
-        puts("IRQs initialized(?)");
 
+        puts("Initializing Timer");
         timer_init();
-        puts("PIT initialized(?)");
 
+        // Testing that interrupts are active by waiting for the timer to tick
+        puts("Testing Interrupts");
+        timer_poll();
+        puts("Interrupts passed");
+
+        puts("Initializing Keyboard");
         keyboard_init();
-        puts("Keyboard initialized(?)");
 
         // Stopping us from exiting kernel
         for (;;)

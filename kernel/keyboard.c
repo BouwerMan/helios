@@ -50,6 +50,7 @@ unsigned char kbdus[128] = {
 /* Handles the keyboard interrupt */
 void keyboard_handler(struct irq_regs* r)
 {
+        (void)r;
         unsigned char scancode;
 
         /* Read from the keyboard's data buffer */

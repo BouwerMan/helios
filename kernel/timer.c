@@ -34,6 +34,14 @@ void timer_handler(struct irq_regs* r)
         }
 }
 
+/* Waits until the timer at least one time.
+ * Added optimize attribute to stop compiler from
+ * optimizing away the while loop and causing the kernel to hang. */
+void __attribute__((optimize("O0"))) timer_poll()
+{
+        while (0 == ticks) { }
+}
+
 /* Sets up the system clock by installing the timer handler
  *  into IRQ0 */
 void timer_init()
