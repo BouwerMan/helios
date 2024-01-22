@@ -1,5 +1,5 @@
-#include <asm.h>
-#include <interrupts.h>
+#include <kernel/asm.h>
+#include <kernel/interrupts.h>
 #include <stdio.h>
 
 const int PIT_CLK = 1193180;

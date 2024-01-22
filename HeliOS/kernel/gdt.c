@@ -1,4 +1,4 @@
-#include <gdt.h>
+#include <kernel/gdt.h>
 
 /* Our GDT, with 3 entries, and finally our special GDT pointer */
 struct gdt_entry gdt[3];

@@ -1,6 +1,6 @@
-#include <asm.h>
-#include <interrupts.h>
-#include <keyboard.h>
+#include <kernel/asm.h>
+#include <kernel/interrupts.h>
+#include <kernel/keyboard.h>
 #include <stdio.h>
 
 /* KBDUS means US Keyboard Layout. This is a scancode table

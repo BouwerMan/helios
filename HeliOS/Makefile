@@ -9,6 +9,7 @@ LIBS?=
 
 OSNAME?=myos
 BUILDDIR=build
+KERNELDIR=kernel
 
 DESTDIR?=
 PREFIX?=/usr/local
@@ -32,13 +33,13 @@ LIBS:=$(LIBS) $(KERNEL_ARCH_LIBS)
 
 KERNEL_OBJS=\
 $(KERNEL_ARCH_OBJS) \
-$(BUILDDIR)/kernel.o \
-$(BUILDDIR)/gdt.o \
-$(BUILDDIR)/idt.o \
-$(BUILDDIR)/isr.o \
-$(BUILDDIR)/irq.o \
-$(BUILDDIR)/timer.o \
-$(BUILDDIR)/keyboard.o \
+$(BUILDDIR)/$(KERNELDIR)/kernel.o \
+$(BUILDDIR)/$(KERNELDIR)/gdt.o \
+$(BUILDDIR)/$(KERNELDIR)/idt.o \
+$(BUILDDIR)/$(KERNELDIR)/isr.o \
+$(BUILDDIR)/$(KERNELDIR)/irq.o \
+$(BUILDDIR)/$(KERNELDIR)/timer.o \
+$(BUILDDIR)/$(KERNELDIR)/keyboard.o \
 
 OBJS=\
 $(KERNEL_OBJS) \

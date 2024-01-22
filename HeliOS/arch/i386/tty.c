@@ -1,9 +1,9 @@
-#include <asm.h>
+#include <kernel/asm.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
-#include <tty.h>
+#include <kernel/tty.h>
 
 #include "vga.h"
 

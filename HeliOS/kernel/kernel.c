@@ -1,10 +1,10 @@
-#include <gdt.h>
-#include <interrupts.h>
-#include <keyboard.h>
+#include <kernel/gdt.h>
+#include <kernel/interrupts.h>
+#include <kernel/keyboard.h>
+#include <kernel/sys.h>
+#include <kernel/timer.h>
+#include <kernel/tty.h>
 #include <stdio.h>
-#include <sys.h>
-#include <timer.h>
-#include <tty.h>
 
 void kernel_main(void)
 {

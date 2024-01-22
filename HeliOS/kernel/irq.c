@@ -1,5 +1,5 @@
-#include <asm.h>
-#include <interrupts.h>
+#include <kernel/asm.h>
+#include <kernel/interrupts.h>
 
 /* These are own ISRs that point to our special IRQ handler
  *  instead of the regular 'fault_handler' function */

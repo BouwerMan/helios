@@ -1,5 +1,5 @@
 // TODO: Should this be only in x86_64 arch?
-#include <interrupts.h>
+#include <kernel/interrupts.h>
 #include <string.h>
 
 /* Declare an IDT of 256 entries. Although we will only use the
