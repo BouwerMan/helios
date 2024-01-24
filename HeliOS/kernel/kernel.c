@@ -37,6 +37,9 @@ void kernel_main(void)
         puts("Initializing Keyboard");
         keyboard_init();
 
+        printf("Hex test: 0x%x\n", 0x5b);
+        printf("Dec test: %d\n", 6296);
+
         // Stopping us from exiting kernel
         for (;;)
                 ;

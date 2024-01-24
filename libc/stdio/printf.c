@@ -4,6 +4,35 @@
 #include <stdio.h>
 #include <string.h>
 
+#define BUF_SIZE 16
+
+char buffer[BUF_SIZE];
+
+static char* parse_num(unsigned int value, unsigned int base)
+{
+        size_t i = 0;
+        memset(buffer, 0, BUF_SIZE);
+
+        // Gets digit from right to left and converts to ascii
+        while (value != 0) {
+                buffer[i] = (value % 10) + '0';
+                i++;
+                value /= 10;
+        };
+        return buffer;
+}
+
+static char* parse_hex(unsigned int value)
+{
+        int i = 8;
+        size_t index = 0;
+        memset(buffer, 0, BUF_SIZE);
+
+        while (i-- > 0)
+                buffer[index++] = "0123456789abcdef"[(value >> (i * 4)) & 0xF];
+        return buffer;
+}
+
 static bool print(const char* data, size_t length)
 {
         const unsigned char* bytes = (const unsigned char*)data;
@@ -62,6 +91,20 @@ int printf(const char* restrict format, ...)
                         }
                         if (!print(str, len))
                                 return -1;
+                        written += len;
+                } else if (*format == 'x') { // I've stolen this which is why it is kinda a mess/different style.
+                        format++;
+                        unsigned int value = (unsigned int)va_arg(parameters, int);
+                        parse_hex(value);
+                        size_t len = strlen(buffer);
+                        print(buffer, len);
+                        written += len;
+                } else if (*format == 'd') {
+                        format++;
+                        unsigned int value = (unsigned int)va_arg(parameters, int);
+                        parse_num(value, 10);
+                        size_t len = strlen(buffer);
+                        print(buffer, len);
                         written += len;
                 } else {
                         format = format_begun_at;
