@@ -28,8 +28,8 @@ void kernel_main(multiboot_info_t* mbd, uint32_t magic)
              i += sizeof(multiboot_memory_map_t)) {
                 multiboot_memory_map_t* mmmt = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
 
-                printf("Start Addr: %x%x | Length: %x%x | Size: %x | Type: %d\n",
-                    mmmt->addr_high, mmmt->addr_low, mmmt->len_high, mmmt->len_low, mmmt->size, mmmt->type);
+                printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n",
+                    mmmt->addr_low, mmmt->len_low, mmmt->size, mmmt->type);
 
                 if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE) {
                         /*
