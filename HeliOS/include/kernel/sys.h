@@ -11,4 +11,6 @@ typedef unsigned long uintptr_t;
 #define KERNEL_NAME "HELIOS"
 #define KERNEL_VERSION "0.0.0"
 
+void panic(char* message);
+
 #endif /* SYS_H */
