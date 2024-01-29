@@ -59,6 +59,15 @@ $(LIBS) \
 #$(ARCHDIR)/crtend.o \
 #$(ARCHDIR)/crtn.o \
 
+# Check if the '-j' option is present in MAKEFLAGS
+ifeq ($(findstring -j,$(MAKEFLAGS)), -j)
+    # Extract the value following the '-j' option
+    NUM_JOBS := $(subst -j, , $(filter -j%, $(MAKEFLAGS)))
+else
+    # Default value if '-j' is not present
+    NUM_JOBS = 1
+endif
+
 .PHONY: all clean install install-headers install-kernel
 .SUFFIXES: .o .c .s .asm
 
