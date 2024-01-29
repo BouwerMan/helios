@@ -41,6 +41,7 @@ $(BUILDDIR)/$(KERNELDIR)/irq.o \
 $(BUILDDIR)/$(KERNELDIR)/timer.o \
 $(BUILDDIR)/$(KERNELDIR)/keyboard.o \
 $(BUILDDIR)/$(KERNELDIR)/panic.o \
+$(BUILDDIR)/$(KERNELDIR)/cpu.o \
 
 OBJS=\
 $(KERNEL_OBJS) \

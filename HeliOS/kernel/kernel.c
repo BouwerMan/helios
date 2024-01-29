@@ -1,3 +1,5 @@
+#include "../arch/i386/vga.h"
+#include <kernel/cpu.h>
 #include <kernel/gdt.h>
 #include <kernel/interrupts.h>
 #include <kernel/keyboard.h>
@@ -41,6 +43,9 @@ void kernel_main(multiboot_info_t* mbd, uint32_t magic)
                 }
         }
 
+        printf("CPU: ");
+        cpu_print_model();
+
         tty_enable_cursor(0, 0);
         // tty_disable_cursor();
         printf("Welcome to %s. Version: %s\n", KERNEL_NAME, KERNEL_VERSION);
@@ -63,13 +68,12 @@ void kernel_main(multiboot_info_t* mbd, uint32_t magic)
         // Testing that interrupts are active by waiting for the timer to tick
         puts("Testing Interrupts");
         timer_poll();
+        tty_setcolor(VGA_COLOR_GREEN);
         puts("Interrupts passed");
 
+        tty_setcolor(VGA_COLOR_LIGHT_GREY);
         puts("Initializing Keyboard");
         keyboard_init();
-
-        printf("Hex test: 0x%x\n", 0x5b);
-        printf("Dec test: %d\n", 6296);
 
         // Stopping us from exiting kernel
         for (;;)
