@@ -3,6 +3,7 @@
 #include <kernel/gdt.h>
 #include <kernel/interrupts.h>
 #include <kernel/keyboard.h>
+#include <kernel/mm.h>
 #include <kernel/multiboot.h>
 #include <kernel/sys.h>
 #include <kernel/timer.h>
@@ -22,25 +23,6 @@ void kernel_main(multiboot_info_t* mbd, uint32_t magic)
         /* Check bit 6 to see if we have a valid memory map */
         if (!(mbd->flags >> 6 & 0x1)) {
                 panic("invalid memory map given by GRUB bootloader");
-        }
-
-        /* Loop through the memory map and display the values */
-        int i;
-        for (i = 0; i < mbd->mmap_length;
-             i += sizeof(multiboot_memory_map_t)) {
-                multiboot_memory_map_t* mmmt = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
-
-                printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n",
-                    mmmt->addr_low, mmmt->len_low, mmmt->size, mmmt->type);
-
-                if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE) {
-                        /*
-                         * Do something with this memory block!
-                         * BE WARNED that some of memory shown as availiable is actually
-                         * actively being used by the kernel! You'll need to take that
-                         * into account before writing to memory!
-                         */
-                }
         }
 
         printf("CPU: ");
@@ -74,6 +56,15 @@ void kernel_main(multiboot_info_t* mbd, uint32_t magic)
         tty_setcolor(VGA_COLOR_LIGHT_GREY);
         puts("Initializing Keyboard");
         keyboard_init();
+
+        puts("Initalizing Paging");
+        mmap_init(mbd);
+        uint32_t new_frame = allocate_frame();
+        uint32_t new_frame_addr = mmap_read(new_frame, MMAP_GET_ADDR);
+        printf("New frame allocated at: 0x%x\n", new_frame_addr);
+        uint32_t new_frame_two = allocate_frame();
+        uint32_t new_frame_addr_two = mmap_read(new_frame_two, MMAP_GET_ADDR);
+        printf("New frame allocated at: 0x%x\n", new_frame_addr_two);
 
         // Stopping us from exiting kernel
         for (;;)
