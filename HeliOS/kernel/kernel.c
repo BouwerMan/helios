@@ -52,7 +52,6 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
 
 void kernel_main()
 {
-
         printf("Welcome to %s. Version: %s\n", KERNEL_NAME, KERNEL_VERSION);
         printf("Detected CPU: ");
         cpu_print_model();
