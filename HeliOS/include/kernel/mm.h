@@ -10,3 +10,4 @@
 void mmap_init(multiboot_info_t* mboot_hdr);
 uint32_t mmap_read(uint32_t request, uint8_t mode);
 uint32_t allocate_frame();
+void free_frame(uint32_t mmap_addr);

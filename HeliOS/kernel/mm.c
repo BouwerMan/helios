@@ -1,3 +1,9 @@
+/**
+ * Basic memory map reader and page allocator
+ *
+ * Based on https://anastas.io/osdev/memory/2016/08/08/page-frame-allocator.html
+ */
+
 #include <kernel/mm.h>
 #include <kernel/multiboot.h>
 #include <stdint.h>
@@ -74,6 +80,7 @@ uint32_t mmap_read(uint32_t request, uint8_t mode)
         return 0;
 }
 
+// TODO: Allow allocation of multiple frames (for liballoc)
 /**
  * Allocate the next free frame and return it's frame number
  */
@@ -97,4 +104,11 @@ uint32_t allocate_frame()
 
         // Finally, return the newly allocated frame num
         return cur_num;
+}
+
+void free_frame(uint32_t mmap_addr)
+{
+        // Get a pointer to the current entry
+        multiboot_memory_map_t* entry = (multiboot_memory_map_t*)mmap_addr;
+        entry->type = MULTIBOOT_MEMORY_AVAILABLE;
 }
