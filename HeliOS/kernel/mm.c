@@ -6,6 +6,7 @@
 
 #include <kernel/mm.h>
 #include <kernel/multiboot.h>
+#include <stddef.h>
 #include <stdint.h>
 
 multiboot_info_t* verified_mboot_hdr;
@@ -111,4 +112,26 @@ void free_frame(uint32_t mmap_addr)
         // Get a pointer to the current entry
         multiboot_memory_map_t* entry = (multiboot_memory_map_t*)mmap_addr;
         entry->type = MULTIBOOT_MEMORY_AVAILABLE;
+}
+
+/**
+ * @brief Allocates multiple page frames
+ * @param frames Number of consequtive frames to allocate.
+ * @return Address for beginning of frames.
+ */
+uint32_t allocate_frames(size_t frames)
+{
+        uint32_t cur_addr = mmap_read(next_free_frame, MMAP_GET_ADDR);
+        return 0;
+}
+
+/**
+ * Wrapper for liballoc allocation.
+ * @param pages Number of pages to alloc
+ * @return Pointer to the allocated pages
+ */
+void* liballoc_alloc(size_t pages)
+{
+        allocate_frames(pages);
+        return NULL;
 }
