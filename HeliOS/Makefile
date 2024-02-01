@@ -43,6 +43,7 @@ $(BUILDDIR)/$(KERNELDIR)/keyboard.o \
 $(BUILDDIR)/$(KERNELDIR)/panic.o \
 $(BUILDDIR)/$(KERNELDIR)/cpu.o \
 $(BUILDDIR)/$(KERNELDIR)/mm.o \
+$(BUILDDIR)/$(KERNELDIR)/paging.o \
 
 OBJS=\
 $(KERNEL_OBJS) \

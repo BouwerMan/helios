@@ -23,6 +23,12 @@ void mmap_init(multiboot_info_t* mboot_hdr)
 }
 
 /**
+ * @brief Reads through the mmap and creates a bitmap of pages.
+ */
+void mmap_read_new()
+{
+}
+/**
  * A function to iterate through the multiboot memory map.
  * If `mode` is set to MMAP_GET_NUM, it will return the frame number for the
  * frame at address `request`.

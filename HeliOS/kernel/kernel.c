@@ -5,6 +5,7 @@
 #include <kernel/keyboard.h>
 #include <kernel/mm.h>
 #include <kernel/multiboot.h>
+#include <kernel/paging.h>
 #include <kernel/sys.h>
 #include <kernel/timer.h>
 #include <kernel/tty.h>
@@ -24,6 +25,27 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
         if (!(mbd->flags >> 6 & 0x1)) {
                 panic("invalid memory map given by GRUB bootloader");
         }
+        /* Loop through the memory map and display the values */
+        int i;
+        uint32_t length = 0;
+        for (i = 0; i < mbd->mmap_length;
+             i += sizeof(multiboot_memory_map_t)) {
+                multiboot_memory_map_t* mmmt = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
+
+                printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n",
+                    mmmt->addr_low, mmmt->len_low, mmmt->size, mmmt->type);
+
+                length += mmmt->len_low;
+                if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE) {
+                        /*
+                         * Do something with this memory block!
+                         * BE WARNED that some of memory shown as availiable is actually
+                         * actively being used by the kernel! You'll need to take that
+                         * into account before writing to memory!
+                         */
+                }
+        }
+        printf("Memory Length: %dMB\n", length / 1024 / 1024);
 
         tty_enable_cursor(0, 0);
         // tty_disable_cursor();
@@ -48,6 +70,8 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
 
         puts("Initalizing Paging");
         mmap_init(mbd);
+
+        printf("Memory: %d\n", mbd->mem_upper - mbd->mem_lower);
 }
 
 void kernel_main()
@@ -63,6 +87,12 @@ void kernel_main()
         puts("Interrupts passed");
         tty_setcolor(VGA_COLOR_LIGHT_GREY);
 
+#if 1
+        page_directory_clear();
+        init_paging();
+#endif
+
+#if 0
         // Testing paging
         uint32_t new_frame = allocate_frame();
         uint32_t new_frame_addr = mmap_read(new_frame, MMAP_GET_ADDR);
@@ -74,6 +104,7 @@ void kernel_main()
         uint32_t new_frame_three = allocate_frame();
         uint32_t new_frame_addr_three = mmap_read(new_frame, MMAP_GET_ADDR);
         printf("New frame allocated at: 0x%x\n", new_frame_addr);
+#endif
 
         // Stopping us from exiting kernel
         for (;;)

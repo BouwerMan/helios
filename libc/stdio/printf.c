@@ -8,6 +8,7 @@
 
 char buffer[BUF_SIZE];
 
+// TODO: MAKE THIS BETTER I AM LITERALLY BANDAIDING THE ENTIRE THING
 static char* parse_num(unsigned int value, unsigned int base)
 {
         size_t i = 0;
@@ -19,6 +20,10 @@ static char* parse_num(unsigned int value, unsigned int base)
                 i++;
                 value /= 10;
         };
+        // Iterates over array and prints it
+        for (i; i > 0; i--) {
+                putchar(buffer[i - 1]); // TODO: WTF is this
+        }
         return buffer;
 }
 
@@ -104,7 +109,7 @@ int printf(const char* restrict format, ...)
                         unsigned int value = (unsigned int)va_arg(parameters, int);
                         parse_num(value, 10);
                         size_t len = strlen(buffer);
-                        print(buffer, len);
+                        // print(buffer, len);
                         written += len;
                 } else {
                         format = format_begun_at;
