@@ -87,7 +87,13 @@ void kernel_main()
     puts("Interrupts passed");
     tty_setcolor(VGA_COLOR_LIGHT_GREY);
 
-#if 1
+    tty_writestring("Printf testing\n");
+    putchar('c');
+    printf("test old\n");
+    nprintf("test new\n");
+    nprintf("String: %s\n", "test string");
+    nprintf("Char: %c\n", 't');
+#if 0
     page_directory_clear();
     init_paging();
 #endif

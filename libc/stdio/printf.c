@@ -4,6 +4,86 @@
 #include <stdio.h>
 #include <string.h>
 
+// Testing
+#include <kernel/tty.h>
+
+#define BUF_SIZE_NEW 1024
+
+static char buffer_new[BUF_SIZE_NEW] = { '\0' };
+static int pointer = -1;
+
+static bool print(const char* data, size_t length)
+{
+    const unsigned char* bytes = (const unsigned char*)data;
+    for (size_t i = 0; i < length; i++)
+        if (putchar(bytes[i]) == EOF)
+            return false;
+    return true;
+}
+
+int nprintf(const char* restrict format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    int result = nvprintf(format, args);
+    print(buffer_new, strlen(buffer_new));
+    va_end(args);
+    return result;
+}
+
+int nvprintf(const char* restrict format, va_list args)
+{
+    int written = 0;
+    pointer = 0;
+    memset(buffer_new, 0, BUF_SIZE_NEW);
+
+    while (*format != '\0') {
+        size_t maxrem = INT_MAX - written;
+
+        // Check if no special option is present
+        if ((format[0] != '%') && (format[0] != '\\')) {
+            buffer_new[pointer++] = format[0];
+            format++;
+            continue;
+        } else if (format[0] == '\\') {
+            switch (format[0]) {
+            case 'n':
+                buffer_new[pointer++] = '\n';
+                break;
+            case '\\':
+                buffer_new[pointer++] = '\\';
+                break;
+            }
+            format++;
+            continue;
+        }
+
+        // Step forward past '%' to get argument and handle
+        // format++;
+        const char* s;
+        unsigned int value;
+        switch (*++format) {
+        case 's':
+            s = va_arg(args, const char*);
+            while (*s)
+                buffer_new[pointer++] = *s++;
+            break;
+        case 'c':
+            buffer_new[pointer++] = (char)va_arg(args, int); // Char promotes to int
+            break;
+        case 'x':
+
+            value = (unsigned int)va_arg(args, int);
+
+            break;
+        }
+        format++;
+        continue;
+    }
+    return 0;
+}
+
+#if 1
 #define BUF_SIZE 16
 
 char buffer[BUF_SIZE];
@@ -38,6 +118,7 @@ static char* parse_hex(unsigned int value)
     return buffer;
 }
 
+#if 0
 static bool print(const char* data, size_t length)
 {
     const unsigned char* bytes = (const unsigned char*)data;
@@ -46,6 +127,7 @@ static bool print(const char* data, size_t length)
             return false;
     return true;
 }
+#endif
 
 int printf(const char* restrict format, ...)
 {
@@ -128,3 +210,4 @@ int printf(const char* restrict format, ...)
     va_end(parameters);
     return written;
 }
+#endif
