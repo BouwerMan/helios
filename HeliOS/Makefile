@@ -1,8 +1,4 @@
-DEFAULT_HOST!=../default-host.sh
-HOST?=DEFAULT_HOST
-HOSTARCH!=../target-triplet-to-arch.sh $(HOST)
-
-CFLAGS?=-O2 -g
+CFLAGS?=-O2 -g -std=gnu17
 CPPFLAGS?=
 LDFLAGS?=
 LIBS?=
@@ -61,14 +57,6 @@ $(LIBS) \
 #$(ARCHDIR)/crtend.o \
 #$(ARCHDIR)/crtn.o \
 
-# Check if the '-j' option is present in MAKEFLAGS
-ifeq ($(findstring -j,$(MAKEFLAGS)), -j)
-    # Extract the value following the '-j' option
-    NUM_JOBS := $(subst -j, , $(filter -j%, $(MAKEFLAGS)))
-else
-    # Default value if '-j' is not present
-    NUM_JOBS = 1
-endif
 
 .PHONY: all clean install install-headers install-kernel
 .SUFFIXES: .o .c .s .asm
@@ -83,8 +71,8 @@ $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 	OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
 
 $(BUILDDIR)/%.o: %.c
-	@mkdir -p $(@D)
-	$(CC) -MD -c $< -o $@ -std=gnu11 $(CFLAGS) $(CPPFLAGS)
+	mkdir -p $(@D)
+	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
 
 $(BUILDDIR)/%.o: %.s
 	@mkdir -p $(@D)
