@@ -1,8 +1,4 @@
-DEFAULT_HOST!=../default-host.sh
-HOST?=DEFAULT_HOST
-HOSTARCH!=../target-triplet-to-arch.sh $(HOST)
-
-CFLAGS?=-O2 -g
+CFLAGS?=-O2 -g -std=gnu17
 CPPFLAGS?=
 LDFLAGS?=
 LIBS?=
@@ -65,7 +61,7 @@ libk.a: $(LIBK_OBJS)
 	$(AR) rcs $(BUILDDIR)/$@ $(LIBK_OBJS)
 
 $(BUILDDIR)/%.o: %.c
-	$(CC) -MD -c $< -o $(BUILDDIR)/$@ -std=gnu11 $(CFLAGS) $(CPPFLAGS)
+	$(CC) -MD -c $< -o $(BUILDDIR)/$@ $(CFLAGS) $(CPPFLAGS)
 
 .c.S:
 	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
@@ -76,7 +72,7 @@ $(BUILDDIR)/%.o: %.asm
 
 $(BUILDDIR)/%.libk.o: %.c
 	@mkdir -p $(@D)
-	$(CC) -MD -c $< -o $@ -std=gnu11 $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
+	$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
 
 .S.libk.o:
 	$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
