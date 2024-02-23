@@ -90,9 +90,18 @@ void kernel_main()
     tty_writestring("Printf testing\n");
     putchar('c');
     printf("test old\n");
-    nprintf("test new\n");
-    nprintf("String: %s\n", "test string");
-    nprintf("Char: %c\n", 't');
+
+#define PRINTF_TESTING
+#ifdef PRINTF_TESTING
+    printf("test new\n");
+    printf("String: %s\n", "test string");
+    printf("Char: %c\n", 't');
+    printf("Hex: 0x%x 0x%X\n", 0x14AF, 0x41BC);
+    printf("pos dec: %d\n", 5611);
+    printf("neg dec: %d\n", -468);
+    printf("unsigned int: %d\n", 4184);
+    printf("oct: %o\n", 4184);
+#endif // PRINTF_TESTING
 #if 0
     page_directory_clear();
     init_paging();
