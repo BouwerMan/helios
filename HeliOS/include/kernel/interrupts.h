@@ -1,25 +1,26 @@
 #pragma once
 #include <kernel/sys.h>
+#include <stdint.h>
 /* This defines what the stack looks like after an ISR was running */
 struct irq_regs {
-        unsigned int gs, fs, es, ds; /* pushed the segs last */
-        unsigned int edi, esi, ebp, esp, ebx, edx, ecx, eax; /* pushed by 'pusha' */
-        unsigned int int_no, err_code; /* our 'push byte #' and ecodes do this */
-        unsigned int eip, cs, eflags, useresp, ss; /* pushed by the processor automatically */
+    unsigned int gs, fs, es, ds; /* pushed the segs last */
+    unsigned int edi, esi, ebp, esp, ebx, edx, ecx, eax; /* pushed by 'pusha' */
+    unsigned int int_no, err_code; /* our 'push byte #' and ecodes do this */
+    unsigned int eip, cs, eflags, useresp, ss; /* pushed by the processor automatically */
 };
 
 /* Defines an IDT entry */
 struct idt_entry {
-        unsigned short base_lo;
-        unsigned short sel; /* Our kernel segment goes here! */
-        unsigned char always0; /* This will ALWAYS be set to 0! */
-        unsigned char flags; /* Set using the above table! */
-        unsigned short base_hi;
+    unsigned short base_lo;
+    unsigned short sel; /* Our kernel segment goes here! */
+    unsigned char always0; /* This will ALWAYS be set to 0! */
+    unsigned char flags; /* Set using the above table! */
+    unsigned short base_hi;
 } __attribute__((packed));
 
 struct idt_ptr {
-        unsigned short limit;
-        uintptr_t base;
+    unsigned short limit;
+    uintptr_t base;
 } __attribute__((packed));
 
 // idt.c

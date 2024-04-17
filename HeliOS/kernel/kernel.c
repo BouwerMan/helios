@@ -3,13 +3,17 @@
 #include <kernel/gdt.h>
 #include <kernel/interrupts.h>
 #include <kernel/keyboard.h>
-#include <kernel/mm.h>
+#include <kernel/memory.h>
 #include <kernel/multiboot.h>
-#include <kernel/paging.h>
 #include <kernel/sys.h>
 #include <kernel/timer.h>
 #include <kernel/tty.h>
 #include <stdio.h>
+
+extern uint32_t kernel_start_raw;
+extern uint32_t kernel_end_raw;
+static uint32_t kernel_start;
+static uint32_t kernel_end;
 
 void kernel_early(multiboot_info_t* mbd, uint32_t magic)
 {
@@ -25,27 +29,27 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     if (!(mbd->flags >> 6 & 0x1)) {
         panic("invalid memory map given by GRUB bootloader");
     }
-    /* Loop through the memory map and display the values */
-    int i;
-    uint32_t length = 0;
-    for (i = 0; i < mbd->mmap_length;
-         i += sizeof(multiboot_memory_map_t)) {
-        multiboot_memory_map_t* mmmt = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
-
-        printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n",
-            mmmt->addr_low, mmmt->len_low, mmmt->size, mmmt->type);
-
-        length += mmmt->len_low;
-        if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE) {
-            /*
-             * Do something with this memory block!
-             * BE WARNED that some of memory shown as availiable is actually
-             * actively being used by the kernel! You'll need to take that
-             * into account before writing to memory!
-             */
-        }
-    }
-    printf("Memory Length: %dMB\n", length / 1024 / 1024);
+    // /* Loop through the memory map and display the values */
+    // int i;
+    // uint32_t length = 0;
+    // for (i = 0; i < mbd->mmap_length; i += sizeof(multiboot_memory_map_t)) {
+    //     multiboot_memory_map_t* mmmt = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
+    //
+    //     printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n", mmmt->addr_low,
+    //     mmmt->len_low,
+    //         mmmt->size, mmmt->type);
+    //
+    //     length += mmmt->len_low;
+    //     if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE) {
+    //         /*
+    //          * Do something with this memory block!
+    //          * BE WARNED that some of memory shown as availiable is actually
+    //          * actively being used by the kernel! You'll need to take that
+    //          * into account before writing to memory!
+    //          */
+    //     }
+    // }
+    // printf("Memory Length: %dMB\n", length / 1024 / 1024);
 
     tty_enable_cursor(0, 0);
     // tty_disable_cursor();
@@ -62,16 +66,21 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     puts("Initializing IRQs");
     irq_init();
 
+    // Have to do some maintenance to make these sane numbers
+    kernel_start = (uint32_t)(&kernel_start_raw);
+    kernel_end = (uint32_t)(&kernel_end_raw) - KERNEL_OFFSET;
+
+    uint32_t phys_alloc_start = (kernel_end + 0x1000) & 0xFFFFF000;
+    printf("KERNEL START: 0x%X, KERNEL END: 0x%X\n", kernel_start, kernel_end);
+    printf("MEM LOW: 0x%X, MEM HIGH: 0x%X, PHYS START: 0x%X\n", mbd->mem_lower * 1024,
+        mbd->mem_upper * 1024, phys_alloc_start);
+    init_memory(mbd->mem_upper * 1024, phys_alloc_start);
+
     puts("Initializing Timer");
     timer_init();
 
     puts("Initializing Keyboard");
     keyboard_init();
-
-    puts("Initalizing Paging");
-    mmap_init(mbd);
-
-    printf("Memory: %d\n", mbd->mem_upper - mbd->mem_lower);
 }
 
 void kernel_main()
@@ -87,12 +96,22 @@ void kernel_main()
     puts("Interrupts passed");
     tty_setcolor(VGA_COLOR_LIGHT_GREY);
 
-    tty_writestring("Printf testing\n");
+    printf("Memory testing:\n");
+    // FIX: Page faulting
+    uintptr_t test1 = frame_alloc(1);
+    printf("1 frame: 0x%X\n", test1);
+    // int* test2 = (int*)test1;
+    // *test2 = 251;
+    // printf("test2: %d", *test2);
+    // printf("irq handler: 0x%X\n", irq_routines[14]);
+    // printf("Test 0x15CC314:\n");
+    // uintptr_t test2 = 0x15CC314;
+    // *(int*)test2 = 69;
+
+#ifdef PRINTF_TESTING
+    tty_writestring("Printf testing:\n");
     putchar('c');
     printf("test old\n");
-
-#define PRINTF_TESTING
-#ifdef PRINTF_TESTING
     printf("test new\n");
     printf("String: %s\n", "test string");
     printf("Char: %c\n", 't');
@@ -102,26 +121,10 @@ void kernel_main()
     printf("unsigned int: %d\n", 4184);
     printf("oct: %o\n", 4184);
 #endif // PRINTF_TESTING
-#if 0
-    page_directory_clear();
-    init_paging();
-#endif
 
-#if 0
-    // Testing paging
-    uint32_t new_frame = allocate_frame();
-    uint32_t new_frame_addr = mmap_read(new_frame, MMAP_GET_ADDR);
-    printf("New frame allocated at: 0x%x\n", new_frame_addr);
-    uint32_t new_frame_two = allocate_frame();
-    uint32_t new_frame_addr_two = mmap_read(new_frame_two, MMAP_GET_ADDR);
-    printf("New frame allocated at: 0x%x\n", new_frame_addr_two);
-    free_frame(new_frame);
-    uint32_t new_frame_three = allocate_frame();
-    uint32_t new_frame_addr_three = mmap_read(new_frame, MMAP_GET_ADDR);
-    printf("New frame allocated at: 0x%x\n", new_frame_addr);
-#endif
-
+    // NOTE: I removed this for loop since that should reduce idle cpu usage (boot.asm calls hlt)
+    //
     // Stopping us from exiting kernel
-    for (;;)
-        ;
+    // for (;;)
+    //     ;
 }

@@ -10,7 +10,15 @@
 #define BUF_SIZE 1024
 
 static char buffer[BUF_SIZE] = { '\0' };
-static int pointer = -1;
+static size_t pointer = 0;
+
+static void parse_hex(unsigned int value, bool cap)
+{
+    const char* fmt = cap ? "0123456789ABCDEF" : "0123456789abcdef";
+    int i = 8;
+    while (i-- > 0)
+        buffer[pointer++] = fmt[(value >> (i * 4)) & 0xF];
+}
 
 static void parse_num(unsigned int value, unsigned int base)
 {
@@ -45,30 +53,32 @@ int printf(const char* restrict format, ...)
 //       Error codes (including other supporting funcs)
 int vprintf(const char* restrict format, va_list args)
 {
-    int written = 0;
+    if (strlen(format) > BUF_SIZE) return EOVERFLOW;
+
     pointer = 0;
     memset(buffer, 0, BUF_SIZE);
 
     while (*format != '\0') {
-        size_t maxrem = INT_MAX - written;
+
+        if (pointer >= BUF_SIZE) return EOVERFLOW;
 
         // Check if no special option is present
         if ((format[0] != '%') && (format[0] != '\\')) {
             buffer[pointer++] = format[0];
             format++;
             continue;
-        } else if (format[0] == '\\') {
-            switch (format[0]) {
-            case 'n':
-                buffer[pointer++] = '\n';
-                break;
-            case '\\':
-                buffer[pointer++] = '\\';
-                break;
-            }
-            format++;
-            continue;
-        }
+        } // else if (format[0] == '\\') {
+        //     switch (format[0]) {
+        //     case '\\':
+        //         buffer[pointer++] = '\\';
+        //         break;
+        //     case 'n':
+        //         buffer[pointer++] = '\n';
+        //         break;
+        //         format++;
+        //         continue;
+        //     }
+        // }
 
         // Step forward past '%' to get argument and handle
         // format++;
@@ -83,20 +93,17 @@ int vprintf(const char* restrict format, va_list args)
             buffer[pointer++] = (char)va_arg(args, int); // Char promotes to int
             break;
         case 'x': { // TODO: remove uneeded padding (go right to left?)
-            int value = va_arg(args, unsigned int);
-            int i = 8;
-            while (i-- > 0)
-                buffer[pointer++] = "0123456789abcdef"[(value >> (i * 4)) & 0xF];
+            unsigned int value = va_arg(args, unsigned int);
+            parse_hex(value, false);
             break;
         }
         case 'X': {
-            int value = va_arg(args, unsigned int);
-            int i = 8;
-            while (i-- > 0)
-                buffer[pointer++] = "0123456789ABCDEF"[(value >> (i * 4)) & 0xF];
+            unsigned int value = va_arg(args, unsigned int);
+            parse_hex(value, true);
             break;
         }
-        case 'd': {
+        case 'd':
+        case 'i': {
             int value = va_arg(args, int);
             if (value < 0) {
                 buffer[pointer++] = '-';

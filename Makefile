@@ -29,7 +29,7 @@ export CPPFLAGS=
 export SYSROOT="$(shell pwd)/sysroot"
 export CC+=--sysroot=$(SYSROOT) -isystem=$(INCLUDEDIR)
 
-.PHONY: all libc helios clean qemu headers iso
+.PHONY: all libc helios clean qemu headers iso bochs
 
 all: headers libc helios
 
@@ -54,7 +54,10 @@ iso: all
 	grub-mkrescue -o $(OSNAME).iso isodir
 
 qemu: iso
-	qemu-system-$(HOSTARCH) -cdrom $(OSNAME).iso -m 2048M
+	qemu-system-$(HOSTARCH) -cdrom $(OSNAME).iso -m 4096M
+
+bochs: iso
+	bochs -f bochs
 
 clean:
 	rm -rvf sysroot

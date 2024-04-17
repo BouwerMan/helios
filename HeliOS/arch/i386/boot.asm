@@ -4,7 +4,8 @@ MEMINFO  equ  1 << 1            ; provide memory map
 MBFLAGS  equ  MBALIGN | MEMINFO ; this is the Multiboot 'flag' field
 MAGIC    equ  0x1BADB002        ; 'magic number' lets bootloader find the header
 CHECKSUM equ -(MAGIC + MBFLAGS)   ; checksum of above, to prove we are multiboot
- 
+
+
 ; Declare a multiboot header that marks the program as a kernel. These are magic
 ; values that are documented in the multiboot standard. The bootloader will
 ; search for this signature in the first 8 KiB of the kernel file, aligned at a
@@ -15,6 +16,14 @@ align 4
 	dd MAGIC
 	dd MBFLAGS
 	dd CHECKSUM
+    dd 0, 0, 0, 0, 0
+
+    ; GFX things
+    dd 0
+    dd 800
+    dd 600
+    dd 32
+
  
 ; The multiboot standard does not define the value of the stack pointer register
 ; (esp) and it is up to the kernel to provide a stack. This allocates room for a
@@ -31,51 +40,64 @@ align 16
 stack_bottom:
 resb 16384 ; 16 KiB
 stack_top:
- 
-; The linker script specifies _start as the entry point to the kernel and the
-; bootloader will jump to this position once the kernel has been loaded. It
-; doesn't make sense to return from this function as the bootloader is gone.
-; Declare _start as a function symbol with the given symbol size.
-section .text
-global _start:function (_start.end - _start)
+
+section .boot
+global _start
 _start:
-	; The bootloader has loaded us into 32-bit protected mode on a x86
-	; machine. Interrupts are disabled. Paging is disabled. The processor
-	; state is as defined in the multiboot standard. The kernel has full
-	; control of the CPU. The kernel can only make use of hardware features
-	; and any code it provides as part of itself. There's no printf
-	; function, unless the kernel provides its own <stdio.h> header and a
-	; printf implementation. There are no security restrictions, no
-	; safeguards, no debugging mechanisms, only what the kernel provides
-	; itself. It has absolute and complete power over the
-	; machine.
- 
-        ; Set up stack
-	mov esp, stack_top
-        
-        push eax ; push multiboot pointer to stack
-        push ebx ; push multiboot magic to stack
-        
-        extern kernel_early
-        call kernel_early ; Call initial i386 table setup stuff
-       
+    ; Bochs magic breakpoint
+    ; xchg bx, bx
+
+;     mov edi, (boot_page_table1 - KERNELOFF)
+;     mov esi, 0
+;     mov ecx, 1023
+;
+; .1:
+;     cmp esi, 0x00100000
+;     jl .2f
+;     cmp esi, (kernel_end - KERNELOFF)
+;
+; .2:
+;
+;
+;
+    ; xchg bx, bx
+    mov ecx, (initial_page_dir - 0xC0000000)
+    mov cr3, ecx
+
+    mov ecx, cr4
+    or ecx, 0x10
+    mov cr4, ecx
+    
+    mov ecx, cr0
+    or ecx, 0x80000000
+    mov cr0, ecx
+
+    jmp higher_half
+
+section .text
+
+higher_half:
+    ; mov DWORD [initial_page_dir], 0
+    ; mov ecx, cr3
+    ; mov cr3, ecx
+
+    ; Set up stack
+    mov esp, stack_top
+
+    push eax ; push multiboot pointer to stack
+    push ebx ; push multiboot magic to stack
+
+    extern kernel_early
+    call kernel_early ; Call initial i386 table setup stuff
+
 	extern kernel_main
 	call kernel_main
- 
-	; If the system has nothing more to do, put the computer into an
-	; infinite loop. To do that:
-	; 1) Disable interrupts with cli (clear interrupt enable in eflags).
-	;    They are already disabled by the bootloader, so this is not needed.
-	;    Mind that you might later enable interrupts and return from
-	;    kernel_main (which is sort of nonsensical to do).
-	; 2) Wait for the next interrupt to arrive with hlt (halt instruction).
-	;    Since they are disabled, this will lock up the computer.
-	; 3) Jump to the hlt instruction if it ever wakes up due to a
-	;    non-maskable interrupt occurring or due to system management mode.
-	cli
-.hang:	hlt
-	jmp .hang
-.end:
+
+; halt the cpu if nothing else needs to be done
+; or until next interrupt
+halt:
+    hlt
+    jmp halt
 
 ; This will set up our new segment registers. We need to do
 ; something special in order to set CS. We do what is called a
@@ -102,3 +124,17 @@ extern idtp
 idt_load:
     lidt [idtp]
     ret
+
+section .data
+align 4096
+global initial_page_dir
+initial_page_dir:
+    dd 10000011b
+    times 768-1 dd 0
+    
+    ; dd 10000011b
+    dd (0 << 22) | 10000011b
+    dd (1 << 22) | 10000011b
+    dd (2 << 22) | 10000011b
+    dd (3 << 22) | 10000011b
+    times 256-1 dd 0

@@ -1,0 +1,7 @@
+romimage: file=/home/dylan/Downloads/BIOS-bochs-latest
+vgaromimage: file=/home/dylan/Downloads/VGABIOS-lgpl-latest
+ata0-slave: type=cdrom, path=HeliOS.iso, status=inserted
+boot:cdrom
+magic_break: enabled=1
+display_library: x, options = "gui_debug"
+

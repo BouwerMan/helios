@@ -1,12 +1,11 @@
 ---
 BasedOnStyle: WebKit
-AccessModifierOffset: '-4'
+AccessModifierOffset: -4
 AllowShortIfStatementsOnASingleLine: WithoutElse
 BreakBeforeBraces: Linux
-IndentWidth: '4'
-KeepEmptyLinesAtTheStartOfBlocks: 'true'
+IndentWidth: 4
+KeepEmptyLinesAtTheStartOfBlocks: true
 Language: Cpp
-TabWidth: '4'
+TabWidth: 4
 UseTab: Never
-
-...
+ColumnLimit: 100
