@@ -1,5 +1,6 @@
 // MASTER TODO
 // TODO: clean up inports, such as size_t coming from <stddef>;
+// TODO: Pretty sure PMM will perform weird things when reaching max memory
 #include "../arch/i386/vga.h"
 #include <kernel/cpu.h>
 #include <kernel/gdt.h>
@@ -12,6 +13,12 @@
 #include <kernel/timer.h>
 #include <kernel/tty.h>
 #include <stdio.h>
+
+#ifdef KERNEL_DEBUG
+#define DEBUG_OUT(m) (puts(m))
+#else
+#define DEBUG_OUT(m) ((void)m)
+#endif
 
 extern uint32_t kernel_start_raw;
 extern uint32_t kernel_end_raw;
@@ -46,6 +53,7 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     if (!(mbd->flags >> 6 & 0x1)) {
         panic("invalid memory map given by GRUB bootloader");
     }
+#ifdef MEM_MAP_DUMP
     /* Loop through the memory map and display the values */
     int i;
     uint32_t length = 0;
@@ -66,6 +74,7 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
         }
     }
     printf("Memory Length: %dMB\n", length / 1024 / 1024);
+#endif
 
     tty_enable_cursor(0, 0);
     // tty_disable_cursor();
@@ -87,9 +96,11 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     kernel_end = (uint32_t)(&kernel_end_raw) - KERNEL_OFFSET;
 
     uint32_t phys_alloc_start = (kernel_end + 0x1000) & 0xFFFFF000;
+#ifdef KERNEL_DEBUG
     printf("KERNEL START: 0x%X, KERNEL END: 0x%X\n", kernel_start, kernel_end);
     printf("MEM LOW: 0x%X, MEM HIGH: 0x%X, PHYS START: 0x%X\n", mbd->mem_lower * 1024,
         mbd->mem_upper * 1024, phys_alloc_start);
+#endif
     init_memory(mbd->mem_upper * 1024, phys_alloc_start);
 
     puts("Initializing Timer");
@@ -119,7 +130,6 @@ void kernel_main()
         panic("\tPMM FAILURE");
     }
 
-#define KMALLOC_TESTING
 #ifdef KMALLOC_TESTING
     puts("Testing liballoc:");
     int* test = (int*)kmalloc(sizeof(int));
@@ -136,6 +146,7 @@ void kernel_main()
     kfree(test3);
 #endif
 
+// #define PRINTF_TESTING
 #ifdef PRINTF_TESTING
     tty_writestring("Printf testing:\n");
     putchar('c');

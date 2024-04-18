@@ -1,4 +1,3 @@
-#include "../arch/i386/vga.h"
 #include <kernel/interrupts.h>
 #include <kernel/memory.h>
 #include <kernel/multiboot.h>
@@ -19,31 +18,21 @@ extern void write_cr3(uint32_t pointer);
 #define PAGE_FLAG_PRESENT (1 << 0)
 #define PAGE_FLAG_WRITE (1 << 1)
 #define PAGE_SIZE 4096
-#define NUM_PAGE_DIRS 256
-// page_dir_t page_dirs[NUM_PAGE_DIRS];
-// page_dir_t* kernel_dir;
-// page_dir_t* current_dir;
+// How many entries wide the frame bitset is
+#define BITSET_WIDTH 32
+// #define NUM_PAGE_DIRS 256
 
-#define INDEX_FROM_BIT(a) (a / 32)
-#define OFFSET_FROM_BIT(a) (a % 32)
+#define INDEX_FROM_BIT(a) (a / BITSET_WIDTH)
+#define OFFSET_FROM_BIT(a) (a % BITSET_WIDTH)
 #define GET_VIRT_ADDR(pd_index, tb_index) (((tb_index * 1024) + pd_index) * 4)
 
-#define NUM_PAGE_FRAMES (0x100000000 / 0x1000 / 8)
-// FIX: Hardcoded mem_high for qemu only
-// #define NUM_PAGE_FRAMES (0xBFEE0000 / PAGE_SIZE)
-
-// TODO: Dynamically, bit array
-// uint8_t phys_memory_bitmap[NUM_PAGE_FRAMES / 8];
-
-uint32_t* phys_memory_bitmap;
+uint32_t* frame_bitset;
 uint32_t nframes;
 
-page_dir_t* page_dir;
-page_table_t* page_tab;
+page_dir_t* kernel_page_dir;
 
 uintptr_t placement_ptr;
 
-// TODO: Add to header file
 void bootstrap_malloc_startat(uintptr_t address) { placement_ptr = address; }
 
 // Only used for intial page table mapping.
@@ -53,7 +42,6 @@ uintptr_t bootstrap_malloc_real(size_t size, int align, uintptr_t* phys)
     if (align && (placement_ptr & 0xFFFFF000)) {
         placement_ptr &= 0xFFFFF000;
     }
-    // TODO: This only works for kernel malloc
     if (phys) *phys = placement_ptr - KERNEL_OFFSET;
     uintptr_t addr = placement_ptr;
     placement_ptr += size;
@@ -66,69 +54,63 @@ void pmm_init(uint32_t mem_high)
 {
     uint32_t mem_low = placement_ptr - KERNEL_OFFSET;
     // round up division
-    page_frame_min = CEIL_DIV(mem_low, 0x1000);
-    page_frame_max = mem_high / 0x1000;
-    nframes = (page_frame_max - page_frame_min) / 32;
+    page_frame_min = CEIL_DIV(mem_low, PAGE_SIZE);
+    page_frame_max = mem_high / PAGE_SIZE;
+    nframes = (page_frame_max - page_frame_min) / BITSET_WIDTH;
     // nframes = page_frame_max - page_frame_min;
     total_alloc = 0;
 
-    printf("nframes before: %d\n", nframes);
     // Shrink number of frames
-    nframes = nframes - (sizeof(uint32_t) * nframes) % 0x1000;
-    printf("nframes after: %d\n", nframes);
+    nframes = nframes - (sizeof(uint32_t) * nframes) % PAGE_SIZE;
     // Allocate the bitmap
-    phys_memory_bitmap = (uint32_t*)bootstrap_malloc_real(sizeof(uint32_t) * nframes, 1, NULL);
+    frame_bitset = (uint32_t*)bootstrap_malloc_real(sizeof(uint32_t) * nframes, 1, NULL);
     // printf("MIN: 0x%X, MAX: 0x%X\n", page_frame_min, page_frame_max);
     // First set all to used
-    memset(phys_memory_bitmap, 0xFF, sizeof(uint32_t) * nframes);
+    memset(frame_bitset, 0xFF, sizeof(uint32_t) * nframes);
     // NOTE: for now i will just select placement_ptr as start for phys, unsure if there is a better
     // way. Now we set unused (past placement_ptr)
     // TODO: make this a memset?
-    printf("place: 0x%X, init: 0x%X\n", placement_ptr,
-        CEIL_DIV((placement_ptr - KERNEL_OFFSET) / 4096, 32));
-    for (size_t i = CEIL_DIV((placement_ptr - KERNEL_OFFSET) / 4096, 32);
+    for (size_t i = CEIL_DIV((placement_ptr - KERNEL_OFFSET) / PAGE_SIZE, BITSET_WIDTH);
          i < INDEX_FROM_BIT(nframes); i++) {
-        phys_memory_bitmap[i] = 0;
+        frame_bitset[i] = 0;
     }
 }
 
 // TODO: Separate kernel heap and userspace heap, right now i'm only working with kernel but
 //       userspace should start at virt: 0x0
-// TODO: Implement liballoc
 void init_memory(uint32_t mem_high, uint32_t phys_alloc_start)
 {
-
     uint32_t address = (phys_alloc_start) & 0xFFFFF000;
-    printf("Initial Phys Address: 0x%X\n", address);
+#ifdef KERNEL_DEBUG
+    printf("Initial PMM Address: 0x%X\n", address);
+#endif
     bootstrap_malloc_startat(address + KERNEL_OFFSET);
 
     uintptr_t pd_phys;
-    page_dir = (page_dir_t*)bootstrap_malloc_real(sizeof(page_dir_t), 1, &pd_phys);
-    memset((unsigned char*)page_dir, 0, sizeof(page_dir_t));
-    page_dir->physical_addr = pd_phys;
+    kernel_page_dir = (page_dir_t*)bootstrap_malloc_real(sizeof(page_dir_t), 1, &pd_phys);
+    memset((unsigned char*)kernel_page_dir, 0, sizeof(page_dir_t));
+    kernel_page_dir->physical_addr = pd_phys;
     uintptr_t map_addr = 0x0;
     // Allocate space for paging structure. Only up until 1022, since 1023 will point to beginning
     // of directory. Also map kernel space.
     for (size_t i = 0; i < 1023; i++) {
         uintptr_t table_physaddr;
-        page_dir->tables[i]
+        kernel_page_dir->tables[i]
             = (page_table_t*)bootstrap_malloc_real(sizeof(page_table_t), 1, &table_physaddr);
-        page_dir->physical_tables[i] = table_physaddr | 0x2;
+        kernel_page_dir->physical_tables[i] = table_physaddr | 0x2;
         // Map kernel space (above 0xC0000000)
         if (i >= 768) {
             for (size_t j = 0; j < 1024; j++) {
-                page_dir->tables[i]->pages[j] = map_addr | 0x3;
-                map_addr += 4096;
+                kernel_page_dir->tables[i]->pages[j] = map_addr | 0x3;
+                map_addr += PAGE_SIZE;
             }
-            page_dir->physical_tables[i] |= 0x3;
+            kernel_page_dir->physical_tables[i] |= 0x3;
         }
     }
     // Map last entry to beginning of directory
-    page_dir->physical_tables[1023] = page_dir->physical_addr | 0x3;
+    kernel_page_dir->physical_tables[1023] = kernel_page_dir->physical_addr | 0x3;
 
-    asm volatile("xchgw %bx, %bx");
-    write_cr3((uint32_t)page_dir->physical_addr);
-    asm volatile("xchgw %bx, %bx");
+    write_cr3((uint32_t)kernel_page_dir->physical_addr);
 
     pmm_init(mem_high);
     reload_cr3();
@@ -163,7 +145,7 @@ uintptr_t get_physaddr(uintptr_t virtualaddr)
 
 // TODO: currently i manually add kernel offset since all my allocation should be within the kernel
 //       right now. make this dynamic.
-// TODO: Maxes out at 32 frames. (ONCE I CHANGE TO BITSETS)
+// TODO: Maxes out at 32 frames.
 // TODO: Fragmentation issues when num_frames goes past 32-bit border (between indexes)
 //
 // Gets frame number from memory bitmap
@@ -171,44 +153,27 @@ uint32_t find_frames(size_t num_frames)
 {
     size_t init_offset = 0;
     size_t consecutive_free = 0;
-    // iterate through bitmap, then if we have enough frames we break out to mark them
+    // iterate through bitset, then if we have enough frames we break out to mark them
     for (size_t i = 0; i < INDEX_FROM_BIT(nframes); i++) {
         // Means no bits are free
-        if (phys_memory_bitmap[i] == 0xFFFFFFFF) {
+        if (frame_bitset[i] == 0xFFFFFFFF) {
             init_offset = 0;
             consecutive_free = 0;
             continue;
         }
         // Iterate through all bits
-        for (int j = 0; j < 32; j++) {
-            // printf("j: %d\n", j);
+        for (int j = 0; j < BITSET_WIDTH; j++) {
             uint32_t to_test = 1 << j;
-            if (!(phys_memory_bitmap[i] & to_test)) {
+            if (!(frame_bitset[i] & to_test)) {
                 if (!init_offset) init_offset = j;
                 consecutive_free++;
-                // return ((i * 8) + j);
             } else if (consecutive_free > 0 && consecutive_free < num_frames) {
                 init_offset = 0;
                 consecutive_free = 0;
             }
-            // if (!(phys_memory_bitmap[i / 8] & (1 << (i % 8)))) {
-            // consecutive_free++;
-            if (consecutive_free == num_frames) {
-                // return ((i * 8) + j);
-
-                // allocate these all
-                // get start address as index
-                // uintptr_t start_addr = (i - num_frames + 1); // * PAGE_SIZE;
-                // printf("start_addr index: %d\n", start_addr);
-                // for (size_t j = i - num_frames + 1; j <= i; j++) {
-                //     // mark each page as allocated in the bitmap
-                //     phys_memory_bitmap[j / 8] |= (1 << (j % 8));
-                // }
-                // return GET_VIRT_ADDR(start_addr, i / 1024);
-            }
         }
         if (consecutive_free >= num_frames) {
-            return ((i * 32) + init_offset);
+            return ((i * BITSET_WIDTH) + init_offset);
         } else {
             consecutive_free = 0;
             init_offset = 0;
@@ -225,7 +190,7 @@ static void set_frame(uintptr_t frame_addr)
     uint32_t frame = frame_addr / PAGE_SIZE;
     uint32_t idx = INDEX_FROM_BIT(frame);
     uint32_t off = OFFSET_FROM_BIT(frame);
-    phys_memory_bitmap[idx] |= (0x1 << off);
+    frame_bitset[idx] |= (0x1 << off);
 }
 
 /// I beliebe frame_addr is virtual addr
@@ -234,7 +199,7 @@ static void clear_frame(uintptr_t frame_addr)
     uint32_t frame = frame_addr / PAGE_SIZE;
     uint32_t idx = INDEX_FROM_BIT(frame);
     uint32_t off = OFFSET_FROM_BIT(frame);
-    phys_memory_bitmap[idx] &= ~(0x1 << off);
+    frame_bitset[idx] &= ~(0x1 << off);
 }
 
 uintptr_t kalloc_frames(size_t num_frames)
@@ -292,7 +257,7 @@ uint8_t test_pmm()
     for (size_t i = 0; i < 32; i++) {
         allocated[i] = kalloc_frames(i + 1);
         if (i > 0) {
-            if (allocated[i] - allocated[i - 1] < (i - 1) * 0x1000) {
+            if (allocated[i] - allocated[i - 1] < (i - 1) * PAGE_SIZE) {
                 passed = false;
                 err_code |= OVERLAP;
                 err_code &= ~UNKNOWN;
@@ -308,7 +273,7 @@ uint8_t test_pmm()
     for (size_t i = 0; i < 32; i++) {
         allocated[i + 32] = kalloc_frames(i + 1);
         if (i > 0) {
-            if (allocated[i] - allocated[i - 1] < (i - 1) * 0x1000) {
+            if (allocated[i] - allocated[i - 1] < (i - 1) * PAGE_SIZE) {
                 passed = false;
                 err_code |= OVERLAP;
                 err_code &= ~UNKNOWN;

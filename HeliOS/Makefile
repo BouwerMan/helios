@@ -22,6 +22,12 @@ ARCHDIR=arch/$(HOSTARCH)
 
 include $(ARCHDIR)/make.config
 
+DEFINES:=
+# DEFINES+=-DKERNEL_DEBUG
+DEFINES+=-DKMALLOC_TESTING
+# DEFINES+=-DMEM_MAP_DUMP
+# DEFINES+=-DPRINTF_TESTING
+
 CFLAGS:=$(CFLAGS) $(KERNEL_ARCH_CFLAGS)
 CPPFLAGS:=$(CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS)
 LDFLAGS:=$(LDFLAGS) $(KERNEL_ARCH_LDFLAGS)
@@ -73,7 +79,7 @@ $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 
 $(BUILDDIR)/%.o: %.c
 	mkdir -p $(@D)
-	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
+	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS) $(DEFINES)
 
 $(BUILDDIR)/%.o: %.s
 	@mkdir -p $(@D)
