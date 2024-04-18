@@ -27,11 +27,11 @@ static void parse_num(unsigned int value, unsigned int base)
     int temp_buffer[16] = { 0 };
 
     // Gets digit from right to left and converts to ascii
-    while (value != 0) {
+    do {
         temp_buffer[i] = (value % base) + '0';
         i++;
         value /= base;
-    };
+    } while (value != 0);
     // Iterates over array and prints it
     for (; i > 0; i--) {
         buffer[pointer++] = temp_buffer[i - 1];
@@ -129,12 +129,19 @@ int vprintf(const char* restrict format, va_list args)
     return pointer;
 }
 
+int sprintf(char* str, const char* __restrict format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    int result = vprintf(format, args);
+    str = buffer;
+    va_end(args);
+    return result;
+}
+
 #if defined(__is_libk)
 // TODO: Make this call puts and output full string instead of each char
-static void print(const char* data)
-{
-    tty_writestring(data);
-}
+static void print(const char* data) { tty_writestring(data); }
 
 #else
 // TODO: Proper libc print

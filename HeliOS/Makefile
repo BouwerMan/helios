@@ -39,8 +39,8 @@ $(BUILDDIR)/$(KERNELDIR)/keyboard.o \
 $(BUILDDIR)/$(KERNELDIR)/panic.o \
 $(BUILDDIR)/$(KERNELDIR)/cpu.o \
 $(BUILDDIR)/$(KERNELDIR)/memory.o \
-# $(BUILDDIR)/$(KERNELDIR)/mm.o \
-# $(BUILDDIR)/$(KERNELDIR)/paging.o \
+$(BUILDDIR)/$(KERNELDIR)/liballoc.o \
+$(BUILDDIR)/$(KERNELDIR)/liballoc_hooks.o \
 
 OBJS=\
 $(KERNEL_OBJS) \

@@ -28,14 +28,12 @@ void tty_initialize(void)
     }
 }
 
-void tty_setcolor(uint8_t color)
-{
-    terminal_color = color;
-}
+void tty_setcolor(uint8_t color) { terminal_color = color; }
 
 void tty_putentryat(char c, uint8_t color, size_t x, size_t y)
 {
-    const size_t index = y * VGA_WIDTH + x; // position = (y_position * characters_per_line) + x_position
+    const size_t index
+        = y * VGA_WIDTH + x; // position = (y_position * characters_per_line) + x_position
     terminal_buffer[index] = vga_entry(c, color);
 }
 
@@ -49,6 +47,9 @@ void tty_putchar(char c)
     case '\b':
         if (terminal_column == 0) break;
         tty_putentryat(' ', terminal_color, --terminal_column, terminal_row);
+        break;
+    case '\t':
+        tty_writestring("    ");
         break;
     default:
         tty_putentryat(c, terminal_color, terminal_column, terminal_row);
@@ -83,10 +84,7 @@ void tty_write(const char* data, size_t size)
         tty_putchar(data[i]);
 }
 
-void tty_writestring(const char* data)
-{
-    tty_write(data, strlen(data));
-}
+void tty_writestring(const char* data) { tty_write(data, strlen(data)); }
 
 void tty_enable_cursor(uint8_t cursor_start, uint8_t cursor_end)
 {

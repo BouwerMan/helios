@@ -28,6 +28,8 @@ void idt_set_gate(unsigned char, unsigned long, unsigned short, unsigned char);
 void idt_init();
 
 // isr.c
+void install_isr_handler(int isr, void (*handler)(struct irq_regs* r));
+void uninstall_isr_handler(int isr);
 void isr_init();
 void fault_handler(struct irq_regs*);
 
