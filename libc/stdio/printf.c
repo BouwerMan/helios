@@ -1,6 +1,7 @@
 #include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -15,9 +16,14 @@ static size_t pointer = 0;
 static void parse_hex(unsigned int value, bool cap)
 {
     const char* fmt = cap ? "0123456789ABCDEF" : "0123456789abcdef";
-    int i = 8;
-    while (i-- > 0)
-        buffer[pointer++] = fmt[(value >> (i * 4)) & 0xF];
+    bool zero = true; // Stores if all digits so far have been zero
+    for (int i = 7; i >= 0; i--) {
+        char c = fmt[(value >> (i * 4)) & 0xF];
+        // if we have only seen zeros, we just skip them
+        if (zero && c == '0') continue;
+        zero = false;
+        buffer[pointer++] = c;
+    }
 }
 
 static void parse_num(unsigned int value, unsigned int base)

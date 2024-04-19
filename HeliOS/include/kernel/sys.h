@@ -11,10 +11,10 @@
 
 /// Various defines
 /* Kernel Strings */
-#define KERNEL_NAME "HELIOS"
+#define KERNEL_NAME    "HELIOS"
 #define KERNEL_VERSION "0.0.0"
 
-#define MEM_START 0x00100000
+#define MEM_START     0x00100000
 #define KERNEL_OFFSET 0xC0000000
 
 /// Macros

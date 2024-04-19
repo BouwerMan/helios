@@ -1,6 +1,7 @@
 // MASTER TODO
 // TODO: clean up inports, such as size_t coming from <stddef>;
 // TODO: Pretty sure PMM will perform weird things when reaching max memory
+// TODO: Project restructuring (drivers, kernel, lib, etc.)
 #include "../arch/i386/vga.h"
 #include <kernel/cpu.h>
 #include <kernel/gdt.h>
@@ -9,6 +10,7 @@
 #include <kernel/liballoc.h>
 #include <kernel/memory.h>
 #include <kernel/multiboot.h>
+#include <kernel/pci/pci.h>
 #include <kernel/sys.h>
 #include <kernel/timer.h>
 #include <kernel/tty.h>
@@ -146,7 +148,9 @@ void kernel_main()
     kfree(test3);
 #endif
 
-// #define PRINTF_TESTING
+    list_devices();
+
+#define PRINTF_TESTING
 #ifdef PRINTF_TESTING
     tty_writestring("Printf testing:\n");
     putchar('c');
@@ -154,7 +158,7 @@ void kernel_main()
     printf("test new\n");
     printf("String: %s\n", "test string");
     printf("Char: %c\n", 't');
-    printf("Hex: 0x%x 0x%X\n", 0x14AF, 0x41BC);
+    printf("Hex: 0x%x 0x%X\n", 0x14AF, 0x410BC);
     printf("pos dec: %d\n", 5611);
     printf("neg dec: %d\n", -468);
     printf("unsigned int: %d\n", 4184);

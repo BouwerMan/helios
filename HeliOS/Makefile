@@ -47,6 +47,7 @@ $(BUILDDIR)/$(KERNELDIR)/cpu.o \
 $(BUILDDIR)/$(KERNELDIR)/memory.o \
 $(BUILDDIR)/$(KERNELDIR)/liballoc.o \
 $(BUILDDIR)/$(KERNELDIR)/liballoc_hooks.o \
+$(BUILDDIR)/$(KERNELDIR)/pci/pci.o \
 
 OBJS=\
 $(KERNEL_OBJS) \

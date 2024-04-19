@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define PAGE_SIZE 4096
+
 #if 0
 typedef struct page {
     uint32_t present : 1;
@@ -38,8 +40,6 @@ enum PMM_ERROR_CODE {
     RUN_DIFF = (1 << 3), // Allocating differed between both runs
 };
 
-static void clear_frame(uintptr_t frame_addr);
-static void set_frame(uintptr_t frame_addr);
 void init_memory(uint32_t mem_high, uint32_t phys_alloc_start);
 void pmm_init(uint32_t mem_high);
 void invalidate(uint32_t vaddr);

@@ -17,10 +17,8 @@ extern void write_cr3(uint32_t pointer);
 
 #define PAGE_FLAG_PRESENT (1 << 0)
 #define PAGE_FLAG_WRITE (1 << 1)
-#define PAGE_SIZE 4096
 // How many entries wide the frame bitset is
 #define BITSET_WIDTH 32
-// #define NUM_PAGE_DIRS 256
 
 #define INDEX_FROM_BIT(a) (a / BITSET_WIDTH)
 #define OFFSET_FROM_BIT(a) (a % BITSET_WIDTH)
@@ -143,12 +141,10 @@ uintptr_t get_physaddr(uintptr_t virtualaddr)
     return (uintptr_t)((pt[ptindex] & ~0xFFF) + ((unsigned long)virtualaddr & 0xFFF));
 }
 
-// TODO: currently i manually add kernel offset since all my allocation should be within the kernel
-//       right now. make this dynamic.
 // TODO: Maxes out at 32 frames.
 // TODO: Fragmentation issues when num_frames goes past 32-bit border (between indexes)
 //
-// Gets frame number from memory bitmap
+// Gets frame number from memory bitset
 uint32_t find_frames(size_t num_frames)
 {
     size_t init_offset = 0;

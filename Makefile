@@ -54,7 +54,7 @@ iso: all
 	grub-mkrescue -o $(OSNAME).iso isodir
 
 qemu: iso
-	qemu-system-$(HOSTARCH) -cdrom $(OSNAME).iso -m 4096M
+	qemu-system-$(HOSTARCH) -cdrom $(OSNAME).iso -m 4096M -hda myimage.img
 
 bochs: iso
 	bochs -f bochs
