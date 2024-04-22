@@ -1,4 +1,4 @@
-CFLAGS?=-O2 -g -std=gnu17
+CFLAGS?=-O0 -g -std=gnu17
 CPPFLAGS?=
 LDFLAGS?=
 LIBS?=
@@ -48,6 +48,10 @@ $(BUILDDIR)/$(KERNELDIR)/memory.o \
 $(BUILDDIR)/$(KERNELDIR)/liballoc.o \
 $(BUILDDIR)/$(KERNELDIR)/liballoc_hooks.o \
 $(BUILDDIR)/$(KERNELDIR)/pci/pci.o \
+$(BUILDDIR)/$(KERNELDIR)/ata/controller.o \
+$(BUILDDIR)/$(KERNELDIR)/ata/device.o \
+$(BUILDDIR)/$(KERNELDIR)/ata/ata.o \
+$(BUILDDIR)/$(KERNELDIR)/ata/partition.o \
 
 OBJS=\
 $(KERNEL_OBJS) \

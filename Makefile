@@ -22,7 +22,7 @@ export LIBDIR=$(EXEC_PREFIX)/lib
 export INCLUDEDIR=$(PREFIX)/include
 
 export CWARN=-Wall -Wextra -pedantic -std=gnu17
-export CFLAGS=-O2 -g
+export CFLAGS=-O0 -g
 export CPPFLAGS=
 
 # Configure the cross-compiler to use the desired system root.
@@ -54,7 +54,7 @@ iso: all
 	grub-mkrescue -o $(OSNAME).iso isodir
 
 qemu: iso
-	qemu-system-$(HOSTARCH) -cdrom $(OSNAME).iso -m 4096M -hda myimage.img
+	qemu-system-$(HOSTARCH) -cdrom $(OSNAME).iso -m 4096M -drive format=raw,file=myimage.img -boot d
 
 bochs: iso
 	bochs -f bochs

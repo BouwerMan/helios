@@ -1,3 +1,5 @@
+*.img
+*.qcow2
 build/
 isodir/
 sysroot/

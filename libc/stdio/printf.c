@@ -57,6 +57,10 @@ int printf(const char* restrict format, ...)
 
 // TODO: Buffer overflow protections
 //       Error codes (including other supporting funcs)
+//       Add proper buffer flushing, the real printf only outputs when:
+//          \n is encountered
+//          an input needs to happen
+//          program exit (doesnt apply to kernel so we can just always write after function call)
 int vprintf(const char* restrict format, va_list args)
 {
     if (strlen(format) > BUF_SIZE) return EOVERFLOW;
@@ -98,7 +102,7 @@ int vprintf(const char* restrict format, va_list args)
         case 'c':
             buffer[pointer++] = (char)va_arg(args, int); // Char promotes to int
             break;
-        case 'x': { // TODO: remove uneeded padding (go right to left?)
+        case 'x': {
             unsigned int value = va_arg(args, unsigned int);
             parse_hex(value, false);
             break;

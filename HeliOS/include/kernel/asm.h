@@ -23,6 +23,17 @@ static inline uint8_t inb(uint16_t port)
 }
 
 /**
+ * Outputs the word <val> to the I/O-Port <port>
+ *
+ * @param port the port
+ * @param val the value
+ */
+static inline void outword(uint16_t port, uint16_t val)
+{
+    __asm__ volatile("out	%%ax,%%dx" : : "a"(val), "d"(port));
+}
+
+/**
  * Outputs the dword <val> to the I/O-Port <port>
  *
  * @param port the port
@@ -31,6 +42,19 @@ static inline uint8_t inb(uint16_t port)
 static inline void outdword(uint16_t port, uint32_t val)
 {
     __asm__ volatile("out	%%eax,%%dx" : : "a"(val), "d"(port));
+}
+
+/**
+ * Reads a word from the I/O-Port <port>
+ *
+ * @param port the port
+ * @return the value
+ */
+static inline uint16_t inw(uint16_t port)
+{
+    uint16_t res;
+    __asm__ volatile("in	%%dx,%%ax" : "=a"(res) : "d"(port));
+    return res;
 }
 
 /**

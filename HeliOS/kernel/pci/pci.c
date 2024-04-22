@@ -9,7 +9,7 @@
 
 // TODO: Dynamiclly allocate
 pci_device_t* devices[32];
-uint8_t       device_idx = 0;
+uint8_t device_idx = 0;
 
 enum {
     BUS_COUNT = 8,
@@ -28,7 +28,7 @@ enum dev_type {
     CARD_BUS_BRIDGE = 0x2,
 };
 
-pci_device_t* get_device_by_index(uint8_t index)
+const pci_device_t* get_device_by_index(uint8_t index)
 {
     if (index > device_idx)
         return NULL;
@@ -36,7 +36,7 @@ pci_device_t* get_device_by_index(uint8_t index)
         return devices[index];
 }
 
-pci_device_t* get_device_by_id(uint16_t device_id)
+const pci_device_t* get_device_by_id(uint16_t device_id)
 {
     for (uint8_t i = 0; i <= device_idx; i++) {
         if (devices[i]->device_id == device_id) return devices[i];
@@ -44,7 +44,16 @@ pci_device_t* get_device_by_id(uint16_t device_id)
     return NULL;
 }
 
-static const uint32_t pci_config_read_word(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
+const pci_device_t* get_device_by_class(uint8_t base_class, uint8_t sub_class)
+{
+    for (uint8_t i = 0; i <= device_idx; i++) {
+        if (devices[i]->base_class == base_class && devices[i]->sub_class == sub_class)
+            return devices[i];
+    }
+    return NULL;
+}
+
+const uint32_t pci_config_read_word(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
 {
     uint32_t address;
     uint32_t lbus = (uint32_t)bus;

@@ -3,6 +3,7 @@
 // TODO: Pretty sure PMM will perform weird things when reaching max memory
 // TODO: Project restructuring (drivers, kernel, lib, etc.)
 #include "../arch/i386/vga.h"
+#include <kernel/ata/controller.h>
 #include <kernel/cpu.h>
 #include <kernel/gdt.h>
 #include <kernel/interrupts.h>
@@ -149,8 +150,8 @@ void kernel_main()
 #endif
 
     list_devices();
+    ctrl_init();
 
-#define PRINTF_TESTING
 #ifdef PRINTF_TESTING
     tty_writestring("Printf testing:\n");
     putchar('c');
