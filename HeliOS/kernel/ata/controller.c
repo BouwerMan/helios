@@ -30,8 +30,6 @@ void ctrl_init()
     if ((uint8_t)status == 0xFF) {
         puts("Floating IDE bus");
         return;
-    } else {
-        printf("IDE Status: 0x%X\n", status); // TODO: TEMP
     }
 
     ctrls[0].id = DEVICE_PRIMARY;
@@ -43,7 +41,7 @@ void ctrl_init()
     ctrls[1].port_base = PORTBASE_SECONDARY;
 
     for (size_t i = 0; i < 2; i++) {
-        printf("Initializing ctrl: %d\n", ctrls[i].id);
+        printf("Initializing controller: %d\n", ctrls[i].id);
 
         ctrls[i].use_irq = false;
         ctrls[i].use_dma = false;

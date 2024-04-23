@@ -4,7 +4,9 @@
 // TODO: Project restructuring (drivers, kernel, lib, etc.)
 #include "../arch/i386/vga.h"
 #include <kernel/ata/controller.h>
+#include <kernel/ata/device.h>
 #include <kernel/cpu.h>
+#include <kernel/fs/fat.h>
 #include <kernel/gdt.h>
 #include <kernel/interrupts.h>
 #include <kernel/keyboard.h>
@@ -151,6 +153,8 @@ void kernel_main()
 
     list_devices();
     ctrl_init();
+    // TODO: Get sATADevice function
+    init_fat(get_device_by_class(0x01, 0x01));
 
 #ifdef PRINTF_TESTING
     tty_writestring("Printf testing:\n");

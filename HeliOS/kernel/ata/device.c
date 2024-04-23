@@ -7,12 +7,13 @@
 
 static bool device_identify(sATADevice* device, uint16_t cmd);
 
-// TODO: Clean this up a bit
+// TODO: Clean this up a bit.
+//       Also need to implement the IDENTIFY struct.
 void device_init(sATADevice* device)
 {
     uint16_t buffer[256];
     sATAController* ctrl = device->ctrl;
-    printf("Sending 'IDENTIFY DEVICE' to device %d\n", device->id);
+    // printf("Sending 'IDENTIFY DEVICE' to device %d\n", device->id);
     if (!device_identify(device, COMMAND_IDENTIFY)) {
         if (!device_identify(device, COMMAND_IDENTIFY_PACKET)) {
             printf("Device %d not valid\n", device->id);
@@ -32,7 +33,7 @@ void device_init(sATADevice* device)
             device->present = 0;
             return;
         }
-        puts("Parsing partition table");
+        // puts("Parsing partition table");
         // for (size_t i = 0; i < 256; i++) {
         //     if (buffer[i]) printf("0x%X ", buffer[i]);
         // }
@@ -48,7 +49,7 @@ static bool device_identify(sATADevice* device, uint16_t cmd)
 
     uint32_t device_select = device->id & SLAVE_BIT ? 0xB0 : 0xA0;
 
-    printf("Selecting device %d, using value: 0x%X\n", device->id, device_select);
+    // printf("Selecting device %d, using value: 0x%X\n", device->id, device_select);
     ctrl_outb(ctrl, ATA_REG_DRIVE_SELECT, device_select);
     ctrl_wait(ctrl);
 
@@ -59,7 +60,7 @@ static bool device_identify(sATADevice* device, uint16_t cmd)
     ctrl_outb(ctrl, ATA_REG_COMMAND, cmd);
     uint8_t status = ctrl_inb(ctrl, ATA_REG_STATUS);
     if (status == 0) {
-        printf("Device %d returned a status of 0\n", device->id);
+        // printf("Device %d returned a status of 0\n", device->id);
         return false;
     }
     // Set Sectorcount, LBAlo, LBAmid, and LBAhi IO ports to 0

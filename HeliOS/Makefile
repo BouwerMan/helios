@@ -52,6 +52,7 @@ $(BUILDDIR)/$(KERNELDIR)/ata/controller.o \
 $(BUILDDIR)/$(KERNELDIR)/ata/device.o \
 $(BUILDDIR)/$(KERNELDIR)/ata/ata.o \
 $(BUILDDIR)/$(KERNELDIR)/ata/partition.o \
+$(BUILDDIR)/$(KERNELDIR)/fs/fat.o \
 
 OBJS=\
 $(KERNEL_OBJS) \

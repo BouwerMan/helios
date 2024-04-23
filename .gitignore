@@ -1,5 +1,7 @@
 *.img
 *.qcow2
+*.ini
+fat_dir/
 build/
 isodir/
 sysroot/

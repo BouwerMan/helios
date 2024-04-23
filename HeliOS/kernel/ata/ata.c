@@ -19,7 +19,6 @@ bool ata_read_write(
     // bool st = setup_command(device, lba, secCount, command);
     // PIO Transfer:
 
-    puts("Setting up command");
     ctrl_outb(
         ctrl, ATA_REG_DRIVE_SELECT, 0xE0 | ((device->id & SLAVE_BIT) << 4) | ((lba >> 24) & 0x0F));
     ctrl_wait(ctrl);
