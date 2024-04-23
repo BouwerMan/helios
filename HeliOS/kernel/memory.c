@@ -16,12 +16,12 @@ extern uint32_t kernel_end;
 extern void write_cr3(uint32_t pointer);
 
 #define PAGE_FLAG_PRESENT (1 << 0)
-#define PAGE_FLAG_WRITE (1 << 1)
+#define PAGE_FLAG_WRITE   (1 << 1)
 // How many entries wide the frame bitset is
 #define BITSET_WIDTH 32
 
-#define INDEX_FROM_BIT(a) (a / BITSET_WIDTH)
-#define OFFSET_FROM_BIT(a) (a % BITSET_WIDTH)
+#define INDEX_FROM_BIT(a)                 (a / BITSET_WIDTH)
+#define OFFSET_FROM_BIT(a)                (a % BITSET_WIDTH)
 #define GET_VIRT_ADDR(pd_index, tb_index) (((tb_index * 1024) + pd_index) * 4)
 
 uint32_t* frame_bitset;
@@ -232,8 +232,8 @@ void page_fault(struct irq_regs* r)
     int reserved = r->err_code & 0x8;
     int id = r->err_code & 0x10;
 
-    printf("PAGE FAULT! p:%d,rw:%d,user:%d,res:%d,id:%d) at 0x%x\r\n", present, rw, user, reserved,
-        fault_addr, id);
+    printf("PAGE FAULT! p:%d,rw:%d,user:%d,res:%d,id:%d) at 0x%x\n", present, rw, user, reserved,
+        id, fault_addr);
     panic("Page Fault");
 }
 

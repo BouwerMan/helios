@@ -9,19 +9,20 @@ static bool device_identify(sATADevice* device, uint16_t cmd);
 
 // TODO: Clean this up a bit.
 //       Also need to implement the IDENTIFY struct.
+//       Also need to support ATAPI
 void device_init(sATADevice* device)
 {
     uint16_t buffer[256];
     sATAController* ctrl = device->ctrl;
     // printf("Sending 'IDENTIFY DEVICE' to device %d\n", device->id);
     if (!device_identify(device, COMMAND_IDENTIFY)) {
-        if (!device_identify(device, COMMAND_IDENTIFY_PACKET)) {
-            printf("Device %d not valid\n", device->id);
-            return;
-        }
+        // if (!device_identify(device, COMMAND_IDENTIFY_PACKET)) {
+        printf("Device %d not valid\n", device->id);
+        return;
+        // }
     }
 
-    device->present = 1;
+    device->present = true;
     // Making sure device is not ATAPI
     if (!(device->info[0] & (1 << 15))) {
         device->sec_size = ATA_SEC_SIZE;
@@ -30,7 +31,7 @@ void device_init(sATADevice* device)
         // Read partition table
         if (!ata_read_write(device, OP_READ, buffer, 0, device->sec_size, 1)) {
             puts("Unable to read partition table");
-            device->present = 0;
+            device->present = false;
             return;
         }
         // puts("Parsing partition table");
@@ -90,6 +91,7 @@ static bool device_identify(sATADevice* device, uint16_t cmd)
 
     if (!(device->info[49] & (1 << 9))) {
         printf("Device %d does not support lba\n", device->id);
+        return false;
     }
 
     uint32_t lba_num = device->info[60] | (device->info[61] << 16);

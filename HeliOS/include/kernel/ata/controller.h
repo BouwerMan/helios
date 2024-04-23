@@ -76,6 +76,8 @@ struct sATAController {
 
 void ctrl_init();
 
+sATADevice* ctrl_get_device(uint8_t id);
+
 void ctrl_outb(sATAController* ctrl, uint16_t reg, uint8_t value);
 
 uint8_t ctrl_inb(sATAController* ctrl, uint16_t reg);

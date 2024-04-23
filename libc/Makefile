@@ -28,7 +28,9 @@ LIBK_CPPFLAGS:=$(LIBK_CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS)
 FREEOBJS=\
 $(ARCH_FREEOBJS) \
 $(BUILDDIR)/string/strlen.o \
+$(BUILDDIR)/string/strcmp.o \
 $(BUILDDIR)/string/memset.o \
+$(BUILDDIR)/string/memcpy.o \
 $(BUILDDIR)/stdio/printf.o \
 $(BUILDDIR)/stdio/putchar.o \
 $(BUILDDIR)/stdio/puts.o \

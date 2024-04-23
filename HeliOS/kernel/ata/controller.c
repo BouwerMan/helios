@@ -56,6 +56,8 @@ void ctrl_init()
     }
 }
 
+sATADevice* ctrl_get_device(uint8_t id) { return ctrls[id / 2].devices + id % 2; }
+
 void ctrl_outb(sATAController* ctrl, uint16_t reg, uint8_t value)
 {
     outb(ctrl->port_base + reg, value);

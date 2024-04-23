@@ -53,6 +53,7 @@ $(BUILDDIR)/$(KERNELDIR)/ata/device.o \
 $(BUILDDIR)/$(KERNELDIR)/ata/ata.o \
 $(BUILDDIR)/$(KERNELDIR)/ata/partition.o \
 $(BUILDDIR)/$(KERNELDIR)/fs/fat.o \
+$(BUILDDIR)/$(KERNELDIR)/fs/vfs.o \
 
 OBJS=\
 $(KERNEL_OBJS) \

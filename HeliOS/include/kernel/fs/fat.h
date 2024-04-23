@@ -1,5 +1,14 @@
 #pragma once
 #include <kernel/ata/controller.h>
+#include <kernel/fs/vfs.h>
+
+// enum {
+//     FAT12,
+//     FAT16,
+//     FAT32,
+//     ExFat,
+// };
+
 // TODO: put uint8_t types in the structs
 typedef struct fat_extBS_32 {
     // extended fat32 stuff
@@ -52,4 +61,39 @@ typedef struct fat_BS {
 
 } __attribute__((packed)) fat_BS_t;
 
-void init_fat(sATADevice* device);
+typedef struct fat_filetable_s {
+    char name[8];       //!< 8.3 Name
+    char ext[3];        //!< 8.3 File Extension
+    uint8_t attrib;     //!< File Attributes.
+    uint8_t ntres;      //!< Reserved for NT - Set to 0
+    uint8_t ctimems;    //!< 10ths of a second ranging from 0-199 (2 seconds)
+    uint16_t ctime;     //!< Creation Time
+    uint16_t cdate;     //!< Creation Date
+    uint16_t adate;     //!< Accessed Date. No Time feild though
+    uint16_t clusterHi; //!< High Cluster. 0 for FAT12 and FAT16
+    uint16_t mtime;     //!< Last Modified Time
+    uint16_t mdate;     //!< Last Modified Date
+    uint16_t cluster;   //!< Low Word of First cluster
+    uint32_t size;      //!< Size of file
+} __attribute__((packed)) fat_filetable_t;
+
+// TODO: Resize these fields
+struct fat_fs {
+    uint32_t lba_start;
+    uint16_t total_sectors;
+    uint16_t sector_size;
+    uint16_t fat_size;
+    uint16_t root_dir_sectors;
+    uint16_t first_root_dir_sector;
+    uint16_t first_data_sector;
+    uint16_t data_sectors;
+    uint16_t first_fat_sector;
+    uint16_t total_clusters;
+    uint8_t fat_type;
+    sATADevice* device;
+};
+
+typedef struct fat_filetable_s fat_filetable;
+
+void init_fat(sATADevice* device, uint32_t lba_start);
+void* fat_open_file(const char* directory, const char* filename);

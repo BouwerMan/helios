@@ -19,9 +19,13 @@ bool ata_read_write(
     // bool st = setup_command(device, lba, secCount, command);
     // PIO Transfer:
 
+    device_poll(device);
+    // printf("Selecting Device %d using 0x%X\n", device->id,
+    // 0xE0 | ((device->id & SLAVE_BIT) << 4) | ((lba >> 24) & 0x0F));
     ctrl_outb(
         ctrl, ATA_REG_DRIVE_SELECT, 0xE0 | ((device->id & SLAVE_BIT) << 4) | ((lba >> 24) & 0x0F));
     ctrl_wait(ctrl);
+    ctrl_outb(ctrl, ATA_REG_SECTOR_COUNT, (unsigned char)sec_count);
     ctrl_outb(ctrl, ATA_REG_ADDRESS1, (uint8_t)lba);
     ctrl_outb(ctrl, ATA_REG_ADDRESS2, (uint8_t)(lba >> 8));
     ctrl_outb(ctrl, ATA_REG_ADDRESS3, (uint8_t)(lba >> 16));
@@ -37,6 +41,9 @@ bool ata_read_write(
                 return false;
             }
             ctrl_inws(ctrl, ATA_REG_DATA, buffer, sec_size / sizeof(uint16_t));
+            // Flush cache
+            ctrl_outb(ctrl, ATA_REG_COMMAND, COMMAND_CACHE_FLUSH);
+            device_poll(device);
         }
     } else if (command == COMMAND_WRITE_SEC) {
         // For each sector we want to get

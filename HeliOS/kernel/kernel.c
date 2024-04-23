@@ -1,3 +1,21 @@
+/**
+ *   HeliOS is an open source hobby OS development project.
+ *   Copyright (C) 2024  Dylan Parks
+ *
+ *   This program is free software: you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation, either version 3 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 // MASTER TODO
 // TODO: clean up inports, such as size_t coming from <stddef>;
 // TODO: Pretty sure PMM will perform weird things when reaching max memory
@@ -65,8 +83,8 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     for (i = 0; i < mbd->mmap_length; i += sizeof(multiboot_memory_map_t)) {
         multiboot_memory_map_t* mmmt = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
 
-        printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n", mmmt->addr_low, mmmt->len_low,
-            mmmt->size, mmmt->type);
+        printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n", mmmt->addr_low, mmmt->len_low, mmmt->size,
+            mmmt->type);
 
         length += mmmt->len_low;
         if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE) {
@@ -103,8 +121,8 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     uint32_t phys_alloc_start = (kernel_end + 0x1000) & 0xFFFFF000;
 #ifdef KERNEL_DEBUG
     printf("KERNEL START: 0x%X, KERNEL END: 0x%X\n", kernel_start, kernel_end);
-    printf("MEM LOW: 0x%X, MEM HIGH: 0x%X, PHYS START: 0x%X\n", mbd->mem_lower * 1024,
-        mbd->mem_upper * 1024, phys_alloc_start);
+    printf("MEM LOW: 0x%X, MEM HIGH: 0x%X, PHYS START: 0x%X\n", mbd->mem_lower * 1024, mbd->mem_upper * 1024,
+        phys_alloc_start);
 #endif
     init_memory(mbd->mem_upper * 1024, phys_alloc_start);
 
@@ -153,8 +171,16 @@ void kernel_main()
 
     list_devices();
     ctrl_init();
-    // TODO: Get sATADevice function
-    init_fat(get_device_by_class(0x01, 0x01));
+    puts("Time to initialize FAT");
+    // Device 3 is the FAT device, hardcoding for now
+    init_fat(ctrl_get_device(3), 63);
+    fat_open_file("", "");
+    // for (size_t i = 0; i < 4; i++) {
+    //     sATADevice* dev = ctrl_get_device(i);
+    //     if (dev->present) {
+    //         init_fat(dev);
+    //     }
+    // }
 
 #ifdef PRINTF_TESTING
     tty_writestring("Printf testing:\n");
