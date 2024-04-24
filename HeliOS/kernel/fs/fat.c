@@ -12,6 +12,8 @@ static fat_BS_t* fat_boot;
 static struct fat_fs* fat;
 
 static void list_directory(struct fat_fs* fs, fat_filetable_t* tables, size_t tables_size, size_t* num_tables);
+static void* fat_open_cluster(
+    const struct fat_fs* fs, uint16_t* buffer, uint16_t buffer_size, uint32_t cluster, uint16_t sector);
 
 // TODO: make a struct for all the useful data (FAT_FS esc thing).
 //       return success or failure bool
@@ -61,7 +63,9 @@ void init_fat(sATADevice* device, uint32_t lba_start)
         = fat_boot->reserved_sector_count + (fat_boot->table_count * fat->fat_size) + fat->root_dir_sectors;
     printf("first_data_sector: %d\n", fat->first_data_sector);
     fat->first_root_dir_sector = fat->first_data_sector - fat->root_dir_sectors;
+    printf("first_root_dir_sector: %d\n", fat->first_root_dir_sector);
 
+    printf("secperclust: %d\n", fat_boot->sectors_per_cluster);
     fat->lba_start = lba_start;
     fat->device = device;
     // int cluster = 2;
@@ -162,38 +166,40 @@ void init_fat(sATADevice* device, uint32_t lba_start)
 const static uint8_t MAX_FILES = 16;
 
 // TODO: Ignores file extensions
-void* fat_open_file(const char* directory, const char* filename)
+void* fat_open_file(const sATADevice* device, const char* directory, const char* filename, const char* file_ext)
 {
     // TODO: Support directories
     (void)directory;
     void* file_out = NULL;
-    unsigned char* file_data = kmalloc(256);
+    // TODO: Account for filesize
+    unsigned char* file_data = kmalloc(512);
     fat_filetable_t* file_tables = kmalloc(sizeof(fat_filetable_t) * MAX_FILES);
     size_t num_tables = 0;
     list_directory(fat, file_tables, MAX_FILES, &num_tables);
 
     for (size_t i = 0; i < num_tables; i++) {
         printf("file %d: %s.%s\n", i, file_tables[i].name, file_tables[i].ext);
+        // Check if name matches
         if (strcmp(filename, file_tables[i].name)) continue;
-        uint16_t cluster = ((fat_table[to_check + 27] << 8) | (fat_table[to_check + 26])) - 2;
-        printf("test cluster: %d\n", cluster);
-        printf("secperclust: %d\n", fat_boot->sectors_per_cluster);
-
-        uint16_t fat_offset2 = cluster * fat_boot->sectors_per_cluster;
-        uint16_t fat_sector2 = fat->first_data_sector + fat_offset2;
-        memset(buffer, 0, sizeof(uint16_t) * 256);
-        printf("Fat offset: %d. Reading sector: %d\n", fat_offset2, fat_sector2 + 63);
-        if (!device->rw_handler(device, OP_READ, (uint16_t*)buffer, fat_sector2 + 63, device->sec_size, 1)) {
-            printf("Could not read from disk\n");
-            break;
-        }
-        file_out = NULL;
+        // printf("%s, %s\n", file_ext, file_tables[i].ext);
+        // if (strcmp(file_ext, file_tables[i].ext)) continue;
+        // TODO: fat is just from the init function, should select some other way
+        uint16_t cluster = file_tables[i].cluster;
+        fat_open_cluster(fat, (uint16_t*)file_data, 256, cluster, fat->first_data_sector);
+        file_out = file_data;
         break;
     }
 
     kfree(file_tables);
-    return NULL;
+    if (file_out) {
+        return file_out;
+    } else {
+        kfree(file_data);
+        return NULL;
+    }
 }
+
+void fat_close_file(void* file_start) { kfree(file_start); }
 
 // TODO: Currently only supports reading from root_dir
 static void list_directory(struct fat_fs* fs, fat_filetable_t* tables, size_t tables_size, size_t* num_tables)
@@ -201,18 +207,7 @@ static void list_directory(struct fat_fs* fs, fat_filetable_t* tables, size_t ta
     uint8_t fat_table[fs->sector_size];
     // Controls which directory we read
     uint8_t active_cluster = 2;
-    uint16_t fat_offset = active_cluster * 2;
-    // NOTE: Not sure first_root_dir_sector is right here, might have to manually find first
-    // sector of active_cluster
-    uint16_t fat_sector = fs->first_root_dir_sector + (fat_offset / fs->sector_size);
-    uint16_t ent_offset = fat_offset % fs->sector_size;
-
-    uint16_t read_buff[256] = { 0 };
-    if (!fs->device->rw_handler(fs->device, OP_READ, read_buff, fs->lba_start + fat_sector, fs->device->sec_size, 1)) {
-        printf("Could not read from disk\n");
-        return;
-    }
-    memcpy(fat_table, (uint8_t*)read_buff, fs->sector_size);
+    fat_open_cluster(fs, (uint16_t*)fat_table, fs->sector_size / 2, active_cluster, fs->first_root_dir_sector);
 
     for (size_t i = 0; i < fs->sector_size; i += 64) {
         if (fat_table[i] == 0x0) {
@@ -235,14 +230,26 @@ static void list_directory(struct fat_fs* fs, fat_filetable_t* tables, size_t ta
             }
             tables++;
             (*num_tables)++;
-            // printf("i: %d\n", i);
-            // for (size_t j = i; j < 11 + i; j++) {
-            //     printf("%c", fat_table[j]);
-            // }
-            // puts("");
         }
     }
     return;
 }
 
-static void* fat_open_cluster();
+// sector should be either first_root_dir_sector or first_data_sector, specifys where to look for sector i think
+static void* fat_open_cluster(
+    const struct fat_fs* fs, uint16_t* buffer, uint16_t buffer_size, uint32_t cluster, uint16_t sector)
+{
+    uint16_t read_buff[256] = { 0 };
+    uint32_t lba_addr = fs->lba_start + (cluster - 2) * fat_boot->sectors_per_cluster;
+    printf("lba_addr: %d\n", lba_addr);
+    if (!fs->device->rw_handler(fs->device, OP_READ, read_buff, lba_addr + sector, fs->device->sec_size, 1)) {
+        printf("Could not read from disk\n");
+        return NULL;
+    }
+    // Copy into caller's buffer, manually making sure we don't read past end of read_buff
+    if (buffer_size <= 256) {
+        return memcpy(buffer, read_buff, buffer_size);
+    } else {
+        return memcpy(buffer, read_buff, 256);
+    }
+}

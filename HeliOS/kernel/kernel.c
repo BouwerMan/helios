@@ -174,7 +174,17 @@ void kernel_main()
     puts("Time to initialize FAT");
     // Device 3 is the FAT device, hardcoding for now
     init_fat(ctrl_get_device(3), 63);
-    fat_open_file("", "");
+    // Here is the order for opening files:
+    // kernel requests vfs to open file at directory on drive X
+    //     Unsure if this is a good way to do this, maybe force the vfs to figure out drive
+    // vfs takes that information and sends it to the relevant filesystem driver
+    //     Driver needs to know: device to read from, filename, directory
+    uint8_t* data = (uint8_t*)fat_open_file(ctrl_get_device(3), "", "TEST", "TXT");
+    for (size_t i = 0; i < 512; i++) {
+        if (data[i]) printf("%c", data[i]);
+    }
+    puts("");
+    fat_close_file(data);
     // for (size_t i = 0; i < 4; i++) {
     //     sATADevice* dev = ctrl_get_device(i);
     //     if (dev->present) {

@@ -96,4 +96,5 @@ struct fat_fs {
 typedef struct fat_filetable_s fat_filetable;
 
 void init_fat(sATADevice* device, uint32_t lba_start);
-void* fat_open_file(const char* directory, const char* filename);
+void* fat_open_file(const sATADevice* device, const char* directory, const char* filename, const char* file_ext);
+void fat_close_file(void* file_start);

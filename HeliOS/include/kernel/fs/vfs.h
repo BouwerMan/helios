@@ -6,7 +6,9 @@
 // TODO: Add more filesystems once drivers for them are supported
 enum FILESYSTEMS {
     UNSUPPORTED = 0,
-    FAT16 = 1,
+    FAT16,
+    FAT32, // Not sure these are techincally supported
+    FAT12, // Not sure these are techincally supported
 };
 
 // TODO: Support longer file names, only limiting since we only support FAT16 no LFN
