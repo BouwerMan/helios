@@ -199,7 +199,8 @@ int fat_find_inode(inode_t* inode)
 
     for (size_t i = 0; i < num_tables; i++) {
         // Check if name matches
-        if (strcmp(inode->dir->filename, file_tables[i].name)) continue;
+        if (strncmp(inode->dir->filename, file_tables[i].name, 8)) continue;
+        if (strncmp(inode->dir->file_extension, file_tables[i].ext, 3)) continue;
         // TODO: Add more checks, too lazy rn so it just checks file name and calls it quits
 
         // Now we just fill out the inode

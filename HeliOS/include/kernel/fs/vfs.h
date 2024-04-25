@@ -17,8 +17,8 @@ enum FILESYSTEMS {
 typedef struct directory_s {
     uint8_t mount_id; // id of mount point
     const char* path;
-    const char filename[8];
-    const char file_extension[3];
+    const char filename[9];       // extended out so null chars fit
+    const char file_extension[4]; // extended out so null chars fit
 } dir_t;
 
 typedef struct filesystem_s filesystem_t;

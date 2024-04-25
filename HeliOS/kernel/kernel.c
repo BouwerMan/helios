@@ -193,7 +193,7 @@ void kernel_main()
     dir_t directory = {
         .mount_id = 0,
         .path = "",
-        .file_extension = "",
+        .file_extension = "TXT",
         .filename = "TEST",
     };
     puts("Opening file");
