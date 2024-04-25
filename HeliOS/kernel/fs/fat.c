@@ -3,9 +3,15 @@
 #include <kernel/ata/controller.h>
 #include <kernel/ata/device.h>
 #include <kernel/fs/fat.h>
+#include <kernel/fs/vfs.h>
 #include <kernel/liballoc.h>
 #include <stdio.h>
 #include <string.h>
+
+enum {
+    DIRECTORY_TYPE,
+    FILE_TYPE,
+};
 
 static fat_BS_t* fat_boot;
 // TODO: setup proper storage of filesystems
@@ -14,17 +20,21 @@ static struct fat_fs* fat;
 static void list_directory(struct fat_fs* fs, fat_filetable_t* tables, size_t tables_size, size_t* num_tables);
 static void* fat_open_cluster(
     const struct fat_fs* fs, uint16_t* buffer, uint16_t buffer_size, uint32_t cluster, uint16_t sector);
+static int fat_open_sector(
+    const struct fat_fs* fs, uint16_t* buffer, uint16_t buffer_size, uint32_t sector, uint8_t type);
 
 // TODO: make a struct for all the useful data (FAT_FS esc thing).
 //       return success or failure bool
 void init_fat(sATADevice* device, uint32_t lba_start)
 {
     uint16_t buffer[256] = { 0 };
+    printf("Attempting to read device %d\n", device->id);
     bool res = device->rw_handler(device, OP_READ, buffer, lba_start, device->sec_size, 1);
     if (!res) {
         printf("Failed to read device %d\n", device->id);
         return;
     }
+    printf("Read success\n");
     fat_boot = kmalloc(sizeof(fat_BS_t));
     fat = kmalloc(sizeof(struct fat_fs));
     memcpy(fat_boot, buffer, sizeof(fat_BS_t));
@@ -163,43 +173,50 @@ void init_fat(sATADevice* device, uint32_t lba_start)
     }
 }
 
+/// Max number of files to check, eventually should be infinite but i don't trust myself yet.
 const static uint8_t MAX_FILES = 16;
 
 // TODO: Ignores file extensions
-void* fat_open_file(const sATADevice* device, const char* directory, const char* filename, const char* file_ext)
+int fat_open_file(const inode_t* inode, char* buffer, size_t buffer_size)
 {
     // TODO: Support directories
-    (void)directory;
-    void* file_out = NULL;
     // TODO: Account for filesize
-    unsigned char* file_data = kmalloc(512);
+
+    return fat_open_sector(fat, (uint16_t*)buffer, buffer_size, inode->init_sector, FILE_TYPE);
+}
+
+void fat_close_file(void* file_start) { kfree(file_start); }
+
+/// Finds inode and fills out remaining inode parameters.
+/// NOTE: Requires dir and mount to be filled in so it can know where to look.
+/// TODO: Maybe rework that?
+int fat_find_inode(inode_t* inode)
+{
+    inode->f_size = 0;
     fat_filetable_t* file_tables = kmalloc(sizeof(fat_filetable_t) * MAX_FILES);
     size_t num_tables = 0;
     list_directory(fat, file_tables, MAX_FILES, &num_tables);
 
     for (size_t i = 0; i < num_tables; i++) {
-        printf("file %d: %s.%s\n", i, file_tables[i].name, file_tables[i].ext);
         // Check if name matches
-        if (strcmp(filename, file_tables[i].name)) continue;
-        // printf("%s, %s\n", file_ext, file_tables[i].ext);
-        // if (strcmp(file_ext, file_tables[i].ext)) continue;
-        // TODO: fat is just from the init function, should select some other way
-        uint16_t cluster = file_tables[i].cluster;
-        fat_open_cluster(fat, (uint16_t*)file_data, 256, cluster, fat->first_data_sector);
-        file_out = file_data;
+        if (strcmp(inode->dir->filename, file_tables[i].name)) continue;
+        // TODO: Add more checks, too lazy rn so it just checks file name and calls it quits
+
+        // Now we just fill out the inode
+        inode->f_size = file_tables[i].size;
+        // NOTE: Does not correctly offset based on root dir or data sectors yet.
+        // Planning on doing that in fat_open_sector()
+        inode->init_sector
+            = inode->mount->partition->start + (file_tables[i].cluster - 2) * fat_boot->sectors_per_cluster;
         break;
     }
 
     kfree(file_tables);
-    if (file_out) {
-        return file_out;
-    } else {
-        kfree(file_data);
-        return NULL;
-    }
+    if (inode->f_size)
+        return 0;
+    else
+        return 1;
 }
-
-void fat_close_file(void* file_start) { kfree(file_start); }
 
 // TODO: Currently only supports reading from root_dir
 static void list_directory(struct fat_fs* fs, fat_filetable_t* tables, size_t tables_size, size_t* num_tables)
@@ -233,6 +250,30 @@ static void list_directory(struct fat_fs* fs, fat_filetable_t* tables, size_t ta
         }
     }
     return;
+}
+
+static int fat_open_sector(
+    const struct fat_fs* fs, uint16_t* buffer, uint16_t buffer_size, uint32_t sector, uint8_t type)
+{
+    uint32_t offset = 0;
+    if (type == DIRECTORY_TYPE) {
+        offset = fs->first_root_dir_sector;
+    } else if (type == FILE_TYPE) {
+        offset = fs->first_data_sector;
+    }
+    uint16_t read_buff[256] = { 0 };
+    printf("Reading from sector: %d\n", sector + offset);
+    if (!fs->device->rw_handler(fs->device, OP_READ, read_buff, sector + offset, fs->device->sec_size, 1)) {
+        printf("Could not read from disk\n");
+        return -1;
+    }
+    // Copy into caller's buffer, manually making sure we don't read past end of read_buff
+    if (buffer_size <= 256) {
+        memcpy(buffer, read_buff, buffer_size);
+    } else {
+        memcpy(buffer, read_buff, 256);
+    }
+    return 0;
 }
 
 // sector should be either first_root_dir_sector or first_data_sector, specifys where to look for sector i think

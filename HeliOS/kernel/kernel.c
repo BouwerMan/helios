@@ -25,6 +25,7 @@
 #include <kernel/ata/device.h>
 #include <kernel/cpu.h>
 #include <kernel/fs/fat.h>
+#include <kernel/fs/vfs.h>
 #include <kernel/gdt.h>
 #include <kernel/interrupts.h>
 #include <kernel/keyboard.h>
@@ -171,20 +172,43 @@ void kernel_main()
 
     list_devices();
     ctrl_init();
-    puts("Time to initialize FAT");
+    puts("VFS Testing");
+    vfs_init(8, 8, 16);
+
+    puts("Registering FAT16");
+    register_fs(FAT16);
+    puts("Registered FAT16\nMounting drive");
+    sATADevice* fat_device = ctrl_get_device(3);
+    mount(0, fat_device, &fat_device->part_table[0], FAT16);
+
+    // puts("Time to initialize FAT");
     // Device 3 is the FAT device, hardcoding for now
-    init_fat(ctrl_get_device(3), 63);
+    // init_fat(ctrl_get_device(3), 63);
     // Here is the order for opening files:
     // kernel requests vfs to open file at directory on drive X
     //     Unsure if this is a good way to do this, maybe force the vfs to figure out drive
     // vfs takes that information and sends it to the relevant filesystem driver
     //     Driver needs to know: device to read from, filename, directory
-    uint8_t* data = (uint8_t*)fat_open_file(ctrl_get_device(3), "", "TEST", "TXT");
-    for (size_t i = 0; i < 512; i++) {
-        if (data[i]) printf("%c", data[i]);
+
+    dir_t directory = {
+        .mount_id = 0,
+        .path = "",
+        .file_extension = "",
+        .filename = "TEST",
+    };
+    puts("Opening file");
+    FILE* data = vfs_open(&directory);
+    if (data) {
+        puts(data->read_ptr);
+        vfs_close(data);
     }
-    puts("");
-    fat_close_file(data);
+    puts("Opening file again");
+    FILE* data2 = vfs_open(&directory);
+    if (data) {
+        puts(data2->read_ptr);
+        vfs_close(data2);
+    }
+    // fat_close_file(data);
     // for (size_t i = 0; i < 4; i++) {
     //     sATADevice* dev = ctrl_get_device(i);
     //     if (dev->present) {
