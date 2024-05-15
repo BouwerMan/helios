@@ -1,7 +1,7 @@
+#include <drivers/ata/controller.h>
+#include <drivers/ata/device.h>
+#include <drivers/pci/pci.h>
 #include <kernel/asm.h>
-#include <kernel/ata/controller.h>
-#include <kernel/ata/device.h>
-#include <kernel/pci/pci.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -58,10 +58,7 @@ void ctrl_init()
 
 sATADevice* ctrl_get_device(uint8_t id) { return ctrls[id / 2].devices + id % 2; }
 
-void ctrl_outb(sATAController* ctrl, uint16_t reg, uint8_t value)
-{
-    outb(ctrl->port_base + reg, value);
-}
+void ctrl_outb(sATAController* ctrl, uint16_t reg, uint8_t value) { outb(ctrl->port_base + reg, value); }
 
 uint8_t ctrl_inb(sATAController* ctrl, uint16_t reg) { return inb(ctrl->port_base + reg); }
 uint16_t ctrl_inw(sATAController* ctrl, uint16_t reg) { return inw(ctrl->port_base + reg); }

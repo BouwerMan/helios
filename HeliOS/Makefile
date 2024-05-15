@@ -6,6 +6,7 @@ LIBS?=
 OSNAME?=myos
 BUILDDIR=build
 KERNELDIR=kernel
+DRIVERDIR=drivers
 
 DESTDIR?=
 PREFIX?=/usr/local
@@ -25,6 +26,7 @@ include $(ARCHDIR)/make.config
 DEFINES:=
 # DEFINES+=-DKERNEL_DEBUG
 DEFINES+=-DKMALLOC_TESTING
+DEFINES+=-DFS_TESTING
 # DEFINES+=-DMEM_MAP_DUMP
 # DEFINES+=-DPRINTF_TESTING
 
@@ -47,16 +49,19 @@ $(BUILDDIR)/$(KERNELDIR)/cpu.o \
 $(BUILDDIR)/$(KERNELDIR)/memory.o \
 $(BUILDDIR)/$(KERNELDIR)/liballoc.o \
 $(BUILDDIR)/$(KERNELDIR)/liballoc_hooks.o \
-$(BUILDDIR)/$(KERNELDIR)/pci/pci.o \
-$(BUILDDIR)/$(KERNELDIR)/ata/controller.o \
-$(BUILDDIR)/$(KERNELDIR)/ata/device.o \
-$(BUILDDIR)/$(KERNELDIR)/ata/ata.o \
-$(BUILDDIR)/$(KERNELDIR)/ata/partition.o \
-$(BUILDDIR)/$(KERNELDIR)/fs/fat.o \
-$(BUILDDIR)/$(KERNELDIR)/fs/vfs.o \
+
+DRIVER_OBJS=\
+$(BUILDDIR)/$(DRIVERDIR)/pci/pci.o \
+$(BUILDDIR)/$(DRIVERDIR)/ata/controller.o \
+$(BUILDDIR)/$(DRIVERDIR)/ata/device.o \
+$(BUILDDIR)/$(DRIVERDIR)/ata/ata.o \
+$(BUILDDIR)/$(DRIVERDIR)/ata/partition.o \
+$(BUILDDIR)/$(DRIVERDIR)/fs/fat.o \
+$(BUILDDIR)/$(DRIVERDIR)/fs/vfs.o \
 
 OBJS=\
 $(KERNEL_OBJS) \
+$(DRIVER_OBJS) \
 #$(ARCHDIR)/crti.o \
 #$(ARCHDIR)/crtbegin.o \
 #$(ARCHDIR)/crtend.o \
@@ -65,6 +70,7 @@ $(KERNEL_OBJS) \
 LINK_LIST=\
 $(LDFLAGS) \
 $(KERNEL_OBJS) \
+$(DRIVER_OBJS) \
 $(LIBS) \
 #$(ARCHDIR)/crti.o \
 #$(ARCHDIR)/crtbegin.o \

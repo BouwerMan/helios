@@ -21,18 +21,18 @@
 // TODO: Pretty sure PMM will perform weird things when reaching max memory
 // TODO: Project restructuring (drivers, kernel, lib, etc.)
 #include "../arch/i386/vga.h"
-#include <kernel/ata/controller.h>
-#include <kernel/ata/device.h>
+#include <drivers/ata/controller.h>
+#include <drivers/ata/device.h>
+#include <drivers/fs/fat.h>
+#include <drivers/fs/vfs.h>
+#include <drivers/pci/pci.h>
 #include <kernel/cpu.h>
-#include <kernel/fs/fat.h>
-#include <kernel/fs/vfs.h>
 #include <kernel/gdt.h>
 #include <kernel/interrupts.h>
 #include <kernel/keyboard.h>
 #include <kernel/liballoc.h>
 #include <kernel/memory.h>
 #include <kernel/multiboot.h>
-#include <kernel/pci/pci.h>
 #include <kernel/sys.h>
 #include <kernel/timer.h>
 #include <kernel/tty.h>
@@ -170,6 +170,7 @@ void kernel_main()
     kfree(test3);
 #endif
 
+#ifdef FS_TESTING
     list_devices();
     ctrl_init();
     puts("VFS Testing");
@@ -208,13 +209,14 @@ void kernel_main()
         puts(data2->read_ptr);
         vfs_close(data2);
     }
-    // fat_close_file(data);
-    // for (size_t i = 0; i < 4; i++) {
-    //     sATADevice* dev = ctrl_get_device(i);
-    //     if (dev->present) {
-    //         init_fat(dev);
-    //     }
-    // }
+// fat_close_file(data);
+// for (size_t i = 0; i < 4; i++) {
+//     sATADevice* dev = ctrl_get_device(i);
+//     if (dev->present) {
+//         init_fat(dev);
+//     }
+// }
+#endif
 
 #ifdef PRINTF_TESTING
     tty_writestring("Printf testing:\n");

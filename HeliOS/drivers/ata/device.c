@@ -1,7 +1,7 @@
-#include <kernel/ata/ata.h>
-#include <kernel/ata/controller.h>
-#include <kernel/ata/device.h>
-#include <kernel/ata/partition.h>
+#include <drivers/ata/ata.h>
+#include <drivers/ata/controller.h>
+#include <drivers/ata/device.h>
+#include <drivers/ata/partition.h>
 #include <kernel/timer.h>
 #include <stdio.h>
 

@@ -1,7 +1,7 @@
 // https://wiki.osdev.org/ATA_PIO_Mode#28_bit_PIO
-#include <kernel/ata/ata.h>
-#include <kernel/ata/controller.h>
-#include <kernel/ata/device.h>
+#include <drivers/ata/ata.h>
+#include <drivers/ata/controller.h>
+#include <drivers/ata/device.h>
 #include <stdio.h>
 
 static uint16_t get_command(sATADevice* device, uint16_t op);
@@ -9,8 +9,7 @@ static bool setup_command(sATADevice* device, uint32_t lba, size_t sec_count, ui
 
 // TODO: Add DMA support, currently just PIO
 //       Also need support for ATAPI
-bool ata_read_write(
-    sATADevice* device, uint16_t op, void* buffer, uint32_t lba, size_t sec_size, size_t sec_count)
+bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba, size_t sec_size, size_t sec_count)
 {
     sATAController* ctrl = device->ctrl;
     uint16_t command = get_command(device, op);
@@ -22,8 +21,7 @@ bool ata_read_write(
     device_poll(device);
     // printf("Selecting Device %d using 0x%X\n", device->id,
     // 0xE0 | ((device->id & SLAVE_BIT) << 4) | ((lba >> 24) & 0x0F));
-    ctrl_outb(
-        ctrl, ATA_REG_DRIVE_SELECT, 0xE0 | ((device->id & SLAVE_BIT) << 4) | ((lba >> 24) & 0x0F));
+    ctrl_outb(ctrl, ATA_REG_DRIVE_SELECT, 0xE0 | ((device->id & SLAVE_BIT) << 4) | ((lba >> 24) & 0x0F));
     ctrl_wait(ctrl);
     ctrl_outb(ctrl, ATA_REG_SECTOR_COUNT, (unsigned char)sec_count);
     ctrl_outb(ctrl, ATA_REG_ADDRESS1, (uint8_t)lba);

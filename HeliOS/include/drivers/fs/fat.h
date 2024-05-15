@@ -1,6 +1,6 @@
 #pragma once
-#include <kernel/ata/controller.h>
-#include <kernel/fs/vfs.h>
+#include <drivers/ata/controller.h>
+#include <drivers/fs/vfs.h>
 
 // enum {
 //     FAT12,
