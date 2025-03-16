@@ -9,6 +9,10 @@
 //     ExFat,
 // };
 
+enum fat_values {
+    FAT_BAD_SECTOR = 0xFFF8,
+};
+
 // TODO: put uint8_t types in the structs
 typedef struct fat_extBS_32 {
     // extended fat32 stuff
@@ -99,3 +103,4 @@ void init_fat(sATADevice* device, uint32_t lba_start);
 int fat_open_file(const inode_t* inode, char* buffer, size_t buffer_size);
 void fat_close_file(void* file_start);
 int fat_find_inode(inode_t* inode);
+void fat_dir(inode_t* inode);

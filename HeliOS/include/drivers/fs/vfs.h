@@ -35,11 +35,13 @@ typedef struct mount mount_t;
 // NOTE: This is not the same as linux inode because I am stupid and don't understand it. I am just stealing the name.
 // TODO: I need to store sector information or some way for the fs to find the file immediately.
 typedef struct inode_s {
-    int id;               // inode id in cache
-    mount_t* mount;       // Top level device information
-    dir_t* dir;           // File location and name
-    uint32_t init_sector; // Initial sector of the filesystem
-    size_t f_size;        // File size
+    int id;                // inode id in cache
+    mount_t* mount;        // Top level device information
+    dir_t* dir;            // File location and name
+    uint32_t init_sector;  // Initial sector of the filesystem
+    size_t f_size;         // File size
+    uint32_t init_cluster; // initial fat cluster, later this should be placed in fat specific place
+    uint8_t loc_type;      // fat location type, either 0 -> ROOT or 1 -> DATA
 } inode_t;
 
 typedef struct {

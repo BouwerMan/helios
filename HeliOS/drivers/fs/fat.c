@@ -5,13 +5,17 @@
 #include <drivers/fs/fat.h>
 #include <drivers/fs/vfs.h>
 #include <kernel/liballoc.h>
+#include <kernel/sys.h>
 #include <stdio.h>
 #include <string.h>
+
+// https://unix.stackexchange.com/questions/209566/how-to-format-a-partition-inside-of-an-img-file
 
 enum {
     DIRECTORY_TYPE,
     FILE_TYPE,
 };
+enum LOC_TYPE { ROOT, DATA };
 
 static fat_BS_t* fat_boot;
 // TODO: setup proper storage of filesystems
@@ -20,8 +24,10 @@ static struct fat_fs* fat;
 static void list_directory(struct fat_fs* fs, fat_filetable_t* tables, size_t tables_size, size_t* num_tables);
 static void* fat_open_cluster(
     const struct fat_fs* fs, uint16_t* buffer, uint16_t buffer_size, uint32_t cluster, uint16_t sector);
-static int fat_open_sector(
-    const struct fat_fs* fs, uint16_t* buffer, uint16_t buffer_size, uint32_t sector, uint8_t type);
+static int fat_open_sector(const struct fat_fs* fs, uint8_t* buffer, uint16_t buffer_size, uint32_t sector);
+static int fat_open_clust(
+    const struct fat_fs* fs, uint8_t* buffer, size_t buffer_size, uint32_t cluster, enum LOC_TYPE type);
+static uint32_t fat_get_next_cluster(const struct fat_fs* fs, uint32_t first_cluster);
 
 // TODO: make a struct for all the useful data (FAT_FS esc thing).
 //       return success or failure bool
@@ -54,13 +60,16 @@ void init_fat(sATADevice* device, uint32_t lba_start)
         - (fat_boot->reserved_sector_count + (fat_boot->table_count * fat->fat_size) + fat->root_dir_sectors);
 
     fat->total_clusters = fat->data_sectors / fat_boot->sectors_per_cluster;
+    printf("Total Clusters: %d\n", fat->total_clusters);
 
     // TODO: Support ExFAT
     if (fat->total_clusters < 4085) {
         fat->fat_type = FAT12;
+        // panic("We don't like FAT12");
     } else if (fat->total_clusters < 65525) {
         fat->fat_type = FAT16;
     } else {
+        // panic("We don't like FAT32");
         fat->fat_type = FAT32;
     }
 
@@ -69,6 +78,8 @@ void init_fat(sATADevice* device, uint32_t lba_start)
     // NOTE: I know I am using FAT16 now so I am just going to tailor for that while testing
     //       Most everything below this should be moved to an fopen function
 
+    fat->first_fat_sector = fat_boot->reserved_sector_count;
+    printf("first_fat_sector: %d\n", fat->first_fat_sector);
     fat->first_data_sector
         = fat_boot->reserved_sector_count + (fat_boot->table_count * fat->fat_size) + fat->root_dir_sectors;
     printf("first_data_sector: %d\n", fat->first_data_sector);
@@ -85,7 +96,10 @@ void init_fat(sATADevice* device, uint32_t lba_start)
 
     // NOTE: I think this translates properly, if i understand, multiple sectors make up a cluster,
     // since this is the first one i can just use the sector and i'll increment from there.
+    // asm volatile("1: jmp 1b");
+
     return;
+#if 0
     int active_cluster = 2;
     bool next = true;
     while (next) {
@@ -171,6 +185,7 @@ void init_fat(sATADevice* device, uint32_t lba_start)
             // next = false;
         }
     }
+#endif
 }
 
 /// Max number of files to check, eventually should be infinite but i don't trust myself yet.
@@ -182,7 +197,22 @@ int fat_open_file(const inode_t* inode, char* buffer, size_t buffer_size)
     // TODO: Support directories
     // TODO: Account for filesize
 
-    return fat_open_sector(fat, (uint16_t*)buffer, buffer_size, inode->init_sector, FILE_TYPE);
+    uint32_t cluster_size = fat->sector_size * fat_boot->sectors_per_cluster; // number of bytes in a cluster
+    uint32_t num_clusters
+        = (buffer_size / (fat->sector_size * fat_boot->sectors_per_cluster) + 1); // number of clusters to read (approx)
+
+    uint32_t next_cluster = inode->init_cluster;
+    size_t i = 0;
+    while (next_cluster < 0xFFF8) {
+        next_cluster = fat_get_next_cluster(fat, next_cluster);
+        fat_open_clust(fat, buffer + (i * cluster_size), buffer_size - (i * cluster_size), next_cluster, DATA);
+        i++;
+    }
+    // NOTE: LETS GOOOOOOOO THIS THING READS THE ENTIRE FILE AT ONCE IM LITERALLY GONNA
+
+    // return fat_open_clust(fat, buffer, buffer_size, inode->init_cluster, DATA);
+    return 0;
+    // return fat_open_sector(fat, buffer, buffer_size, inode->init_sector + fat->first_data_sector);
 }
 
 void fat_close_file(void* file_start) { kfree(file_start); }
@@ -209,6 +239,7 @@ int fat_find_inode(inode_t* inode)
         // Planning on doing that in fat_open_sector()
         inode->init_sector
             = inode->mount->partition->start + (file_tables[i].cluster - 2) * fat_boot->sectors_per_cluster;
+        inode->init_cluster = file_tables[i].cluster;
         break;
     }
 
@@ -217,6 +248,29 @@ int fat_find_inode(inode_t* inode)
         return 0;
     else
         return 1;
+}
+
+void fat_dir(inode_t* inode)
+{
+    fat_filetable_t* file_tables = kmalloc(sizeof(fat_filetable_t) * MAX_FILES);
+    size_t num_tables = 0;
+    // First we read the root sector
+    uint8_t fat_table[fat->sector_size];
+    uint8_t active_cluster = 2; // for root dir
+    uint32_t first_sector = fat->first_root_dir_sector;
+    // fat_open_cluster(fat, (uint16_t*)fat_table, fs->sector_size / 2, )
+    fat_open_clust(fat, fat_table, fat->sector_size, first_sector, ROOT);
+
+    list_directory(fat, file_tables, MAX_FILES, &num_tables);
+
+    for (int i = 0; i < num_tables; ++i) {
+        puts(file_tables[i].name);
+        printf("file cluster: %d\n", file_tables[i].cluster);
+    }
+
+    // asm volatile("1: jmp 1b");
+    kfree(file_tables);
+    return;
 }
 
 // TODO: Currently only supports reading from root_dir
@@ -253,26 +307,123 @@ static void list_directory(struct fat_fs* fs, fat_filetable_t* tables, size_t ta
     return;
 }
 
-static int fat_open_sector(
-    const struct fat_fs* fs, uint16_t* buffer, uint16_t buffer_size, uint32_t sector, uint8_t type)
+static void parse_directory(
+    struct fat_fs* fs, fat_filetable_t* tables, size_t tables_size, size_t* num_tables, uint8_t* fat_table)
 {
-    uint32_t offset = 0;
-    if (type == DIRECTORY_TYPE) {
-        offset = fs->first_root_dir_sector;
-    } else if (type == FILE_TYPE) {
-        offset = fs->first_data_sector;
+    for (size_t i = 0; i < fs->sector_size; i += 64) {
+        if (fat_table[i] == 0x0) {
+            break;
+        } else if (fat_table[i] == 0xE5) {
+            // TODO: Unused entry
+            continue;
+        }
+        // tables = (fat_filetable_t)fat_table[i];
+        if (fat_table[i + 10] == 0x0F) {
+            puts("long file name entry not supported");
+            continue;
+        } else {
+            memcpy(tables, fat_table + i, 32);
+            for (uint8_t j = 0; j < 8; j++) {
+                if (tables->name[j] == ' ') tables->name[j] = '\0';
+                if (j < 3) {
+                    if (tables->ext[j] == ' ') tables->ext[j] = '\0';
+                }
+            }
+            tables++;
+            (*num_tables)++;
+        }
     }
+}
+
+/**
+ * @brief gets next cluster in chain
+ * @param[in] first_cluster First cluster of the file (DOES THIS NEED TO BE PREVIOUS CLUSTER INSTEAD)
+ *
+ * @returns cluster
+ */
+static uint32_t fat_get_next_cluster(const struct fat_fs* fs, uint32_t first_cluster)
+{
+    // TODO: document basic blurb on how this all works
+
+    // Setting up offsets
+    uint32_t active_cluster = first_cluster;
+    unsigned char FAT_table[fs->sector_size];
+    unsigned int fat_offset = active_cluster * 2;
+    // Have to add lba_start, TODO: make lba start included in first_fat sector?
+    unsigned int fat_sector = fs->first_fat_sector + (fat_offset / fs->sector_size) + fs->lba_start;
+    unsigned int ent_offset = fat_offset % fs->sector_size;
+
+    // at this point you need to read from sector "fat_sector" on the disk into "FAT_table".
+    //  TODO: Handle errors
+    fat_open_sector(fs, FAT_table, fs->sector_size, fat_sector); // First sector
+
+    unsigned short table_value = *(unsigned short*)&FAT_table[ent_offset];
+
+    // the variable "table_value" now has the information you need about the next cluster in the chain.
+
+    if (table_value > 0xFFF8)
+        puts("Last cluster in string");
+    else if (table_value == 0xFFF8)
+        puts("Cluster marked as bad");
+
+    return table_value;
+}
+
+// NOTE: Doing things kinda funky, this is made to replace the old fat_open_cluster()
+// This function SHOULD read the entire cluster to memory
+// type refers to either root directory or data directory sectors
+static int fat_open_clust(
+    const struct fat_fs* fs, uint8_t* buffer, size_t buffer_size, uint32_t cluster, enum LOC_TYPE type)
+{
+    // TODO: Put sectors per cluster in fat_fs
+
+    uint32_t sector = type ? fs->first_data_sector : fs->first_root_dir_sector;
+    uint32_t lba_addr = fs->lba_start + sector + (cluster - 2) * fat_boot->sectors_per_cluster;
+    uint32_t cluster_size = fs->sector_size * fat_boot->sectors_per_cluster;
+    // Holds entire cluster
+    uint8_t* cluster_data = kmalloc(cluster_size);
+    printf("cluster: %d, lba_addr: %d, type: %d\n", cluster, lba_addr, type);
+    for (size_t i = 0; i < fat_boot->sectors_per_cluster; i++) {
+        uint8_t* tmp = cluster_data + (i * fs->sector_size);
+        fat_open_sector(fs, tmp, fat->sector_size, lba_addr + i);
+        // asm volatile("1: jmp 1b");
+    }
+    // asm volatile("1: jmp 1b");
+    // puts(cluster_data);
+    // Copy into caller's buffer, manually making sure we don't read past end of read_buff
+    if (buffer_size <= cluster_size) {
+        memcpy(buffer, cluster_data, buffer_size);
+    } else {
+        memcpy(buffer, cluster_data, cluster_size);
+    }
+    kfree(cluster_data);
+    return 0;
+}
+
+// TODO: Do we want to integrate this into other functions? This feels kinda useless and basically just a wrapper for
+// the rw_handler.
+/**
+ *  @brief Modifies input buffer with sector data from disk. This function will handle casting for device drivers.
+ *
+ *  @param[in] fs Pointer to fat filesystem.
+ *  @param[in] buffer Byte array to place data.
+ *  @param[in] buffer_size Size of buffer in bytes.
+ *  @param[in] sector Logical sector to read.
+ *  @returns 0 if success, 1 if failure.
+ */
+static int fat_open_sector(const struct fat_fs* fs, uint8_t* buffer, uint16_t buffer_size, uint32_t sector)
+{
     uint16_t read_buff[256] = { 0 };
-    printf("Reading from sector: %d\n", sector + offset);
-    if (!fs->device->rw_handler(fs->device, OP_READ, read_buff, sector + offset, fs->device->sec_size, 1)) {
+    // printf("Reading from sector: %d\n", sector);
+    if (!fs->device->rw_handler(fs->device, OP_READ, read_buff, sector, fs->device->sec_size, 1)) {
         printf("Could not read from disk\n");
         return -1;
     }
     // Copy into caller's buffer, manually making sure we don't read past end of read_buff
-    if (buffer_size <= 256) {
+    if (buffer_size <= 512) {
         memcpy(buffer, read_buff, buffer_size);
     } else {
-        memcpy(buffer, read_buff, 256);
+        memcpy(buffer, read_buff, 512);
     }
     return 0;
 }
@@ -281,10 +432,11 @@ static int fat_open_sector(
 static void* fat_open_cluster(
     const struct fat_fs* fs, uint16_t* buffer, uint16_t buffer_size, uint32_t cluster, uint16_t sector)
 {
+    // 256 because it is 16 bits so 2 bytes (equals full 512 bytes per sector)
     uint16_t read_buff[256] = { 0 };
-    uint32_t lba_addr = fs->lba_start + (cluster - 2) * fat_boot->sectors_per_cluster;
+    uint32_t lba_addr = fs->lba_start + sector + (cluster - 2) * fat_boot->sectors_per_cluster;
     printf("lba_addr: %d\n", lba_addr);
-    if (!fs->device->rw_handler(fs->device, OP_READ, read_buff, lba_addr + sector, fs->device->sec_size, 1)) {
+    if (!fs->device->rw_handler(fs->device, OP_READ, read_buff, lba_addr, fs->device->sec_size, 1)) {
         printf("Could not read from disk\n");
         return NULL;
     }
@@ -292,6 +444,6 @@ static void* fat_open_cluster(
     if (buffer_size <= 256) {
         return memcpy(buffer, read_buff, buffer_size);
     } else {
-        return memcpy(buffer, read_buff, 256);
+        return memcpy(buffer, read_buff, 512);
     }
 }

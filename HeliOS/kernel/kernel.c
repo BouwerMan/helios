@@ -170,6 +170,7 @@ void kernel_main()
     kfree(test3);
 #endif
 
+#define FS_TESTING
 #ifdef FS_TESTING
     list_devices();
     ctrl_init();
@@ -195,7 +196,7 @@ void kernel_main()
         .mount_id = 0,
         .path = "",
         .file_extension = "TXT",
-        .filename = "TEST",
+        .filename = "TEST2",
     };
     puts("Opening file");
     FILE* data = vfs_open(&directory);
@@ -209,6 +210,11 @@ void kernel_main()
         puts(data2->read_ptr);
         vfs_close(data2);
     }
+
+    puts("FAT_Dir testing");
+
+    inode_t* test_inode = kmalloc(sizeof(inode_t));
+    fat_dir(test_inode);
 // fat_close_file(data);
 // for (size_t i = 0; i < 4; i++) {
 //     sATADevice* dev = ctrl_get_device(i);
@@ -231,6 +237,8 @@ void kernel_main()
     printf("unsigned int: %d\n", 4184);
     printf("oct: %o\n", 4184);
 #endif // PRINTF_TESTING
+    // asm volatile("1: jmp 1b");
+    puts("End breakpoint");
 
     // NOTE: I removed this for loop since that should reduce idle cpu usage (boot.asm calls hlt)
     //
