@@ -11,6 +11,17 @@
 
 enum fat_values {
     FAT_BAD_SECTOR = 0xFFF8,
+    FAT_END_OF_CHAIN
+    = 0xFFF8, // Check if value is below this to know if another cluster exists
+};
+
+enum FAT_ATTRIB {
+    FAT_READ_ONLY = 0x01,
+    FAT_HIDDEN = 0x02,
+    FAT_SYSTEM = 0x04,
+    FAT_VOLUME_ID = 0x08,
+    FAT_DIRECTORY = 0x10,
+    FAT_ARCHIVE = 0x20
 };
 
 // TODO: put uint8_t types in the structs
@@ -59,8 +70,8 @@ typedef struct fat_BS {
     unsigned int hidden_sector_count;
     unsigned int total_sectors_32;
 
-    // this will be cast to it's specific type once the driver actually knows what type of FAT this
-    // is.
+    // this will be cast to it's specific type once the driver actually knows
+    // what type of FAT this is.
     unsigned char extended_section[54];
 
 } __attribute__((packed)) fat_BS_t;
@@ -86,6 +97,7 @@ struct fat_fs {
     uint32_t lba_start;
     uint16_t total_sectors;
     uint16_t sector_size;
+    uint16_t cluster_size;
     uint16_t fat_size;
     uint16_t root_dir_sectors;
     uint16_t first_root_dir_sector;
@@ -103,4 +115,4 @@ void init_fat(sATADevice* device, uint32_t lba_start);
 int fat_open_file(const inode_t* inode, char* buffer, size_t buffer_size);
 void fat_close_file(void* file_start);
 int fat_find_inode(inode_t* inode);
-void fat_dir(inode_t* inode);
+void fat_dir(const char* dir);

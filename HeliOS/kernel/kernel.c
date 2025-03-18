@@ -37,6 +37,7 @@
 #include <kernel/timer.h>
 #include <kernel/tty.h>
 #include <stdio.h>
+#include <string.h>
 
 #ifdef KERNEL_DEBUG
 #define DEBUG_OUT(m) (puts(m))
@@ -82,10 +83,11 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     int i;
     uint32_t length = 0;
     for (i = 0; i < mbd->mmap_length; i += sizeof(multiboot_memory_map_t)) {
-        multiboot_memory_map_t* mmmt = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
+        multiboot_memory_map_t* mmmt
+            = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
 
-        printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n", mmmt->addr_low, mmmt->len_low, mmmt->size,
-            mmmt->type);
+        printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n",
+            mmmt->addr_low, mmmt->len_low, mmmt->size, mmmt->type);
 
         length += mmmt->len_low;
         if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE) {
@@ -122,8 +124,8 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     uint32_t phys_alloc_start = (kernel_end + 0x1000) & 0xFFFFF000;
 #ifdef KERNEL_DEBUG
     printf("KERNEL START: 0x%X, KERNEL END: 0x%X\n", kernel_start, kernel_end);
-    printf("MEM LOW: 0x%X, MEM HIGH: 0x%X, PHYS START: 0x%X\n", mbd->mem_lower * 1024, mbd->mem_upper * 1024,
-        phys_alloc_start);
+    printf("MEM LOW: 0x%X, MEM HIGH: 0x%X, PHYS START: 0x%X\n",
+        mbd->mem_lower * 1024, mbd->mem_upper * 1024, phys_alloc_start);
 #endif
     init_memory(mbd->mem_upper * 1024, phys_alloc_start);
 
@@ -162,10 +164,12 @@ void kernel_main()
     kfree(test);
     int* test2 = (int*)kmalloc(sizeof(int));
     *test2 = 6435;
-    printf("\tkmalloc returned address: 0x%X, set value to: %d\n", test2, *test2);
+    printf(
+        "\tkmalloc returned address: 0x%X, set value to: %d\n", test2, *test2);
     int* test3 = (int*)kmalloc(sizeof(int));
     *test3 = 2421;
-    printf("\tkmalloc returned address: 0x%X, set value to: %d\n", test3, *test3);
+    printf(
+        "\tkmalloc returned address: 0x%X, set value to: %d\n", test3, *test3);
     kfree(test2);
     kfree(test3);
 #endif
@@ -188,10 +192,12 @@ void kernel_main()
     // init_fat(ctrl_get_device(3), 63);
     // Here is the order for opening files:
     // kernel requests vfs to open file at directory on drive X
-    //     Unsure if this is a good way to do this, maybe force the vfs to figure out drive
+    //     Unsure if this is a good way to do this, maybe force the vfs to
+    //     figure out drive
     // vfs takes that information and sends it to the relevant filesystem driver
     //     Driver needs to know: device to read from, filename, directory
 
+#if 0
     dir_t directory = {
         .mount_id = 0,
         .path = "",
@@ -201,20 +207,22 @@ void kernel_main()
     puts("Opening file");
     FILE* data = vfs_open(&directory);
     if (data) {
-        puts(data->read_ptr);
+        // puts(data->read_ptr);
         vfs_close(data);
     }
     puts("Opening file again");
     FILE* data2 = vfs_open(&directory);
     if (data) {
-        puts(data2->read_ptr);
+        // puts(data2->read_ptr);
         vfs_close(data2);
     }
 
+#endif
     puts("FAT_Dir testing");
 
-    inode_t* test_inode = kmalloc(sizeof(inode_t));
-    fat_dir(test_inode);
+    // fat_dir("/");
+    // fat_dir("/DIR");
+    fat_dir("/DIR/SUBDIR");
 // fat_close_file(data);
 // for (size_t i = 0; i < 4; i++) {
 //     sATADevice* dev = ctrl_get_device(i);
@@ -237,10 +245,12 @@ void kernel_main()
     printf("unsigned int: %d\n", 4184);
     printf("oct: %o\n", 4184);
 #endif // PRINTF_TESTING
+
     // asm volatile("1: jmp 1b");
     puts("End breakpoint");
 
-    // NOTE: I removed this for loop since that should reduce idle cpu usage (boot.asm calls hlt)
+    // NOTE: I removed this for loop since that should reduce idle cpu usage
+    // (boot.asm calls hlt)
     //
     // Stopping us from exiting kernel
     // for (;;)

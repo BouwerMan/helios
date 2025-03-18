@@ -29,6 +29,8 @@ FREEOBJS=\
 $(ARCH_FREEOBJS) \
 $(BUILDDIR)/string/strlen.o \
 $(BUILDDIR)/string/strcmp.o \
+$(BUILDDIR)/string/strtok.o \
+$(BUILDDIR)/string/strchr.o \
 $(BUILDDIR)/string/memset.o \
 $(BUILDDIR)/string/memcpy.o \
 $(BUILDDIR)/stdio/printf.o \

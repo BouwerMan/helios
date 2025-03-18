@@ -6,4 +6,4 @@ build/
 isodir/
 sysroot/
 *.iso
-
+mnt/
