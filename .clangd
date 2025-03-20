@@ -4,3 +4,4 @@ CompileFlags:
     - "-isystem/home/dylan/code/osdev/libc/include"
     - "-nostdlibinc"
     - "-D__is_libk"
+    - "-Wunused-variable"

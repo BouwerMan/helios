@@ -207,29 +207,38 @@ void kernel_main()
     puts("Opening file");
     FILE* data = vfs_open(&directory);
     if (data) {
-        // puts(data->read_ptr);
+        puts(data->read_ptr);
         vfs_close(data);
     }
-    puts("Opening file again");
-    FILE* data2 = vfs_open(&directory);
-    if (data) {
-        // puts(data2->read_ptr);
-        vfs_close(data2);
-    }
+    // puts("Opening file again");
+    // FILE* data2 = vfs_open(&directory);
+    // if (data) {
+    //     // puts(data2->read_ptr);
+    //     vfs_close(data2);
+    // }
 
 #endif
     puts("FAT_Dir testing");
 
     // fat_dir("/");
     // fat_dir("/DIR");
-    fat_dir("/DIR/SUBDIR");
-// fat_close_file(data);
-// for (size_t i = 0; i < 4; i++) {
-//     sATADevice* dev = ctrl_get_device(i);
-//     if (dev->present) {
-//         init_fat(dev);
-//     }
-// }
+    // fat_dir("/DIR/SUBDIR");
+    inode_t inode = { 0 };
+    char path[] = "/DIR/SUBDIR/TEST5.TXT";
+    // char* pch;
+    // printf("Splitting string \"%s\" into tokens:\n", path);
+    // pch = strtok(path, "/");
+    // while (pch != NULL) {
+    //     printf("%s\n", pch);
+    //     pch = strtok(NULL, "/");
+    // }
+    int result = 0;
+    result = fat_lookup_inode(path, NULL, &inode);
+    printf("Found inode? %d, Inode name: %s, File size: %d, Init cluster: %d\n",
+        result, inode.file, inode.f_size, inode.init_cluster);
+    result = fat_lookup_inode("/DIR/SUBdir", NULL, &inode);
+    printf("Found inode? %d, Inode name: %s, File size: %d, Init cluster: %d\n",
+        result, inode.file, inode.f_size, inode.init_cluster);
 #endif
 
 #ifdef PRINTF_TESTING

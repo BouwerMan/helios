@@ -1,4 +1,5 @@
 // https://wiki.osdev.org/FAT#Reading_the_Boot_Sector
+#include <ctype.h>
 #include <drivers/ata/ata.h>
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
@@ -6,6 +7,7 @@
 #include <drivers/fs/vfs.h>
 #include <kernel/liballoc.h>
 #include <kernel/sys.h>
+#include <kernel/timer.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -21,19 +23,21 @@ static fat_BS_t* fat_boot;
 // TODO: setup proper storage of filesystems
 static struct fat_fs* fat;
 
-static void list_directory(struct fat_fs* fs, fat_filetable_t* tables,
-    size_t tables_size, size_t* num_tables);
-static void* fat_open_cluster(const struct fat_fs* fs, uint16_t* buffer,
-    uint16_t buffer_size, uint32_t cluster, uint16_t sector);
 static int fat_open_sector(const struct fat_fs* fs, uint8_t* buffer,
     uint16_t buffer_size, uint32_t sector);
-static int fat_open_clust(const struct fat_fs* fs, uint8_t* buffer,
-    size_t buffer_size, uint32_t cluster, enum LOC_TYPE type);
+static int fat_open_cluster(const struct fat_fs* fs, uint8_t* buffer,
+    size_t buffer_size, uint32_t cluster);
 static uint32_t fat_get_next_cluster(
-    const struct fat_fs* fs, uint32_t first_cluster);
+    const struct fat_fs* fs, uint32_t prev_cluster);
 static void parse_directory(struct fat_fs* fs, fat_filetable_t* tables,
     size_t max_tables, size_t* num_tables, uint8_t* fat_table,
     size_t table_size);
+
+static uint8_t* fat_read_root_dir(struct fat_fs* fat, size_t* root_size);
+static int fat_scan_dir(mount_t* mount, uint32_t start_cluster,
+    int (*callback)(const void* entry, void* context), void* context);
+static int fat_process_dir_entries(uint8_t* dir_data, size_t dir_size,
+    int (*callback)(const void* entry, void* context), void* context);
 
 // TODO: make a struct for all the useful data (FAT_FS esc thing).
 //       return success or failure bool
@@ -105,104 +109,8 @@ void init_fat(sATADevice* device, uint32_t lba_start)
     printf("secperclust: %d\n", fat_boot->sectors_per_cluster);
     fat->lba_start = lba_start;
     fat->device = device;
-    // int cluster = 2;
-    //
-    // int first_sector_of_cluster
-    //     = ((cluster - 2) * fat_boot->sectors_per_cluster) +
-    //     first_data_sector;
-
-    // NOTE: I think this translates properly, if i understand, multiple sectors
-    // make up a cluster, since this is the first one i can just use the sector
-    // and i'll increment from there. asm volatile("1: jmp 1b");
 
     return;
-#if 0
-    int active_cluster = 2;
-    bool next = true;
-    while (next) {
-        uint8_t fat_table[fat->sector_size];
-        uint16_t fat_offset = active_cluster * 2;
-        // NOTE: Not sure first_root_dir_sector is right here, might have to manually find first
-        // sector of active_cluster
-        uint16_t fat_sector = fat->first_root_dir_sector + (fat_offset / fat->sector_size);
-        uint16_t ent_offset = fat_offset % fat->sector_size;
-        memset(buffer, 0, sizeof(uint16_t) * 256);
-        printf("Reading sector: %d, cluster: %d\n", fat_sector, active_cluster);
-        if (!device->rw_handler(device, OP_READ, (uint16_t*)buffer, 63 + fat_sector, device->sec_size, 1)) {
-            printf("Could not read from disk\n");
-            return;
-        }
-        memcpy(fat_table, (uint8_t*)buffer, fat->sector_size);
-        unsigned short table_value = *(unsigned short*)&fat_table[ent_offset];
-        // for (size_t i = 64; i < sector_size; i++) {
-        //     printf("0x%X ", fat_table[i]);
-        // }
-        // return;
-        printf("\ntable_value: %d\n", table_value);
-        for (size_t i = 0; i < fat->sector_size; i += 64) {
-            if (fat_table[i] == 0x0) {
-                puts("No more files");
-                next = false;
-                break;
-            } else if (fat_table[i] == 0xE5) {
-                // TODO: Unused entry
-            }
-            if (fat_table[i + 10] == 0x0F) {
-                puts("long file name entry");
-            } else {
-                puts("not long file name");
-                printf("i: %d\n", i);
-                for (size_t j = i; j < 11 + i; j++) {
-                    printf("%c", fat_table[j]);
-                }
-                puts("");
-            }
-        }
-
-        const int to_check = 64;
-        // for (int k = to_check; k < to_check + 32; k++) {
-        //     printf("i: %d, 0x%X ", k, fat_table[k]);
-        // }
-        // puts("");
-
-        // Manually read file test.txt
-
-        uint16_t cluster = ((fat_table[to_check + 27] << 8) | (fat_table[to_check + 26])) - 2;
-        printf("test cluster: %d\n", cluster);
-        printf("secperclust: %d\n", fat_boot->sectors_per_cluster);
-
-        uint16_t fat_offset2 = cluster * fat_boot->sectors_per_cluster;
-        uint16_t fat_sector2 = fat->first_data_sector + fat_offset2;
-        memset(buffer, 0, sizeof(uint16_t) * 256);
-        printf("Fat offset: %d. Reading sector: %d\n", fat_offset2, fat_sector2 + 63);
-        if (!device->rw_handler(device, OP_READ, (uint16_t*)buffer, fat_sector2 + 63, device->sec_size, 1)) {
-            printf("Could not read from disk\n");
-            return;
-        }
-
-        uint8_t* tmp = (uint8_t*)buffer;
-        uint32_t fsize = 0;
-        for (size_t i = 0; i < 4; i++) {
-            fsize += fat_table[32 - i] << ((4 - i) * 8);
-        }
-        for (int i = 0; i < fsize; i++) {
-            if (tmp[i]) printf("%c", tmp[i]);
-        }
-        puts("");
-
-        if (table_value >= 0xFFF8) {
-            puts("No more clusters in chain");
-            next = false;
-        } else if (table_value == 0xFFF7) {
-            puts("Sector marked as bad");
-            next = false;
-        } else {
-            active_cluster = table_value;
-            // active_cluster++;
-            // next = false;
-        }
-    }
-#endif
 }
 
 /// Max number of files to check, eventually should be infinite but i don't
@@ -210,11 +118,10 @@ void init_fat(sATADevice* device, uint32_t lba_start)
 const static uint8_t MAX_FILES = 16;
 
 // TODO: Ignores file extensions
+// TODO: Support directories
+// TODO: Account for filesize
 int fat_open_file(const inode_t* inode, char* buffer, size_t buffer_size)
 {
-    // TODO: Support directories
-    // TODO: Account for filesize
-
     uint32_t cluster_size = fat->sector_size
         * fat_boot->sectors_per_cluster; // number of bytes in a cluster
     uint32_t num_clusters
@@ -225,18 +132,12 @@ int fat_open_file(const inode_t* inode, char* buffer, size_t buffer_size)
     size_t i = 0;
     while (next_cluster < FAT_END_OF_CHAIN) {
         next_cluster = fat_get_next_cluster(fat, next_cluster);
-        fat_open_clust(fat, (uint8_t*)(buffer + (i * cluster_size)),
-            buffer_size - (i * cluster_size), next_cluster, DATA);
+        fat_open_cluster(fat, (uint8_t*)(buffer + (i * cluster_size)),
+            buffer_size - (i * cluster_size), next_cluster);
         i++;
     }
-    // NOTE: LETS GOOOOOOOO THIS THING READS THE ENTIRE FILE AT ONCE IM
-    // LITERALLY GONNA
 
-    // return fat_open_clust(fat, buffer, buffer_size, inode->init_cluster,
-    // DATA);
     return 0;
-    // return fat_open_sector(fat, buffer, buffer_size, inode->init_sector +
-    // fat->first_data_sector);
 }
 
 void fat_close_file(void* file_start) { kfree(file_start); }
@@ -249,7 +150,13 @@ int fat_find_inode(inode_t* inode)
     inode->f_size = 0;
     fat_filetable_t* file_tables = kmalloc(sizeof(fat_filetable_t) * MAX_FILES);
     size_t num_tables = 0;
-    list_directory(fat, file_tables, MAX_FILES, &num_tables);
+    // list_directory(fat, file_tables, MAX_FILES, &num_tables);
+    uint8_t fat_table[fat->cluster_size];
+    uint8_t active_cluster = 2; // for root dir
+    uint32_t first_sector = fat->first_root_dir_sector;
+    fat_open_cluster(fat, fat_table, fat->cluster_size, 0);
+    parse_directory(
+        fat, file_tables, MAX_FILES, &num_tables, fat_table, fat->cluster_size);
 
     for (size_t i = 0; i < num_tables; i++) {
         // Check if name matches
@@ -276,6 +183,169 @@ int fat_find_inode(inode_t* inode)
         return 1;
 }
 
+/**
+ * @brief Normalizes a FAT16 filename by extracting, trimming spaces, and
+ * converting to lowercase.
+ *
+ * This function extracts an 8.3 filename from a FAT16 directory entry, removes
+ * trailing spaces, converts it to lowercase, and formats it as "NAME.EXT".
+ *
+ * @param entry Pointer to a 32-byte FAT16 directory entry.
+ * @param output Pre-allocated buffer (at least 13 bytes) to store the formatted
+ * filename.
+ */
+static void fat_normalize_filename(const uint8_t* entry, char* output)
+{
+    // First removing trailing spaces in name_end
+    char name[8] = { 0 };
+    memcpy(name, entry, 8);
+    int name_len = 8;
+    for (; name_len > 0; name_len--) {
+        if (name[name_len - 1] != ' ') break;
+    }
+    if (name_len == 0) {
+        output[0] = '\0';
+        return;
+    }
+    memcpy(output, name, name_len);
+
+    char ext[3] = { 0 };
+    memcpy(ext, entry + 8, 3);
+    int ext_len = 3;
+    for (; ext_len > 0; ext_len--) {
+        if (ext[ext_len - 1] != ' ') break;
+    }
+    if (ext_len > 0) {
+        output[name_len] = '.';
+        memcpy(output + name_len + 1, ext, ext_len);
+        output[name_len + ext_len + 1] = '\0'; // add null terminator
+    } else {
+        output[name_len] = '\0';
+    }
+}
+
+// TODO: Remove
+void test_fat_normalize_filename(const char* raw_entry, const char* expected)
+{
+    uint8_t entry[11] = { 0 };
+    char output[13] = { 0 };
+
+    // Copy raw FAT16 entry into test entry buffer
+    memcpy(entry, raw_entry, strlen(raw_entry));
+
+    // Normalize the filename
+    fat_normalize_filename(entry, output);
+
+    // Print the result
+    printf("Raw Entry:   \"%.8s.%.3s\"\n", entry, entry + 8);
+    printf("Normalized:  \"%s\"\n", output);
+    printf("Expected:    \"%s\"\n", expected);
+    printf("Test %s\n\n", strcmp(output, expected) == 0 ? "PASSED" : "FAILED");
+}
+
+/**
+ * @brief Compares two filenames case-insensitively.
+ *
+ * This function performs a case-insensitive comparison between a normalized
+ * FAT16 filename and a target filename.
+ *
+ * @param fat_name Normalized FAT16 filename (from `fat_normalize_filename()`).
+ * @param target_name Target filename to compare against.
+ * @returns true if filenames match, false otherwise.
+ */
+bool fat_compare_filenames(const char* fat_name, const char* target_name)
+{
+    size_t name_len = strlen(fat_name);
+    size_t target_len = strlen(target_name);
+    if (name_len != target_len) return false;
+    for (int i = 0; i < name_len && i < target_len; i++) {
+        if (fat_name[i] != toupper(target_name[i])) return false;
+    }
+    return true;
+}
+
+/**
+ * @brief Callback function for scanning a FAT directory to find a specific
+ * file.
+ *
+ * This function extracts the filename and extension from a 32-byte FAT
+ * directory entry and compares it with the target filename stored in the
+ * `inode_t` structure. If a match is found, it populates the `inode_t` with
+ * metadata and signals `fat_scan_dir()` to stop scanning.
+ *
+ * @param entry Pointer to a 32-byte FAT directory entry.
+ * @param context Pointer to an `inode_t` structure where file
+ * metadata will be stored.
+ * @returns 1 if the file is found (stop scanning), 0 to continue scanning,
+ *          or -1 on error.
+ *
+ * @note The filename comparison is case-insensitive, and spaces in FAT
+ *       filenames are ignored.
+ */
+int fat_lookup_inode_callback(const void* entry, void* context)
+{
+    fat_filetable_t file_table;
+    inode_t* inode = (inode_t*)context;
+
+    memcpy(&file_table, entry, 32);
+    char norm_name[13] = { 0 };
+    fat_normalize_filename(entry, norm_name);
+    if (fat_compare_filenames(norm_name, inode->file)) {
+        // Populate inode with file metadata
+        inode->f_size = file_table.size;          // File size (bytes)
+        inode->init_cluster = file_table.cluster; // First cluster
+
+        return 1; // Stop scanning, file found
+    }
+    return 0;
+}
+
+// TODO: use mount to find fat_boot and BPB.
+// TODO: Currently does not support relative paths.
+
+/**
+ * @brief Finds a file or directory in a FAT16 filesystem and populates its
+ * inode.
+ *
+ * This function searches for a file or directory at the given path within the
+ * mounted FAT16 filesystem. If found, it populates the provided `inode_t`
+ * structure with the file's metadata, including its size and starting cluster.
+ *
+ * @param path The absolute or relative path to the file or directory.
+ * @param mount Pointer to the mounted FAT16 filesystem structure.
+ * @param out_inode Pointer to an `inode_t` structure where the file metadata
+ *                  will be stored if the lookup is successful.
+ * @returns 1 if the file is found and `out_inode` is populated, 0 if file is
+ *          not found, -1 if an error occured.
+ *
+ * @note The search is case-insensitive, and long filenames (LFN) are not
+ *       supported.
+ */
+int fat_lookup_inode(const char* path, const mount_t* mount, inode_t* out_inode)
+{
+    const size_t path_len = strlen(path);
+    char buffer[path_len + 1];
+    strncpy(buffer, path, path_len + 1);
+    char* token = strtok(buffer, "/");
+    inode_t inode = { 0 };
+    inode.init_cluster = 0;
+    int res = 0;
+    while (token != NULL) {
+        strcpy(inode.file, token);
+        res = fat_scan_dir(mount, inode.init_cluster, fat_lookup_inode_callback,
+            (void*)&inode);
+        if (res < 0) {
+            return res;
+        } else if (res > 0) {
+            memcpy(out_inode, &inode, sizeof(inode_t));
+        }
+        token = strtok(NULL, "/");
+    }
+
+    return res;
+}
+
+// I guess this just prints out directory files
 void fat_dir(const char* dir)
 {
     printf("Reading directory: %s\n", dir);
@@ -284,11 +354,9 @@ void fat_dir(const char* dir)
     // First we read the root sector
     uint8_t fat_table[fat->cluster_size];
     uint8_t active_cluster = 2; // for root dir
-    uint32_t first_sector = fat->first_root_dir_sector;
-    fat_open_clust(fat, fat_table, fat->cluster_size, 2, ROOT);
+    fat_open_cluster(fat, fat_table, fat->cluster_size, 0);
     parse_directory(
         fat, file_tables, MAX_FILES, &num_tables, fat_table, fat->cluster_size);
-    // list_directory(fat, file_tables, MAX_FILES, &num_tables);
 
     // Testing loop to view tables
     for (int i = 0; i < num_tables; ++i) {
@@ -300,27 +368,15 @@ void fat_dir(const char* dir)
     if (dir[1] != '\0') {
         fat_filetable_t* subdir_files
             = kmalloc(sizeof(fat_filetable_t) * MAX_FILES);
-        // Get locations for each '/'
-        // TODO: Should make an strtok or similar function in libc
-        int split[16] = { 0 };
-        size_t tokens = 0;
-        for (int i = 0; i < 16; i++) {
-            putchar(dir[i]);
-            if ((dir[i] == '/') || (dir[i] == '\0')) split[tokens++] = i;
-            if (dir[i] == '\0') break;
-        }
-        for (int i = 0; i < 16; i++)
-            printf(" %d", split[i]);
-        // Basically iterates through each token in split[]
-        for (size_t i = 0; i < tokens; i++) {
+
+        const size_t dir_len = strlen(dir);
+        char buffer[dir_len + 1];
+        strncpy(buffer, dir, dir_len + 1);
+        char* token = strtok(buffer, "/");
+        while (token) {
+            size_t token_len = strlen(token);
             for (size_t table = 0; table < num_tables; table++) {
-                const char* token_start = dir + split[i] + 1;
-                int token_len = dir + split[i + 1] - token_start;
-                if (token_len < 0) break;
-                char token[16] = { 0 };
-                memcpy(token, token_start, token_len);
-                printf("Token: %s, token length: %d\n", token, token_len);
-                if (strncmp(file_tables[table].name, token_start, token_len))
+                if (strncmp(file_tables[table].name, token, token_len))
                     continue;
                 if (!(file_tables[table].attrib & FAT_DIRECTORY)) continue;
                 // now we found the directory
@@ -328,8 +384,8 @@ void fat_dir(const char* dir)
                 printf("Found subdirectory %s\n", file_tables[table].name);
                 active_cluster = file_tables[table].cluster;
                 num_tables = 0;
-                fat_open_clust(
-                    fat, fat_table, fat->cluster_size, active_cluster, DATA);
+                fat_open_cluster(
+                    fat, fat_table, fat->cluster_size, active_cluster);
                 parse_directory(fat, subdir_files, MAX_FILES, &num_tables,
                     fat_table, fat->cluster_size);
 
@@ -343,6 +399,7 @@ void fat_dir(const char* dir)
             }
             kfree(file_tables);
             file_tables = subdir_files;
+            token = strtok(NULL, "/");
         }
         kfree(subdir_files);
     }
@@ -352,40 +409,133 @@ void fat_dir(const char* dir)
     return;
 }
 
-// TODO: Currently only supports reading from root_dir
-static void list_directory(struct fat_fs* fs, fat_filetable_t* tables,
-    size_t tables_size, size_t* num_tables)
+/**
+ * @brief Reads the FAT root directory into a dynamically allocated buffer.
+ *
+ * This function allocates memory and loads the entire root directory from disk.
+ * The caller is responsible for freeing the returned buffer after use.
+ *
+ * @param fat Pointer to the FAT filesystem structure.
+ * @param root_size[out] Calculated root_size (length of buffer returned).
+ * @returns Pointer to a dynamically allocated buffer containing the root
+ *          directory data, or NULL if memory allocation or disk read fails.
+ *
+ * @note The caller must free the returned buffer using `kfree()` to prevent
+ *       memory leaks.
+ */
+static uint8_t* fat_read_root_dir(struct fat_fs* fat, size_t* root_size)
 {
-    uint8_t fat_table[fs->sector_size];
-    // Controls which directory we read
-    uint8_t active_cluster = 2;
-    fat_open_cluster(fs, (uint16_t*)fat_table, fs->sector_size / 2,
-        active_cluster, fs->first_root_dir_sector);
-
-    for (size_t i = 0; i < fs->sector_size; i += 64) {
-        if (fat_table[i] == 0x0) {
-            break;
-        } else if (fat_table[i] == 0xE5) {
-            // TODO: Unused entry
-            continue;
-        }
-        // tables = (fat_filetable_t)fat_table[i];
-        if (fat_table[i + 10] == 0x0F) {
-            puts("long file name entry not supported");
-            continue;
-        } else {
-            memcpy(tables, fat_table + i, 32);
-            for (uint8_t j = 0; j < 8; j++) {
-                if (tables->name[j] == ' ') tables->name[j] = '\0';
-                if (j < 3) {
-                    if (tables->ext[j] == ' ') tables->ext[j] = '\0';
-                }
-            }
-            tables++;
-            (*num_tables)++;
+    *root_size = fat->root_dir_sectors * fat->sector_size;
+    uint8_t* root_data = kmalloc(*root_size);
+    if (!root_data) return NULL;
+    for (size_t i = 0; i < fat->root_dir_sectors; i++) {
+        uint8_t* sector_buffer = root_data + (i * fat->sector_size);
+        uint32_t lba_addr = fat->lba_start + fat->first_root_dir_sector + i;
+        int res
+            = fat_open_sector(fat, sector_buffer, fat->sector_size, lba_addr);
+        if (res != 0) {
+            kfree(root_data);
+            return NULL;
         }
     }
-    return;
+    return root_data;
+}
+
+/**
+ * @brief Iterates over directory entries in a FAT16 directory buffer.
+ *
+ * This function scans a buffer containing FAT16 directory entries and invokes
+ * a callback function for each valid 32-byte entry. The iteration stops if an
+ * empty entry (0x00) is encountered or if the callback function returns a
+ * nonzero value.
+ *
+ * @param dir_data Pointer to the buffer containing directory entries.
+ * @param dir_size Size of the directory buffer in bytes.
+ * @param callback Function pointer to process each directory entry. It takes
+ *                 two arguments: a pointer to the 32-byte entry and a
+ *                 user-defined context.
+ * @param context  A user-defined context pointer passed to the callback
+ *                 function.
+ * @returns 0 on successful iteration, the callback's return value if nonzero,
+ *          or -1 if `dir_data` is NULL.
+ *
+ * @note The callback function should return 0 to continue iteration, a
+ *       positive value to stop early, or -1 to indicate an error.
+ */
+static int fat_process_dir_entries(uint8_t* dir_data, size_t dir_size,
+    int (*callback)(const void* entry, void* context), void* context)
+{
+    if (!dir_data || !callback) return -1;
+    for (size_t entry_offset = 0; entry_offset < dir_size; entry_offset += 32) {
+        if (dir_data[entry_offset] == 0x0) break;
+        // NOTE: Might want to callback in case the caller is looking for
+        // deleted files.
+        if (dir_data[entry_offset] == 0xE5) continue;
+        int res = callback(dir_data + entry_offset, context);
+        if (res) return res;
+    }
+    return 0;
+}
+
+// TODO: Rework mount_t so it stores the FAT BPB properly and rework this
+// function to use the values stored in there.
+
+/**
+ * @brief Scans a FAT directory and processes its entries using a callback.
+ *
+ * This function iterates over a directory's entries, either in the root
+ * directory (fixed location) or a subdirectory (linked via FAT cluster chain).
+ * Each entry is passed to the provided callback function for processing.
+ *
+ * @param mount Pointer to the mounted FAT filesystem.
+ * @param start_cluster First cluster of the directory to scan (0 for root).
+ * @param callback Function pointer to process each directory entry.
+ * @param context User-defined context pointer passed to the callback.
+ * @returns 0 if all entries were processed, a positive value if the callback
+ *          requested early termination, or -1 on error.
+ *
+ * @note The callback should return 0 to continue, >0 to stop early, or -1
+ *       to signal an error.
+ */
+static int fat_scan_dir(mount_t* mount, uint32_t start_cluster,
+    int (*callback)(const void* entry, void* context), void* context)
+{
+    if (callback == NULL) {
+        puts("callback can't be NULL");
+        return -1;
+    }
+    // If we need to scan the root directory
+    if (start_cluster == 0) {
+        // Read data from root directory into buffer
+        size_t root_size;
+        uint8_t* root_data = fat_read_root_dir(fat, &root_size);
+        if (root_data == NULL) return -1;
+        int res
+            = fat_process_dir_entries(root_data, root_size, callback, context);
+        kfree(root_data);
+        return res;
+    }
+    uint8_t* cluster_buffer = kmalloc(fat->cluster_size);
+    uint32_t next_cluster = start_cluster;
+    int res = 0;
+    while (next_cluster < FAT_END_OF_CHAIN) {
+        res = fat_open_cluster(
+            fat, cluster_buffer, fat->cluster_size, next_cluster);
+        if (res) {
+            kfree(cluster_buffer);
+            return res;
+        }
+        res = fat_process_dir_entries(
+            cluster_buffer, fat->cluster_size, callback, context);
+        if (res) {
+            kfree(cluster_buffer);
+            return res;
+        }
+        next_cluster = fat_get_next_cluster(fat, next_cluster);
+    }
+
+    kfree(cluster_buffer);
+    return 0;
 }
 
 /// Fills filetables, num_tables becomes number of found files
@@ -426,17 +576,17 @@ static void parse_directory(struct fat_fs* fs, fat_filetable_t* tables,
 /**
  * @brief gets next cluster in chain
  * @param[in] first_cluster First cluster of the file (DOES THIS NEED TO BE
- * PREVIOUS CLUSTER INSTEAD)
+ * PREVIOUS CLUSTER INSTEAD?)
  *
  * @returns cluster
  */
 static uint32_t fat_get_next_cluster(
-    const struct fat_fs* fs, uint32_t first_cluster)
+    const struct fat_fs* fs, uint32_t prev_cluster)
 {
     // TODO: document basic blurb on how this all works
 
     // Setting up offsets
-    uint32_t active_cluster = first_cluster;
+    uint32_t active_cluster = prev_cluster;
     unsigned char FAT_table[fs->sector_size];
     unsigned int fat_offset = active_cluster * 2;
     // Have to add lba_start, TODO: make lba start included in first_fat sector?
@@ -462,34 +612,39 @@ static uint32_t fat_get_next_cluster(
     return table_value;
 }
 
-// NOTE: Doing things kinda funky, this is made to replace the old
-// fat_open_cluster() This function SHOULD read the entire cluster to memory
-// type refers to either root directory or data directory sectors
-static int fat_open_clust(const struct fat_fs* fs, uint8_t* buffer,
-    size_t buffer_size, uint32_t cluster, enum LOC_TYPE type)
+/**
+ * @brief Reads entire cluster into buffer
+ *
+ * @param ...
+ * @param cluster Cluster to open. If cluster is root directory specify 0.
+ *
+ */
+static int fat_open_cluster(const struct fat_fs* fs, uint8_t* buffer,
+    size_t buffer_size, uint32_t cluster)
 {
-    // TODO: Put sectors per cluster in fat_fs
+    uint32_t offset, lba_addr;
 
-    uint32_t sector = type ? fs->first_data_sector : fs->first_root_dir_sector;
-    uint32_t lba_addr = fs->lba_start + sector
-        + ((cluster - 2) * fat_boot->sectors_per_cluster);
-    uint32_t cluster_size = fs->sector_size * fat_boot->sectors_per_cluster;
+    // Cluster == 0 if root section
+    if (cluster == 0) {
+        offset = fs->first_root_dir_sector;
+        lba_addr = fs->lba_start + offset;
+
+    } else {
+        offset = fs->first_data_sector;
+        lba_addr = fs->lba_start + offset
+            + ((cluster - 2) * fat_boot->sectors_per_cluster);
+    }
     // Holds entire cluster
-    uint8_t* cluster_data = kmalloc(cluster_size);
-    printf("cluster: %d, lba_addr: %d, type: %d\n", cluster, lba_addr, type);
+    uint8_t* cluster_data = kmalloc(fs->cluster_size);
+    // printf("cluster: %d, lba_addr: %d\n", cluster, lba_addr);
     for (size_t i = 0; i < fat_boot->sectors_per_cluster; i++) {
         uint8_t* tmp = cluster_data + (i * fs->sector_size);
         fat_open_sector(fs, tmp, fat->sector_size, lba_addr + i);
-        // asm volatile("1: jmp 1b");
     }
-    // asm volatile("1: jmp 1b");
-    // puts(cluster_data);
-    // Copy into caller's buffer, manually making sure we don't read past end of
-    // read_buff
-    if (buffer_size <= cluster_size) {
+    if (buffer_size <= fs->cluster_size) {
         memcpy(buffer, cluster_data, buffer_size);
     } else {
-        memcpy(buffer, cluster_data, cluster_size);
+        memcpy(buffer, cluster_data, fs->cluster_size);
     }
     kfree(cluster_data);
     return 0;
@@ -527,26 +682,19 @@ static int fat_open_sector(const struct fat_fs* fs, uint8_t* buffer,
     return 0;
 }
 
-// sector should be either first_root_dir_sector or first_data_sector, specifys
-// where to look for sector i think
-static void* fat_open_cluster(const struct fat_fs* fs, uint16_t* buffer,
-    uint16_t buffer_size, uint32_t cluster, uint16_t sector)
+/// Random function to call to test certain helper functions
+void fat_test()
 {
-    // 256 because it is 16 bits so 2 bytes (equals full 512 bytes per sector)
-    uint16_t read_buff[256] = { 0 };
-    uint32_t lba_addr = fs->lba_start + sector
-        + (cluster - 2) * fat_boot->sectors_per_cluster;
-    printf("lba_addr: %d\n", lba_addr);
-    if (!fs->device->rw_handler(fs->device, OP_READ, read_buff, lba_addr,
-            fs->device->sec_size, 1)) {
-        printf("Could not read from disk\n");
-        return NULL;
-    }
-    // Copy into caller's buffer, manually making sure we don't read past end of
-    // read_buff
-    if (buffer_size <= 256) {
-        return memcpy(buffer, read_buff, buffer_size);
-    } else {
-        return memcpy(buffer, read_buff, 512);
-    }
+    printf("Testing FAT16 Filename Normalization:\n\n");
+
+    test_fat_normalize_filename("HELLO   TXT", "HELLO.TXT");
+    sleep(1000);
+    test_fat_normalize_filename("HEL LO  TXT", "HEL LO.TXT");
+    sleep(1000);
+    test_fat_normalize_filename("        ", "");
+    sleep(1000);
+    test_fat_normalize_filename("WORLD   DOC", "WORLD.DOC");
+    sleep(1000);
+    test_fat_normalize_filename("PROGRAM EXE", "PROGRAM.EXE");
+    test_fat_normalize_filename("DIR        ", "DIR");
 }

@@ -52,3 +52,8 @@ char* strtok(char* str, const char* delimiters);
  *         or NULL if not found.
  */
 char* strchr(const char* str, char character);
+
+char* strcpy(char* dest, const char* src);
+char* strncpy(char* dest, const char* src, size_t num);
+
+char* strcat(char* destination, const char* source);

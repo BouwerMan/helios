@@ -38,8 +38,8 @@ static const int CTRL_IRQ_BASE = 14;
 
 typedef struct sATAController sATAController;
 typedef struct sATADevice sATADevice;
-typedef bool (*fReadWrite)(
-    sATADevice* device, uint16_t op, void* buffer, uint32_t lba, size_t secSize, size_t secCount);
+typedef bool (*fReadWrite)(sATADevice* device, uint16_t op, void* buffer,
+    uint32_t lba, size_t secSize, size_t secCount);
 
 struct sATADevice {
     /* the identifier; 0-3; bit0 set means slave */
@@ -74,6 +74,13 @@ struct sATAController {
     sATADevice devices[2];
 };
 
+struct PRDT {
+    uint32_t addr;  // Address of memory buffer
+    uint16_t size;  // Size of memory buffer
+    uint16_t flags; // The last entry in the table must have the EOT
+                    // (End-of-Table) flag set.
+} __attribute__((packed));
+
 void ctrl_init();
 
 sATADevice* ctrl_get_device(uint8_t id);
@@ -84,10 +91,12 @@ uint8_t ctrl_inb(sATAController* ctrl, uint16_t reg);
 uint16_t ctrl_inw(sATAController* ctrl, uint16_t reg);
 
 // in words
-void ctrl_inws(sATAController* ctrl, uint16_t reg, uint16_t* buff, size_t count);
+void ctrl_inws(
+    sATAController* ctrl, uint16_t reg, uint16_t* buff, size_t count);
 
 // out words
-void ctrl_outws(sATAController* ctrl, uint16_t reg, const uint16_t* buff, size_t count);
+void ctrl_outws(
+    sATAController* ctrl, uint16_t reg, const uint16_t* buff, size_t count);
 
 /**
  * Performs a few io-port-reads (just to waste a bit of time ;))

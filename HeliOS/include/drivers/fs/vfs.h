@@ -13,12 +13,14 @@ enum FILESYSTEMS {
     FAT12, // Not sure these are techincally supported
 };
 
-// TODO: Support longer file names, only limiting since we only support FAT16 no LFN
+// TODO: Support longer file names, only limiting since we only support FAT16 no
+// LFN
 typedef struct directory_s {
     uint8_t mount_id; // id of mount point
     const char* path;
-    const char filename[9];       // extended out so null chars fit
-    const char file_extension[4]; // extended out so null chars fit
+    char file[13];          // Entire FAT 8.3 name
+    char filename[9];       // extended out so null chars fit
+    char file_extension[4]; // extended out so null chars fit
 } dir_t;
 
 typedef struct filesystem_s filesystem_t;
@@ -32,15 +34,19 @@ struct mount {
 };
 typedef struct mount mount_t;
 
-// NOTE: This is not the same as linux inode because I am stupid and don't understand it. I am just stealing the name.
-// TODO: I need to store sector information or some way for the fs to find the file immediately.
+// NOTE: This is not the same as linux inode because I am stupid and don't
+// understand it. I am just stealing the name.
+// TODO: I need to store sector information or some way for the fs to find the
+// file immediately.
 typedef struct inode_s {
     int id;                // inode id in cache
     mount_t* mount;        // Top level device information
+    char file[13];         // 8.3 Filename
     dir_t* dir;            // File location and name
     uint32_t init_sector;  // Initial sector of the filesystem
     size_t f_size;         // File size
-    uint32_t init_cluster; // initial fat cluster, later this should be placed in fat specific place
+    uint32_t init_cluster; // initial fat cluster, later this should be placed
+                           // in fat specific place
     uint8_t loc_type;      // fat location type, either 0 -> ROOT or 1 -> DATA
 } inode_t;
 
@@ -62,8 +68,10 @@ struct filesystem_s {
     int (*find_inode)(inode_t* inode);
 };
 
-void vfs_init(uint8_t maximum_filesystems, uint8_t maximum_mounts, size_t inode_cache_size);
+void vfs_init(uint8_t maximum_filesystems, uint8_t maximum_mounts,
+    size_t inode_cache_size);
 bool register_fs(uint8_t fs);
 FILE* vfs_open(dir_t* directory);
 void vfs_close(FILE* file);
-int mount(uint8_t id, sATADevice* device, sPartition* partition, uint8_t fs_type);
+int mount(
+    uint8_t id, sATADevice* device, sPartition* partition, uint8_t fs_type);

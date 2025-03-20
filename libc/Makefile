@@ -31,12 +31,15 @@ $(BUILDDIR)/string/strlen.o \
 $(BUILDDIR)/string/strcmp.o \
 $(BUILDDIR)/string/strtok.o \
 $(BUILDDIR)/string/strchr.o \
+$(BUILDDIR)/string/strcpy.o \
+$(BUILDDIR)/string/strcat.o \
 $(BUILDDIR)/string/memset.o \
 $(BUILDDIR)/string/memcpy.o \
 $(BUILDDIR)/stdio/printf.o \
 $(BUILDDIR)/stdio/putchar.o \
 $(BUILDDIR)/stdio/puts.o \
 $(BUILDDIR)/stdlib/abort.o \
+$(BUILDDIR)/ctype/toupper.o \
 #string/memcmp.o \
 #string/memcpy.o \
 #string/memmove.o \

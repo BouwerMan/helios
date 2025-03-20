@@ -27,7 +27,6 @@ int strncmp(const char* str1, const char* str2, size_t count)
             return 1;
         else {
             if (str1[i] == '\0') return 0;
-
             ++i;
         }
     }
