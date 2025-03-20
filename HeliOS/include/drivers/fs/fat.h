@@ -109,15 +109,27 @@ struct fat_fs {
     uint16_t total_clusters;
     uint8_t fat_type;
     sATADevice* device;
+    fat_BS_t* bs;
 };
 
 typedef struct fat_filetable_s fat_filetable;
+
+typedef struct {
+    struct fat_fs* fat;       // Pointer to fat data
+    uint8_t fat_variant;      // FAT32, Fat16, Fat12
+    uint32_t init_cluster;    // Initial cluster of chain
+    uint32_t current_cluster; // Current cluster being read
+    uint8_t chain_len;        // Number of clusters in chain
+    uint32_t dir_cluster;     // Directory cluster of the parent (0 for root)
+    uint32_t dir_offset;      // Directory entry offset
+    uint32_t fat_attrib;      // Attributes in fat entry
+} fat_inode_info;
 
 void init_fat(sATADevice* device, uint32_t lba_start);
 int fat_open_file(const inode_t* inode, char* buffer, size_t buffer_size);
 void fat_close_file(void* file_start);
 int fat_find_inode(inode_t* inode);
-void fat_dir(const char* dir);
+// void fat_dir(const char* dir);
 
 /**
  * @brief Finds a file or directory in a FAT filesystem and populates its

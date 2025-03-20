@@ -346,67 +346,9 @@ int fat_lookup_inode(const char* path, const mount_t* mount, inode_t* out_inode)
 }
 
 // I guess this just prints out directory files
-void fat_dir(const char* dir)
+void fat_dir(inode_t* inode)
 {
-    printf("Reading directory: %s\n", dir);
-    fat_filetable_t* file_tables = kmalloc(sizeof(fat_filetable_t) * MAX_FILES);
-    size_t num_tables = 0;
-    // First we read the root sector
-    uint8_t fat_table[fat->cluster_size];
-    uint8_t active_cluster = 2; // for root dir
-    fat_open_cluster(fat, fat_table, fat->cluster_size, 0);
-    parse_directory(
-        fat, file_tables, MAX_FILES, &num_tables, fat_table, fat->cluster_size);
-
-    // Testing loop to view tables
-    for (int i = 0; i < num_tables; ++i) {
-        puts(file_tables[i].name);
-        printf("file cluster: %d\n", file_tables[i].cluster);
-    }
-
-    // If the directory is more than just the root dir, check futher down
-    if (dir[1] != '\0') {
-        fat_filetable_t* subdir_files
-            = kmalloc(sizeof(fat_filetable_t) * MAX_FILES);
-
-        const size_t dir_len = strlen(dir);
-        char buffer[dir_len + 1];
-        strncpy(buffer, dir, dir_len + 1);
-        char* token = strtok(buffer, "/");
-        while (token) {
-            size_t token_len = strlen(token);
-            for (size_t table = 0; table < num_tables; table++) {
-                if (strncmp(file_tables[table].name, token, token_len))
-                    continue;
-                if (!(file_tables[table].attrib & FAT_DIRECTORY)) continue;
-                // now we found the directory
-
-                printf("Found subdirectory %s\n", file_tables[table].name);
-                active_cluster = file_tables[table].cluster;
-                num_tables = 0;
-                fat_open_cluster(
-                    fat, fat_table, fat->cluster_size, active_cluster);
-                parse_directory(fat, subdir_files, MAX_FILES, &num_tables,
-                    fat_table, fat->cluster_size);
-
-                // Testing loop to view tables
-                for (int i = 0; i < num_tables; ++i) {
-                    printf("file name: %s, file size: %d, file cluster: %d\n",
-                        subdir_files[i].name, subdir_files[i].size,
-                        subdir_files[i].cluster);
-                }
-                break;
-            }
-            kfree(file_tables);
-            file_tables = subdir_files;
-            token = strtok(NULL, "/");
-        }
-        kfree(subdir_files);
-    }
-
-    // asm volatile("1: jmp 1b");
-    kfree(file_tables);
-    return;
+    // printf("Reading directory: %s\n", dir);
 }
 
 /**

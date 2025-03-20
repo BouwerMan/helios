@@ -13,6 +13,8 @@ enum FILESYSTEMS {
     FAT12, // Not sure these are techincally supported
 };
 
+enum FILETYPE { FILETYPE_FILE, FILETYPE_DIR };
+
 // TODO: Support longer file names, only limiting since we only support FAT16 no
 // LFN
 typedef struct directory_s {
@@ -48,6 +50,7 @@ typedef struct inode_s {
     uint32_t init_cluster; // initial fat cluster, later this should be placed
                            // in fat specific place
     uint8_t loc_type;      // fat location type, either 0 -> ROOT or 1 -> DATA
+    void* fs_data;         // Data to fs specific information
 } inode_t;
 
 typedef struct {
