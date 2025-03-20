@@ -1,5 +1,5 @@
 #pragma once
-#include <kernel/ata/controller.h>
+#include <drivers/ata/controller.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -15,5 +15,4 @@
  * @param secCount number of sectors
  * @return true on success
  */
-bool ata_read_write(
-    sATADevice* device, uint16_t op, void* buffer, uint32_t lba, size_t sec_size, size_t sec_count);
+bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba, size_t sec_size, size_t sec_count);

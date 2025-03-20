@@ -1,5 +1,5 @@
 #pragma once
-#include <kernel/ata/controller.h>
+#include <drivers/ata/controller.h>
 
 enum {
     OP_READ = 0,

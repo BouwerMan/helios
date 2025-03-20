@@ -1,9 +1,9 @@
 // https://wiki.osdev.org/FAT#Reading_the_Boot_Sector
-#include <kernel/ata/ata.h>
-#include <kernel/ata/controller.h>
-#include <kernel/ata/device.h>
-#include <kernel/fs/fat.h>
-#include <kernel/fs/vfs.h>
+#include <drivers/ata/ata.h>
+#include <drivers/ata/controller.h>
+#include <drivers/ata/device.h>
+#include <drivers/fs/fat.h>
+#include <drivers/fs/vfs.h>
 #include <kernel/liballoc.h>
 #include <stdio.h>
 #include <string.h>

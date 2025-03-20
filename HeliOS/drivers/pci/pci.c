@@ -1,8 +1,8 @@
 // https://wiki.osdev.org/PCI
 // https://www.pcilookup.com/
+#include <drivers/pci/pci.h>
 #include <kernel/asm.h>
 #include <kernel/liballoc.h>
-#include <kernel/pci/pci.h>
 #include <stdio.h>
 
 #define VENDOR_INVALID 0xFFFF
@@ -47,8 +47,7 @@ const pci_device_t* get_device_by_id(uint16_t device_id)
 const pci_device_t* get_device_by_class(uint8_t base_class, uint8_t sub_class)
 {
     for (uint8_t i = 0; i <= device_idx; i++) {
-        if (devices[i]->base_class == base_class && devices[i]->sub_class == sub_class)
-            return devices[i];
+        if (devices[i]->base_class == base_class && devices[i]->sub_class == sub_class) return devices[i];
     }
     return NULL;
 }
@@ -62,8 +61,7 @@ const uint32_t pci_config_read_word(uint8_t bus, uint8_t slot, uint8_t func, uin
     uint16_t tmp = 0;
 
     // Create configuration
-    address = (uint32_t)((lbus << 16) | (lslot << 11) | (lfunc << 8) | (offset & 0xFC)
-        | ((uint32_t)(0x80000000)));
+    address = (uint32_t)((lbus << 16) | (lslot << 11) | (lfunc << 8) | (offset & 0xFC) | ((uint32_t)(0x80000000)));
 
     outdword(IOPORT_PCI_CFG_ADDR, address);
     return indword(IOPORT_PCI_CFG_DATA);

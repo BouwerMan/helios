@@ -1,5 +1,5 @@
 #pragma once
-#include <kernel/ata/partition.h>
+#include <drivers/ata/partition.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

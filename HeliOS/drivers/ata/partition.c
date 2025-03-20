@@ -1,4 +1,4 @@
-#include <kernel/ata/partition.h>
+#include <drivers/ata/partition.h>
 #include <stdio.h>
 
 /* offset of partition-table in MBR */
