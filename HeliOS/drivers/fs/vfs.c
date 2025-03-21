@@ -3,6 +3,8 @@
 #include <kernel/liballoc.h>
 #include <stdio.h>
 
+struct vfs_fs_type* fs_list = NULL;
+
 mount_t* mounts;
 static uint8_t max_mounts;
 static uint8_t mount_idx;
@@ -19,7 +21,8 @@ static size_t ic_size;
 // Last inserted inode
 static size_t ic_idx = 0;
 
-void vfs_init(uint8_t maximum_filesystems, uint8_t maximum_mounts, size_t inode_cache_size)
+void vfs_init(uint8_t maximum_filesystems, uint8_t maximum_mounts,
+    size_t inode_cache_size)
 {
     max_fs = maximum_filesystems;
     filesystems = (filesystem_t*)kmalloc(sizeof(filesystem_t) * max_fs);
@@ -94,19 +97,21 @@ FILE* vfs_open(dir_t* directory)
     // First we check if we have already cached this inode
     if (file_inode->f_size == 0) {
         puts("Had to ask filesystem to find inode");
-        // If we can't find the inode we ask the filesystem driver to search the drive
-        // We fill the inode slightly to aide driver searching
+        // If we can't find the inode we ask the filesystem driver to search the
+        // drive We fill the inode slightly to aide driver searching
         file_inode->dir = directory;
         file_inode->mount = mounts + directory->mount_id;
         // If the driver can't find it then we return NULL
-        if (mounts[directory->mount_id].filesystem->find_inode(file_inode)) return NULL;
+        if (mounts[directory->mount_id].filesystem->find_inode(file_inode))
+            return NULL;
         // Cache the inode since we found it
         cache_inode(file_inode);
     }
     puts("Trying to read file");
     FILE* file = kmalloc(sizeof(FILE));
     char* file_buff = kmalloc(file_inode->f_size);
-    int res = mounts[directory->mount_id].filesystem->read_handler(file_inode, file_buff, file_inode->f_size);
+    int res = mounts[directory->mount_id].filesystem->read_handler(
+        file_inode, file_buff, file_inode->f_size);
     // If successful we can return
     if (res == 0) {
         puts("Successfully read file");
@@ -139,7 +144,8 @@ static void register_mount(mount_t mount)
 }
 void unregister_mount(mount_t mount) { mounts[mount.id].present = false; }
 
-int mount(uint8_t id, sATADevice* device, sPartition* partition, uint8_t fs_type)
+int mount(
+    uint8_t id, sATADevice* device, sPartition* partition, uint8_t fs_type)
 {
     if (id > max_mounts || mounts[id].present) return -1;
     // building mount struct
@@ -158,4 +164,10 @@ int mount(uint8_t id, sATADevice* device, sPartition* partition, uint8_t fs_type
         return 0;
     }
     return 1;
+}
+
+void register_filesystem(struct vfs_fs_type* fs)
+{
+    fs->next = fs_list; // Add fs to beginning of list
+    fs_list = fs;
 }

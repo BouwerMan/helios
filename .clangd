@@ -5,3 +5,7 @@ CompileFlags:
     - "-nostdlibinc"
     - "-D__is_libk"
     - "-Wunused-variable"
+    - "-Wall"
+    - "-Wextra"
+    - "-pedantic"
+    - "--target=i386"

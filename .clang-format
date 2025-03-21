@@ -8,6 +8,8 @@ KeepEmptyLinesAtTheStartOfBlocks: true
 Language: Cpp
 TabWidth: 4
 UseTab: Never
-ColumnLimit: 80
+ColumnLimit: 120
 AlignConsecutiveMacros: Consecutive
 AlignTrailingComments: true
+AlignAfterOpenBracket: Align
+PointerAlignment: Left

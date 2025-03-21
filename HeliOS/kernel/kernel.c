@@ -83,11 +83,10 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     int i;
     uint32_t length = 0;
     for (i = 0; i < mbd->mmap_length; i += sizeof(multiboot_memory_map_t)) {
-        multiboot_memory_map_t* mmmt
-            = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
+        multiboot_memory_map_t* mmmt = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
 
-        printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n",
-            mmmt->addr_low, mmmt->len_low, mmmt->size, mmmt->type);
+        printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n", mmmt->addr_low, mmmt->len_low, mmmt->size,
+               mmmt->type);
 
         length += mmmt->len_low;
         if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE) {
@@ -124,8 +123,8 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     uint32_t phys_alloc_start = (kernel_end + 0x1000) & 0xFFFFF000;
 #ifdef KERNEL_DEBUG
     printf("KERNEL START: 0x%X, KERNEL END: 0x%X\n", kernel_start, kernel_end);
-    printf("MEM LOW: 0x%X, MEM HIGH: 0x%X, PHYS START: 0x%X\n",
-        mbd->mem_lower * 1024, mbd->mem_upper * 1024, phys_alloc_start);
+    printf("MEM LOW: 0x%X, MEM HIGH: 0x%X, PHYS START: 0x%X\n", mbd->mem_lower * 1024, mbd->mem_upper * 1024,
+           phys_alloc_start);
 #endif
     init_memory(mbd->mem_upper * 1024, phys_alloc_start);
 
@@ -136,7 +135,7 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     keyboard_init();
 }
 
-void kernel_main()
+void kernel_main(void)
 {
     printf("Welcome to %s. Version: %s\n", KERNEL_NAME, KERNEL_VERSION);
     printf("Detected CPU: ");
@@ -164,12 +163,10 @@ void kernel_main()
     kfree(test);
     int* test2 = (int*)kmalloc(sizeof(int));
     *test2 = 6435;
-    printf(
-        "\tkmalloc returned address: 0x%X, set value to: %d\n", test2, *test2);
+    printf("\tkmalloc returned address: 0x%X, set value to: %d\n", test2, *test2);
     int* test3 = (int*)kmalloc(sizeof(int));
     *test3 = 2421;
-    printf(
-        "\tkmalloc returned address: 0x%X, set value to: %d\n", test3, *test3);
+    printf("\tkmalloc returned address: 0x%X, set value to: %d\n", test3, *test3);
     kfree(test2);
     kfree(test3);
 #endif
@@ -234,11 +231,11 @@ void kernel_main()
     // }
     int result = 0;
     result = fat_lookup_inode(path, NULL, &inode);
-    printf("Found inode? %d, Inode name: %s, File size: %d, Init cluster: %d\n",
-        result, inode.file, inode.f_size, inode.init_cluster);
-    result = fat_lookup_inode("/DIR/SUBdir", NULL, &inode);
-    printf("Found inode? %d, Inode name: %s, File size: %d, Init cluster: %d\n",
-        result, inode.file, inode.f_size, inode.init_cluster);
+    printf("Found inode? %d, Inode name: %s, File size: %d, Init cluster: %d\n", result, inode.file, inode.f_size,
+           inode.init_cluster);
+    result = fat_lookup_inode("/", NULL, &inode);
+    printf("Found inode? %d, Inode name: %s, File size: %d, Init cluster: %d\n", result, inode.file, inode.f_size,
+           inode.init_cluster);
 #endif
 
 #ifdef PRINTF_TESTING

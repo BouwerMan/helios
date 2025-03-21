@@ -13,8 +13,7 @@
 
 enum fat_values {
     FAT_BAD_SECTOR = 0xFFF8,
-    FAT_END_OF_CHAIN
-    = 0xFFF8, // Check if value is below this to know if another cluster exists
+    FAT_END_OF_CHAIN = 0xFFF8, // Check if value is below this to know if another cluster exists
 };
 
 enum FAT_ATTRIB {
@@ -131,20 +130,15 @@ void fat_close_file(void* file_start);
 int fat_find_inode(inode_t* inode);
 // void fat_dir(const char* dir);
 
-/**
- * @brief Finds a file or directory in a FAT filesystem and populates its
- *        inode.
- *
- * @param path The absolute or relative path to the file or directory.
- * @param mount Pointer to the mounted FAT16 filesystem structure.
- * @param out_inode Pointer to an `inode_t` structure where the file metadata
- *                  will be stored if the lookup is successful.
- * @returns 1 if the file is found and `out_inode` is populated, 0 if file is
- *          not found, -1 if an error occured.
- * @note The search is case-insensitive, and long filenames (LFN) are not
- *       supported.
- */
-int fat_lookup_inode(
-    const char* path, const mount_t* mount, inode_t* out_inode);
+int fat_lookup_inode(const char* path, const mount_t* mount, inode_t* out_inode);
+
+/// Registers each supported fat type with the vfs.
+void fat_init();
+
+struct vfs_superblock* fat16_mount(sATADevice* device, uint32_t lba_start, int flags);
+
+int fat16_read_boot_sector(sATADevice* device, uint32_t lba_start, fat_BS_t* bs);
+
+int fat16_fill_meta(fat_BS_t* bs, struct fat_fs* fs);
 
 void fat_test();

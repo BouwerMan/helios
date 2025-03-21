@@ -9,11 +9,24 @@
  * tokenized. On subsequent calls, pass `NULL` to continue tokenizing the
  * same string.
  *
- * @param str The string to tokenize (or NULL to continue tokenizing the last
- * string).
- * @param delimiters A string containing delimiter characters.
+ * @param   str         The string to tokenize (or NULL to continue tokenizing the last string).
+ * @param   delimiters  A string containing delimiter characters.
  *
- * @returns A pointer to the next token, or NULL if no more tokens are found.
+ * @return A pointer to the next token, or NULL if no more tokens are found.
+ *
+ * @note This function modifies the original string by inserting `\0` characters
+ *       in place of delimiters. It is not thread-safe due to its use of a
+ *       static internal pointer.
+ *
+ * Example usage:
+ * @code
+ * char str[] = "hello,world,test";
+ * char *token = strtok(str, ",");
+ * while (token) {
+ *     printf("%s\n", token);
+ *     token = strtok(NULL, ",");
+ * }
+ * @endcode
  */
 char* strtok(char* str, const char* delimiters)
 {
