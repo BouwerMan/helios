@@ -1,9 +1,13 @@
 #include <drivers/fs/fat.h>
 #include <drivers/fs/vfs.h>
 #include <kernel/liballoc.h>
+#include <kernel/sys.h>
 #include <stdio.h>
+#include <string.h>
 
 struct vfs_fs_type* fs_list = NULL;
+struct vfs_superblock** sb_list;
+static uint8_t sb_idx = 0;
 
 mount_t* mounts;
 static uint8_t max_mounts;
@@ -14,6 +18,10 @@ static uint8_t max_fs;
 static uint8_t fs_idx = 0;
 
 static void register_mount(mount_t mount);
+static void add_superblock(struct vfs_superblock* sb)
+{
+    sb_list[sb_idx++] = sb;
+}
 
 static inode_t** inode_cache;
 // Size of inode cache
@@ -22,7 +30,7 @@ static size_t ic_size;
 static size_t ic_idx = 0;
 
 void vfs_init(uint8_t maximum_filesystems, uint8_t maximum_mounts,
-    size_t inode_cache_size)
+              size_t inode_cache_size)
 {
     max_fs = maximum_filesystems;
     filesystems = (filesystem_t*)kmalloc(sizeof(filesystem_t) * max_fs);
@@ -30,13 +38,17 @@ void vfs_init(uint8_t maximum_filesystems, uint8_t maximum_mounts,
     mounts = (mount_t*)kmalloc(sizeof(mount_t) * max_mounts);
     ic_size = inode_cache_size;
     inode_cache = (inode_t**)kmalloc((sizeof(uintptr_t)) * ic_size);
+
+    sb_list = kmalloc(sizeof(uintptr_t) * 8);
 }
 
 /// Finds file system in list of supported filesystems
-static filesystem_t* find_filesystem(uint8_t fs_type)
+static struct vfs_fs_type* find_filesystem(uint8_t fs_type)
 {
-    for (uint8_t i = 0; i < fs_idx; i++) {
-        if (filesystems[i].fs_type == fs_type) return filesystems + i;
+    struct vfs_fs_type* p = fs_list;
+    while (p) {
+        if (p->fs_type == fs_type) return p;
+        p = p->next;
     }
     return NULL;
 }
@@ -45,13 +57,7 @@ bool register_fs(uint8_t fs)
 {
     if (find_filesystem(fs)) return false;
     if (fs == FAT16) {
-        filesystem_t filesys;
-        filesys.id = fs_idx;
-        filesys.fs_type = fs;
-        filesys.fs_init = init_fat;
-        filesys.read_handler = fat_open_file;
-        filesys.find_inode = fat_find_inode;
-        filesystems[fs_idx++] = filesys;
+        fat_init();
         return true;
     } else {
         printf("FS not supported\n");
@@ -88,7 +94,9 @@ static void uncache_inode(inode_t* inode)
     kfree(inode);
 }
 
-FILE* vfs_open(dir_t* directory)
+// TODO: fix
+#if 0
+struct vfs_file* vfs_open(dir_t* directory)
 {
     if (directory->mount_id > mount_idx) return NULL;
     void* file_ptr = NULL;
@@ -134,6 +142,7 @@ void vfs_close(FILE* file)
     kfree(file->file_ptr);
     kfree(file);
 }
+#endif
 
 static void register_mount(mount_t mount)
 {
@@ -144,8 +153,8 @@ static void register_mount(mount_t mount)
 }
 void unregister_mount(mount_t mount) { mounts[mount.id].present = false; }
 
-int mount(
-    uint8_t id, sATADevice* device, sPartition* partition, uint8_t fs_type)
+int mount(uint8_t id, sATADevice* device, sPartition* partition,
+          uint8_t fs_type)
 {
     if (id > max_mounts || mounts[id].present) return -1;
     // building mount struct
@@ -160,7 +169,11 @@ int mount(
         printf("Adding mount to %d\n", id);
         mounts[id] = mount;
         puts("Initializing filesystem");
-        mount.filesystem->fs_init(device, partition->start);
+        if (mount.filesystem->mount == NULL)
+            panic("uh ohmount function dont exist");
+        struct vfs_superblock* sb
+            = mount.filesystem->mount(device, partition->start, 0);
+        add_superblock(sb);
         return 0;
     }
     return 1;
@@ -168,6 +181,53 @@ int mount(
 
 void register_filesystem(struct vfs_fs_type* fs)
 {
-    fs->next = fs_list; // Add fs to beginning of list
-    fs_list = fs;
+    if (fs_list == NULL) {
+        fs_list = fs;
+    } else {
+        fs->next = fs_list; // Add fs to beginning of list
+        fs_list = fs;
+    }
 }
+
+/// Gets superblock for idx
+struct vfs_superblock* vfs_get_sb(int idx) { return sb_list[idx]; }
+
+int uuid = 0; // Always points to next available id
+/// Returns new unique ID to use
+int vfs_get_next_id() { return uuid++; }
+/// Returns most recent allocated id
+int vfs_get_id() { return uuid - 1; }
+
+/**
+ * @brief Allocates a dentry to be filled by the caller
+ *
+ * @param [in] name
+ *
+ * @TODO: IDK if I am going to use this tbh
+ */
+#if 0
+vfs_dentry_t* vfs_alloc_dentry(const char* name)
+{
+    vfs_dentry_t* dentry = kmalloc(sizeof(vfs_dentry_t));
+    if (dentry == NULL) return NULL;
+
+    dentry->name = kmalloc(strlen(name));
+    if (dentry->name == NULL) {
+        kfree(dentry);
+        return NULL;
+    }
+    strcpy(dentry->name, name);
+
+    dentry->inode = kmalloc(sizeof(struct vfs_inode));
+    if (dentry->inode == NULL) {
+        kfree(dentry->name);
+        kfree(dentry);
+        return NULL;
+    }
+
+    return dentry;
+}
+#endif
+
+struct vfs_file* vfs_open_n(struct vfs_dentry* root, const char* path,
+                            int flags);

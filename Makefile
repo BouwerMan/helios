@@ -21,7 +21,7 @@ export BOOTDIR=/boot
 export LIBDIR=$(EXEC_PREFIX)/lib
 export INCLUDEDIR=$(PREFIX)/include
 
-export CWARN=-Wall -Wextra -pedantic -std=gnu17
+export CWARN=-Wall -Wextra -pedantic -std=gnu23
 export CFLAGS=-O0 -g
 export CPPFLAGS=
 

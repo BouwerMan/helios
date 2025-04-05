@@ -20,6 +20,7 @@
 // TODO: clean up inports, such as size_t coming from <stddef>;
 // TODO: Pretty sure PMM will perform weird things when reaching max memory
 // TODO: Project restructuring (drivers, kernel, lib, etc.)
+// TODO: Standardize return values
 #include "../arch/i386/vga.h"
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
@@ -83,10 +84,11 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     int i;
     uint32_t length = 0;
     for (i = 0; i < mbd->mmap_length; i += sizeof(multiboot_memory_map_t)) {
-        multiboot_memory_map_t* mmmt = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
+        multiboot_memory_map_t* mmmt
+            = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
 
-        printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n", mmmt->addr_low, mmmt->len_low, mmmt->size,
-               mmmt->type);
+        printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n",
+               mmmt->addr_low, mmmt->len_low, mmmt->size, mmmt->type);
 
         length += mmmt->len_low;
         if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE) {
@@ -123,8 +125,8 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     uint32_t phys_alloc_start = (kernel_end + 0x1000) & 0xFFFFF000;
 #ifdef KERNEL_DEBUG
     printf("KERNEL START: 0x%X, KERNEL END: 0x%X\n", kernel_start, kernel_end);
-    printf("MEM LOW: 0x%X, MEM HIGH: 0x%X, PHYS START: 0x%X\n", mbd->mem_lower * 1024, mbd->mem_upper * 1024,
-           phys_alloc_start);
+    printf("MEM LOW: 0x%X, MEM HIGH: 0x%X, PHYS START: 0x%X\n",
+           mbd->mem_lower * 1024, mbd->mem_upper * 1024, phys_alloc_start);
 #endif
     init_memory(mbd->mem_upper * 1024, phys_alloc_start);
 
@@ -163,10 +165,12 @@ void kernel_main(void)
     kfree(test);
     int* test2 = (int*)kmalloc(sizeof(int));
     *test2 = 6435;
-    printf("\tkmalloc returned address: 0x%X, set value to: %d\n", test2, *test2);
+    printf("\tkmalloc returned address: 0x%X, set value to: %d\n", test2,
+           *test2);
     int* test3 = (int*)kmalloc(sizeof(int));
     *test3 = 2421;
-    printf("\tkmalloc returned address: 0x%X, set value to: %d\n", test3, *test3);
+    printf("\tkmalloc returned address: 0x%X, set value to: %d\n", test3,
+           *test3);
     kfree(test2);
     kfree(test3);
 #endif
@@ -183,16 +187,6 @@ void kernel_main(void)
     puts("Registered FAT16\nMounting drive");
     sATADevice* fat_device = ctrl_get_device(3);
     mount(0, fat_device, &fat_device->part_table[0], FAT16);
-
-    // puts("Time to initialize FAT");
-    // Device 3 is the FAT device, hardcoding for now
-    // init_fat(ctrl_get_device(3), 63);
-    // Here is the order for opening files:
-    // kernel requests vfs to open file at directory on drive X
-    //     Unsure if this is a good way to do this, maybe force the vfs to
-    //     figure out drive
-    // vfs takes that information and sends it to the relevant filesystem driver
-    //     Driver needs to know: device to read from, filename, directory
 
 #if 0
     dir_t directory = {
@@ -216,26 +210,30 @@ void kernel_main(void)
 
 #endif
     puts("FAT_Dir testing");
+    struct vfs_superblock* fat_sb = vfs_get_sb(0);
+    struct vfs_dentry* child = kmalloc(sizeof(struct vfs_dentry));
+    child->name = "dir";
+    child->ref_count = 1;
+    child->parent = fat_sb->root_dentry;
+    child->fs_data = fat_sb->fs_data;
+    child->flags = DENTRY_DIR;
+    child = fat_lookup(fat_sb->root_dentry->inode, child);
+    printf(
+        "Found inode? 0x%X, Inode name: %s, File size: %d, Init cluster: %d\n",
+        (void*)child, child->name, child->inode->f_size,
+        ((struct fat_inode_info*)child->inode->fs_data)->init_cluster);
 
-    // fat_dir("/");
-    // fat_dir("/DIR");
-    // fat_dir("/DIR/SUBDIR");
-    inode_t inode = { 0 };
-    char path[] = "/DIR/SUBDIR/TEST5.TXT";
-    // char* pch;
-    // printf("Splitting string \"%s\" into tokens:\n", path);
-    // pch = strtok(path, "/");
-    // while (pch != NULL) {
-    //     printf("%s\n", pch);
-    //     pch = strtok(NULL, "/");
-    // }
-    int result = 0;
-    result = fat_lookup_inode(path, NULL, &inode);
-    printf("Found inode? %d, Inode name: %s, File size: %d, Init cluster: %d\n", result, inode.file, inode.f_size,
-           inode.init_cluster);
-    result = fat_lookup_inode("/", NULL, &inode);
-    printf("Found inode? %d, Inode name: %s, File size: %d, Init cluster: %d\n", result, inode.file, inode.f_size,
-           inode.init_cluster);
+    struct vfs_dentry* sub = kmalloc(sizeof(struct vfs_dentry));
+    sub->name = "test2.txt";
+    sub->ref_count = 1;
+    sub->parent = child;
+    sub->fs_data = fat_sb->fs_data;
+    sub->flags = DENTRY_DIR;
+    sub = fat_lookup(child->inode, sub);
+    printf(
+        "Found inode? 0x%X, Inode name: %s, File size: %d, Init cluster: %d\n",
+        (void*)sub, sub->name, sub->inode->f_size,
+        ((struct fat_inode_info*)sub->inode->fs_data)->init_cluster);
 #endif
 
 #ifdef PRINTF_TESTING

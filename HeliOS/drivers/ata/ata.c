@@ -5,11 +5,13 @@
 #include <stdio.h>
 
 static uint16_t get_command(sATADevice* device, uint16_t op);
-static bool setup_command(sATADevice* device, uint32_t lba, size_t sec_count, uint16_t cmd);
+static bool setup_command(sATADevice* device, uint32_t lba, size_t sec_count,
+                          uint16_t cmd);
 
 // TODO: Add DMA support, currently just PIO
 //       Also need support for ATAPI
-bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba, size_t sec_size, size_t sec_count)
+bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba,
+                    size_t sec_size, size_t sec_count)
 {
     sATAController* ctrl = device->ctrl;
     uint16_t command = get_command(device, op);
@@ -21,7 +23,8 @@ bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba,
     device_poll(device);
     // printf("Selecting Device %d using 0x%X\n", device->id,
     // 0xE0 | ((device->id & SLAVE_BIT) << 4) | ((lba >> 24) & 0x0F));
-    ctrl_outb(ctrl, ATA_REG_DRIVE_SELECT, 0xE0 | ((device->id & SLAVE_BIT) << 4) | ((lba >> 24) & 0x0F));
+    ctrl_outb(ctrl, ATA_REG_DRIVE_SELECT,
+              0xE0 | ((device->id & SLAVE_BIT) << 4) | ((lba >> 24) & 0x0F));
     ctrl_wait(ctrl);
     ctrl_outb(ctrl, ATA_REG_SECTOR_COUNT, (unsigned char)sec_count);
     ctrl_outb(ctrl, ATA_REG_ADDRESS1, (uint8_t)lba);
@@ -38,7 +41,10 @@ bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba,
                 printf("Polling failed for device %d\n", device->id);
                 return false;
             }
-            ctrl_inws(ctrl, ATA_REG_DATA, buffer, sec_size / sizeof(uint16_t));
+            // Weird casting to appease the clangd gods
+            ctrl_inws(ctrl, ATA_REG_DATA,
+                      (void*)((uintptr_t)buffer + (i * sec_size)),
+                      sec_size / sizeof(uint16_t));
             // Flush cache
             ctrl_outb(ctrl, ATA_REG_COMMAND, COMMAND_CACHE_FLUSH);
             device_poll(device);
@@ -75,7 +81,8 @@ static uint16_t get_command(sATADevice* device, uint16_t op)
     return 0;
 }
 
-static bool setup_command(sATADevice* device, uint32_t lba, size_t sec_count, uint16_t cmd)
+static bool setup_command(sATADevice* device, uint32_t lba, size_t sec_count,
+                          uint16_t cmd)
 {
     sATAController* ctrl = device->ctrl;
     return true;

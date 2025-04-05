@@ -16,6 +16,36 @@ enum FILESYSTEMS {
 
 enum FILETYPE { FILETYPE_FILE, FILETYPE_DIR };
 
+enum DENTRY_FLAGS {
+    DENTRY_DIR = 0x08,
+    DENTRY_ROOT = 0x10,
+};
+
+enum VFS_PERMS {
+    VFS_PERM_NONE = 0,
+
+    // User permissions
+    VFS_PERM_UR = 0b100000000, // User read
+    VFS_PERM_UW = 0b010000000, // User write
+    VFS_PERM_UX = 0b001000000, // User execute
+
+    // Group permissions
+    VFS_PERM_GR = 0b000100000, // Group read
+    VFS_PERM_GW = 0b000010000, // Group write
+    VFS_PERM_GX = 0b000001000, // Group execute
+
+    // Other permissions
+    VFS_PERM_OR = 0b000000100, // Other read
+    VFS_PERM_OW = 0b000000010, // Other write
+    VFS_PERM_OX = 0b000000001, // Other execute
+
+    // Common combinations
+    VFS_PERM_UALL = VFS_PERM_UR | VFS_PERM_UW | VFS_PERM_UX,
+    VFS_PERM_GALL = VFS_PERM_GR | VFS_PERM_GW | VFS_PERM_GX,
+    VFS_PERM_OALL = VFS_PERM_OR | VFS_PERM_OW | VFS_PERM_OX,
+    VFS_PERM_ALL = VFS_PERM_UALL | VFS_PERM_GALL | VFS_PERM_OALL
+};
+
 // TODO: Support longer file names, only limiting since we only support FAT16 no
 // LFN
 typedef struct directory_s {
@@ -33,7 +63,7 @@ struct mount {
     uint8_t id;
     sATADevice* device;
     sPartition* partition;
-    filesystem_t* filesystem;
+    struct vfs_fs_type* filesystem;
 };
 typedef struct mount mount_t;
 
@@ -54,7 +84,7 @@ typedef struct inode_s {
     void* fs_data;         // Data to fs specific information
 } inode_t;
 
-typedef struct {
+typedef struct vfs_file {
     void* file_ptr;
     unsigned char* read_ptr;
     size_t file_size;
@@ -77,7 +107,7 @@ struct filesystem_s {
 // TODO: Add timestamp stuff
 struct vfs_inode {
     int id;
-    uint8_t filetype;
+    uint8_t filetype; // either DIR or FILE
     size_t f_size;
     int ref_count;
     uint16_t permissions;
@@ -85,6 +115,7 @@ struct vfs_inode {
     void* fs_data;
 };
 
+// TODO: Make helper function for creating new dentries???
 struct vfs_dentry {
     char* name;
     struct vfs_inode* inode;
@@ -95,22 +126,30 @@ struct vfs_dentry {
 };
 
 struct vfs_fs_type {
-    char name[8];                                                                       // Filesystem name
-    struct vfs_superblock* (*mount)(sATADevice* device, uint32_t lba_start, int flags); // Mount function
+    char name[8];    // Filesystem name
+    uint8_t fs_type; // enum of filesystem type for faster checks
+    struct vfs_superblock* (*mount)(sATADevice* device, uint32_t lba_start,
+                                    int flags); // Mount function
     struct vfs_fs_type* next;
 };
 
-struct vfs_superblock {
+typedef struct vfs_superblock {
     struct vfs_dentry* root_dentry;
     struct vfs_fs_type* fs_type;
     void* fs_data;
     char* moint_point;
-};
+} vfs_sb_t;
 
 void register_filesystem(struct vfs_fs_type* fs);
 
-void vfs_init(uint8_t maximum_filesystems, uint8_t maximum_mounts, size_t inode_cache_size);
+void vfs_init(uint8_t maximum_filesystems, uint8_t maximum_mounts,
+              size_t inode_cache_size);
 bool register_fs(uint8_t fs);
-FILE* vfs_open(dir_t* directory);
+struct vfs_file* vfs_open(dir_t* directory);
 void vfs_close(FILE* file);
-int mount(uint8_t id, sATADevice* device, sPartition* partition, uint8_t fs_type);
+int mount(uint8_t id, sATADevice* device, sPartition* partition,
+          uint8_t fs_type);
+struct vfs_dentry* vfs_alloc_dentry(const char* name);
+struct vfs_superblock* vfs_get_sb(int idx);
+int vfs_get_next_id();
+int vfs_get_id();

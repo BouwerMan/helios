@@ -2,18 +2,12 @@
 #include <drivers/ata/controller.h>
 #include <drivers/fs/vfs.h>
 
-// enum {
-//     FAT12,
-//     FAT16,
-//     FAT32,
-//     ExFat,
-// };
-
 #define FAT_ROOT_CLUSTER 2
 
-enum fat_values {
+enum FAT_VALUES {
     FAT_BAD_SECTOR = 0xFFF8,
-    FAT_END_OF_CHAIN = 0xFFF8, // Check if value is below this to know if another cluster exists
+    FAT_END_OF_CHAIN
+    = 0xFFF8, // Check if value is below this to know if another cluster exists
 };
 
 enum FAT_ATTRIB {
@@ -26,7 +20,7 @@ enum FAT_ATTRIB {
 };
 
 // TODO: put uint8_t types in the structs
-typedef struct fat_extBS_32 {
+struct fat_extBS_32 {
     // extended fat32 stuff
     unsigned int table_size_32;
     unsigned short extended_flags;
@@ -42,9 +36,9 @@ typedef struct fat_extBS_32 {
     unsigned char volume_label[11];
     unsigned char fat_type_label[8];
 
-} __attribute__((packed)) fat_extBS_32_t;
+} __attribute__((packed));
 
-typedef struct fat_extBS_16 {
+struct fat_extBS_16 {
     // extended fat12 and fat16 stuff
     unsigned char bios_drive_num;
     unsigned char reserved1;
@@ -53,9 +47,9 @@ typedef struct fat_extBS_16 {
     unsigned char volume_label[11];
     unsigned char fat_type_label[8];
 
-} __attribute__((packed)) fat_extBS_16_t;
+} __attribute__((packed));
 
-typedef struct fat_BS {
+struct fat_BS {
     unsigned char bootjmp[3];
     unsigned char oem_name[8];
     unsigned short bytes_per_sector;
@@ -75,9 +69,9 @@ typedef struct fat_BS {
     // what type of FAT this is.
     unsigned char extended_section[54];
 
-} __attribute__((packed)) fat_BS_t;
+} __attribute__((packed));
 
-typedef struct fat_filetable_s {
+struct fat_filetable {
     char name[8];       //!< 8.3 Name
     char ext[3];        //!< 8.3 File Extension
     uint8_t attrib;     //!< File Attributes.
@@ -91,9 +85,10 @@ typedef struct fat_filetable_s {
     uint16_t mdate;     //!< Last Modified Date
     uint16_t cluster;   //!< Low Word of First cluster
     uint32_t size;      //!< Size of file
-} __attribute__((packed)) fat_filetable_t;
+} __attribute__((packed));
 
 // TODO: Resize these fields
+// TODO: rename to something like fat_metadata
 struct fat_fs {
     uint32_t lba_start;
     uint16_t total_sectors;
@@ -108,37 +103,38 @@ struct fat_fs {
     uint16_t total_clusters;
     uint8_t fat_type;
     sATADevice* device;
-    fat_BS_t* bs;
+    struct fat_BS* bs;
 };
 
-typedef struct fat_filetable_s fat_filetable;
-
-typedef struct {
+struct fat_inode_info {
     struct fat_fs* fat;       // Pointer to fat data
     uint8_t fat_variant;      // FAT32, Fat16, Fat12
     uint32_t init_cluster;    // Initial cluster of chain
     uint32_t current_cluster; // Current cluster being read
-    uint8_t chain_len;        // Number of clusters in chain
+    int16_t chain_len;        // Number of clusters in chain, -1 if unknown
     uint32_t dir_cluster;     // Directory cluster of the parent (0 for root)
-    uint32_t dir_offset;      // Directory entry offset
-    uint32_t fat_attrib;      // Attributes in fat entry
-} fat_inode_info;
+    uint32_t dir_offset;      // Directory entry offset NOTE: May remove idk
+    uint8_t fat_attrib;       // Attributes in fat entry
+};
 
-void init_fat(sATADevice* device, uint32_t lba_start);
+static inline struct fat_fs* dentry_get_fat_fs(struct vfs_dentry* d)
+{
+    return d->fs_data;
+}
+
 int fat_open_file(const inode_t* inode, char* buffer, size_t buffer_size);
 void fat_close_file(void* file_start);
-int fat_find_inode(inode_t* inode);
-// void fat_dir(const char* dir);
 
-int fat_lookup_inode(const char* path, const mount_t* mount, inode_t* out_inode);
+struct vfs_dentry* fat_lookup(struct vfs_inode* dir_inode,
+                              struct vfs_dentry* child);
 
-/// Registers each supported fat type with the vfs.
 void fat_init();
 
-struct vfs_superblock* fat16_mount(sATADevice* device, uint32_t lba_start, int flags);
+struct vfs_superblock* fat16_mount(sATADevice* device, uint32_t lba_start,
+                                   int flags);
+struct vfs_inode* fat16_get_root_inode(struct vfs_superblock* sb);
 
-int fat16_read_boot_sector(sATADevice* device, uint32_t lba_start, fat_BS_t* bs);
+int fat16_read_boot_sector(sATADevice* device, uint32_t lba_start,
+                           struct fat_BS* bs);
 
-int fat16_fill_meta(fat_BS_t* bs, struct fat_fs* fs);
-
-void fat_test();
+void fat_fill_meta(struct fat_BS* bs, struct fat_fs* fs);

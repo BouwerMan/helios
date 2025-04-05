@@ -9,3 +9,5 @@ CompileFlags:
     - "-Wextra"
     - "-pedantic"
     - "--target=i386"
+    - "-std=gnu23"
+    - "-xc"
