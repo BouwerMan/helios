@@ -7,6 +7,7 @@ OSNAME?=myos
 BUILDDIR=build
 KERNELDIR=kernel
 DRIVERDIR=drivers
+UTILDIR=util
 
 DESTDIR?=
 PREFIX?=/usr/local
@@ -59,9 +60,13 @@ $(BUILDDIR)/$(DRIVERDIR)/ata/partition.o \
 $(BUILDDIR)/$(DRIVERDIR)/fs/fat.o \
 $(BUILDDIR)/$(DRIVERDIR)/fs/vfs.o \
 
+UTIL_OBJS=\
+$(BUILDDIR)/$(UTILDIR)/ht.o \
+
 OBJS=\
 $(KERNEL_OBJS) \
 $(DRIVER_OBJS) \
+$(UTIL_OBJS) \
 #$(ARCHDIR)/crti.o \
 #$(ARCHDIR)/crtbegin.o \
 #$(ARCHDIR)/crtend.o \

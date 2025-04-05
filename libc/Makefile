@@ -32,6 +32,7 @@ $(BUILDDIR)/string/strcmp.o \
 $(BUILDDIR)/string/strtok.o \
 $(BUILDDIR)/string/strchr.o \
 $(BUILDDIR)/string/strcpy.o \
+$(BUILDDIR)/string/strdup.o \
 $(BUILDDIR)/string/strcat.o \
 $(BUILDDIR)/string/memset.o \
 $(BUILDDIR)/string/memcpy.o \

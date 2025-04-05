@@ -12,7 +12,7 @@
  * @return A pointer to the first occurrence of the character,
  *         or NULL if not found.
  */
-char* strchr(const char* str, char character)
+char* strchr(const char* str, int character)
 {
     while (*str) {
         if (*str == character) return (char*)str;
