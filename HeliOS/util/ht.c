@@ -27,47 +27,51 @@
  */
 
 #include <kernel/liballoc.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <util/ht.h>
 
 // TODO: Implement some sort of LRU deletion
 // TODO: Implement any sort of removal using custom destructors
+// TODO: Update documentation to reflect generic keys now supported
 
-static uint32_t hash_key(const char* key);
+// Default operations to use, caller can overload these if desired
+struct ht_ops default_ops = {
+    .hash = hash_key,
+    .compare = compare_key,
+    .destructor = NULL,
+};
+
 static const char* ht_set_entry(struct ht_entry* entries, size_t capacity,
-                                const char* key, void* value, size_t* plength);
+                                const void* key, void* value, size_t* plength,
+                                struct ht_ops* ops);
 static bool ht_expand(struct ht* table);
 
 #define INITIAL_CAPACITY 16 // Initial capacity of any hash tables created
 
 /**
- * @brief Creates a new hash table.
+ * ht_create - Creates a new hash table.
+ * @hash_size: The initial size of the hash table (must be a power of 2).
  *
  * This function allocates and initializes a hash table structure. The hash
- * table uses the specified destructor function to clean up entries when the
- * table is destroyed or an entry is removed.
+ * table uses the specified size to allocate memory for its entries and sets
+ * up default operations. If memory allocation fails, the function returns
+ * NULL.
  *
- * @param destructor A pointer to a function that will be called to free the
- *                   memory of each entry in the hash table. Can be NULL if no
- *                   cleanup is needed.
- *
- * @return Pointer to the newly created hash table, or NULL if memory allocation
- *         fails.
- *
- * @note The caller is responsible for freeing the hash table and its entries
- *       using an appropriate cleanup function.
+ * Return:
+ *  - Pointer to the newly created hash table on success.
+ *  - NULL if memory allocation fails.
  */
-struct ht* ht_create(void (*destructor)(void* entry))
+
+struct ht* ht_create(size_t hash_size)
 {
     struct ht* table = kmalloc(sizeof(struct ht));
     if (table == NULL) return NULL;
 
     table->length = 0;
-    table->capacity = INITIAL_CAPACITY;
-    table->destructor = destructor;
-    table->entries = kcalloc(table->capacity, sizeof(ht_entry));
+    table->capacity = hash_size;
+    table->entries = kcalloc(table->capacity, sizeof(struct ht_entry));
+    table->ops = &default_ops;
     if (table->entries == NULL) {
         kfree(table);
         return NULL;
@@ -90,7 +94,8 @@ void ht_destroy(struct ht* table)
 {
     // Free allocated keys and values if they have a custom destructor
     for (size_t i = 0; i < table->capacity; i++) {
-        if (table->destructor) table->destructor(table->entries[i].value);
+        if (table->ops->destructor)
+            table->ops->destructor(table->entries[i].value);
         kfree((void*)table->entries[i].key);
     }
 
@@ -110,15 +115,15 @@ void ht_destroy(struct ht* table)
  * @return Pointer to the value associated with the key, or NULL if the key is
  *         not found.
  */
-void* ht_get(struct ht* table, const char* key)
+void* ht_get(struct ht* table, const void* key)
 {
     // AND hash with capacity-1 to ensure it's within entries array.
     // Equivalent to hash % capacity (maybe faster???)
-    uint32_t hash = hash_key(key);
+    uint32_t hash = table->ops->hash(key);
     size_t index = (size_t)(hash & (uint32_t)(table->capacity - 1));
 
     while (table->entries[index].key != NULL) {
-        if (strcmp(key, table->entries[index].key) == 0) {
+        if (table->ops->compare(key, table->entries[index].key)) {
             // Found key
             return table->entries[index].value;
         }
@@ -147,7 +152,7 @@ void* ht_get(struct ht* table, const char* key)
  * @return Pointer to the copied key, or NULL if out of memory
  *         or if value is NULL.
  */
-const char* ht_set(struct ht* table, const char* key, void* value)
+const char* ht_set(struct ht* table, const void* key, void* value)
 {
     if (value == NULL) {
         puts("WOAH YOU SHOULD SPECIFY A HT VALUE BIG MAN");
@@ -160,7 +165,7 @@ const char* ht_set(struct ht* table, const char* key, void* value)
     }
 
     return ht_set_entry(table->entries, table->capacity, key, value,
-                        &table->length);
+                        &table->length, table->ops);
 }
 
 /**
@@ -225,10 +230,6 @@ bool ht_next(struct ht_iter* it)
     return false;
 }
 
-/***********************************
- * Static functions
- ***********************************/
-
 #define FNV_PRIME  0x01000193 ///< The FNV prime constant.
 #define FNV_OFFSET 0x811c9dc5 ///< The FNV offset basis constant.
 
@@ -243,15 +244,24 @@ bool ht_next(struct ht_iter* it)
  * @param key NUL-terminated string to be hashed.
  * @return 32-bit hash value of the input key.
  */
-static uint32_t hash_key(const char* key)
+uint32_t hash_key(const void* key)
 {
     uint32_t hash = FNV_OFFSET;
-    for (const char* p = key; *p; p++) {
+    for (const char* p = (const char*)key; *p; p++) {
         hash ^= (uint32_t)(unsigned char)(*p);
         hash *= FNV_PRIME;
     }
     return hash;
 }
+
+bool compare_key(const void* key1, const void* key2)
+{
+    return strcmp(key1, key2) == 0;
+}
+
+/***********************************
+ * Static functions
+ ***********************************/
 
 /**
  * @brief Sets a key-value pair in the hash table entries array.
@@ -263,8 +273,9 @@ static uint32_t hash_key(const char* key)
  *
  * @param entries   Pointer to the hash table's entries array.
  * @param capacity  The capacity of the hash table.
- * @param key       NUL-terminated string representing the key. The key is
- *                  duplicated if added.
+ * @param key       Pointer to data representing the key. The key is not
+ *                  duplicated if added, the caller MUST make sure key lifetimes
+ *                  outlive the entry.
  * @param value     Pointer to the value to associate with the key.
  * @param plength   Pointer to the current length of the hash table, or NULL if
  *                  not needed.
@@ -273,15 +284,16 @@ static uint32_t hash_key(const char* key)
  *         or NULL if memory allocation fails.
  */
 static const char* ht_set_entry(struct ht_entry* entries, size_t capacity,
-                                const char* key, void* value, size_t* plength)
+                                const void* key, void* value, size_t* plength,
+                                struct ht_ops* ops)
 {
-    uint32_t hash = hash_key(key);
+    uint32_t hash = ops->hash(key);
     size_t index = (size_t)(hash & (uint32_t)(capacity - 1));
 
     // Looping until empty entry
     while (entries[index].key != NULL) {
         // Check if key exists and updates value if so
-        if (strcmp(key, entries[index].key) == 0) {
+        if (ops->compare(key, entries[index].key)) {
             entries[index].value = value;
             return entries[index].key;
         }
@@ -292,11 +304,10 @@ static const char* ht_set_entry(struct ht_entry* entries, size_t capacity,
     }
 
     if (plength != NULL) {
-        key = strdup(key);
         if (key == NULL) return NULL;
         (*plength)++;
     }
-    entries[index].key = (char*)key;
+    entries[index].key = key;
     entries[index].value = value;
     return key;
 }
@@ -327,7 +338,7 @@ static bool ht_expand(struct ht* table)
         struct ht_entry entry = table->entries[i];
         if (entry.key != NULL) {
             ht_set_entry(new_entries, new_capacity, entry.key, entry.value,
-                         NULL);
+                         NULL, table->ops);
         }
     }
 

@@ -2,7 +2,8 @@
 #include <drivers/ata/controller.h>
 #include <drivers/fs/vfs.h>
 
-#define FAT_ROOT_CLUSTER 2
+#define FAT_ROOT_CLUSTER  2
+#define CHAIN_LEN_UNKNOWN -1
 
 enum FAT_VALUES {
     FAT_BAD_SECTOR = 0xFFF8,
@@ -122,19 +123,20 @@ static inline struct fat_fs* dentry_get_fat_fs(struct vfs_dentry* d)
     return d->fs_data;
 }
 
-int fat_open_file(const inode_t* inode, char* buffer, size_t buffer_size);
-void fat_close_file(void* file_start);
+void fat_init();
+struct vfs_superblock* fat16_mount(sATADevice* device, uint32_t lba_start,
+                                   int flags);
+int fat16_read_boot_sector(sATADevice* device, uint32_t lba_start,
+                           struct fat_BS* bs);
+struct vfs_inode* fat16_get_root_inode(struct vfs_superblock* sb);
 
 struct vfs_dentry* fat_lookup(struct vfs_inode* dir_inode,
                               struct vfs_dentry* child);
+int fat_open_file(struct vfs_inode* inode, struct vfs_file* file);
+void fat_close_file(void* file_start);
 
-void fat_init();
-
-struct vfs_superblock* fat16_mount(sATADevice* device, uint32_t lba_start,
-                                   int flags);
-struct vfs_inode* fat16_get_root_inode(struct vfs_superblock* sb);
-
-int fat16_read_boot_sector(sATADevice* device, uint32_t lba_start,
-                           struct fat_BS* bs);
+struct vfs_dentry* fat_create_dentry(const char* name,
+                                     struct vfs_dentry* parent);
+struct vfs_inode* fat_create_inode(struct vfs_superblock* sb);
 
 void fat_fill_meta(struct fat_BS* bs, struct fat_fs* fs);

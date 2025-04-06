@@ -13,12 +13,6 @@
 
 // https://unix.stackexchange.com/questions/209566/how-to-format-a-partition-inside-of-an-img-file
 
-// TODO: Figure out how to properly switch between different FAT versions
-
-static struct fat_BS* fat_boot;
-// TODO: setup proper storage of filesystems
-static struct fat_fs* fat;
-
 static int fat_open_sector(const struct fat_fs* fs, uint8_t* buffer,
                            uint16_t buffer_size, uint32_t sector);
 static int fat_open_cluster(const struct fat_fs* fs, uint8_t* buffer,
@@ -36,8 +30,17 @@ static int fat_process_dir_entries(uint8_t* dir_data, size_t dir_size,
                                    void* context);
 static int fat_lookup_inode_callback(const void* entry, void* context);
 
-struct vfs_fs_type fat16_fs_type
-    = { .name = "fat16", .fs_type = FAT16, .mount = fat16_mount, .next = NULL };
+struct vfs_fs_type fat16_fs_type = {
+    .name = "fat16",
+    .fs_type = FAT16,
+    .mount = fat16_mount,
+    .next = NULL,
+};
+
+struct inode_ops fat16_default_ops = {
+    .open = fat_open_file,
+    .lookup = fat_lookup,
+};
 
 /**
  * @brief Initializes the FAT filesystem driver.
@@ -184,6 +187,8 @@ struct vfs_inode* fat16_get_root_inode(struct vfs_superblock* sb)
 
     r_node->fs_data = i_info;
 
+    r_node->ops = &fat16_default_ops;
+
     return r_node;
 clean_vnode:
     kfree(r_node);
@@ -282,6 +287,7 @@ struct vfs_dentry* fat_lookup(struct vfs_inode* dir_inode,
     inode->ref_count = 1;
     inode->permissions = VFS_PERM_ALL;
     inode->flags = 0;
+    inode->ops = &fat16_default_ops;
 
     fat_inode->fat = fat_info->fat;
     fat_inode->fat_variant = FAT16;
@@ -289,6 +295,8 @@ struct vfs_dentry* fat_lookup(struct vfs_inode* dir_inode,
     fat_inode->dir_cluster = fat_info->init_cluster;
 
     child->inode = inode;
+
+    dentry_add(child);
     return child;
 
 clean_fat_inode:
@@ -300,21 +308,113 @@ clean:
     return child;
 }
 
-// TODO: Ignores file extensions
-// TODO: Support directories
-// TODO: Account for filesize
-int fat_open_file(const inode_t* inode, char* buffer, size_t buffer_size)
+/**
+ * @brief Allocates and initializes a negative VFS dentry.
+ *
+ * This function creates a new vfs_dentry structure representing a missing
+ * or unresolved file. It initializes basic fields and associates it with
+ * a parent. The resulting dentry can be populated later by a lookup operation.
+ *
+ * @param name   The file name. Gets copied into the dentry.
+ * @param parent Pointer to the parent dentry.
+ * @return       A pointer to a new vfs_dentry, or NULL on failure.
+ */
+struct vfs_dentry* fat_create_dentry(const char* name,
+                                     struct vfs_dentry* parent)
 {
-    uint32_t cluster_size = fat->sector_size
-        * fat_boot->sectors_per_cluster; // number of bytes in a cluster
+    struct vfs_dentry* dentry = kmalloc(sizeof(struct vfs_dentry));
+    if (!dentry) return NULL;
+    dentry->name = strdup(name);
+    if (!dentry->name) {
+        kfree(dentry);
+        return NULL;
+    }
+    dentry->inode = NULL;
+    dentry->parent = parent;
+    dentry->fs_data = parent->fs_data;
+    dentry->ref_count = 1;
+    dentry->flags = 0;
+    return dentry;
+}
 
-    uint32_t next_cluster = inode->init_cluster;
+/**
+ * @brief Allocates and initializes a new VFS inode for the FAT filesystem.
+ *
+ * This function allocates a new vfs_inode and its associated fat_inode_info
+ * structure, sets default values (permissions, ref_count, etc.), and links
+ * them together. It does not fill in on-disk metadata like size or cluster
+ * info— that should be done separately by the caller after parsing a directory
+ * entry.
+ *
+ * @param sb Pointer to the FAT filesystem superblock.
+ * @return   A pointer to an allocated and initialized vfs_inode, or NULL on
+ * failure.
+ */
+struct vfs_inode* fat_create_inode(struct vfs_superblock* sb)
+{
+    // TODO: Actually use this in functions :)
+    struct vfs_inode* inode = kmalloc(sizeof(struct vfs_inode));
+    if (!inode) return NULL;
+    struct fat_inode_info* info = kmalloc(sizeof(struct fat_inode_info));
+    if (!info) {
+        kfree(inode);
+        return NULL;
+    }
+    info->fat = sb->fs_data;
+    info->fat_variant = sb->fs_type->fs_type;
+    info->init_cluster = 0;
+    info->current_cluster = 0;
+    info->chain_len = CHAIN_LEN_UNKNOWN;
+    info->dir_cluster = 0;
+    info->dir_offset = 0;
+    info->fat_attrib = 0;
+
+    inode->fs_data = info;
+
+    inode->id = 0;
+    inode->filetype = FILETYPE_UNKNOWN;
+    inode->f_size = 0;
+    inode->ref_count = 1;
+    inode->permissions = VFS_PERM_ALL;
+    inode->flags = 0;
+    inode->ops = &fat16_default_ops;
+
+    return inode;
+}
+
+/**
+ * fat_open_file - Opens a file in the FAT filesystem.
+ * @inode: Pointer to the VFS inode structure representing the file.
+ * @file: Pointer to the VFS file structure where file data will be loaded.
+ *
+ * This function reads the file data from the FAT filesystem into the buffer
+ * pointed to by `file->file_ptr`. It iterates through the file's clusters,
+ * loading each cluster's data into the buffer. At the end of the file, it
+ * replaces the last line feed character with a null terminator for
+ * compatibility with string operations.
+ *
+ * Return:
+ *  - 0 on success.
+ *  - -1 if an error occurs (e.g., invalid input or memory issues).
+ */
+int fat_open_file(struct vfs_inode* inode, struct vfs_file* file)
+{
+    struct fat_inode_info* info = inode->fs_data;
+    uint32_t cluster_size = info->fat->cluster_size;
+
+    uint32_t next_cluster = info->init_cluster;
+    uint8_t* buffer = file->file_ptr;
     size_t i = 0;
     while (next_cluster < FAT_END_OF_CHAIN) {
-        next_cluster = fat_get_next_cluster(fat, next_cluster);
-        fat_open_cluster(fat, (uint8_t*)(buffer + (i * cluster_size)),
-                         buffer_size - (i * cluster_size), next_cluster);
+        if ((i * cluster_size >= file->file_size)) return -1;
+        fat_open_cluster(info->fat, (uint8_t*)(buffer + (i * cluster_size)),
+                         file->file_size - (i * cluster_size), next_cluster);
+        next_cluster = fat_get_next_cluster(info->fat, next_cluster);
         i++;
+    }
+    if (file->file_size > 0) {
+        // Swap line feed at end of file for '\0' so printf behaves
+        ((char*)file->file_ptr)[file->file_size - 1] = '\0';
     }
 
     return 0;
@@ -590,10 +690,10 @@ static uint32_t fat_get_next_cluster(const struct fat_fs* fs,
     // the variable "table_value" now has the information you need about the
     // next cluster in the chain.
 
-    if (table_value > 0xFFF8)
-        puts("Last cluster in string");
-    else if (table_value == 0xFFF8)
-        puts("Cluster marked as bad");
+    // if (table_value > 0xFFF8)
+    //     puts("Last cluster in string");
+    // else if (table_value == 0xFFF8)
+    //     puts("Cluster marked as bad");
 
     return table_value;
 }
@@ -608,28 +708,19 @@ static uint32_t fat_get_next_cluster(const struct fat_fs* fs,
 static int fat_open_cluster(const struct fat_fs* fs, uint8_t* buffer,
                             size_t buffer_size, uint32_t cluster)
 {
-    uint32_t lba_addr;
-    puts("Opened cluster lets goooo");
-
-    lba_addr = fs->lba_start + fs->first_data_sector
+    uint32_t lba_addr = fs->lba_start + fs->first_data_sector
         + ((cluster - 2) * fs->bs->sectors_per_cluster);
 
     // Holds entire cluster
     uint8_t* cluster_data = kmalloc(fs->cluster_size);
-    // printf("cluster: %d, lba_addr: %d\n", cluster, lba_addr);
     fs->device->rw_handler(fs->device, OP_READ, cluster_data, lba_addr,
                            fs->device->sec_size, fs->bs->sectors_per_cluster);
-    // for (size_t i = 0; i < fat_boot->sectors_per_cluster; i++) {
-    //     uint8_t* tmp = cluster_data + (i * fs->sector_size);
-    //     fat_open_sector(fs, tmp, fat->sector_size, lba_addr + i);
-    // }
     if (buffer_size <= fs->cluster_size) {
         memcpy(buffer, cluster_data, buffer_size);
     } else {
         memcpy(buffer, cluster_data, fs->cluster_size);
     }
     kfree(cluster_data);
-    puts("Finished opened cluster lets goooo");
     return 0;
 }
 

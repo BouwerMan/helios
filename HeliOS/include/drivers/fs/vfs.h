@@ -14,9 +14,14 @@ enum FILESYSTEMS {
     FAT12, // Not sure these are techincally supported
 };
 
-enum FILETYPE { FILETYPE_FILE, FILETYPE_DIR };
+enum FILETYPE {
+    FILETYPE_UNKNOWN,
+    FILETYPE_FILE,
+    FILETYPE_DIR,
+};
 
 enum DENTRY_FLAGS {
+    DENTRY_NEGATIVE = 0x01, // NEEDED?
     DENTRY_DIR = 0x08,
     DENTRY_ROOT = 0x10,
 };
@@ -46,63 +51,24 @@ enum VFS_PERMS {
     VFS_PERM_ALL = VFS_PERM_UALL | VFS_PERM_GALL | VFS_PERM_OALL
 };
 
-// TODO: Support longer file names, only limiting since we only support FAT16 no
-// LFN
-typedef struct directory_s {
-    uint8_t mount_id; // id of mount point
-    const char* path;
-    char file[13];          // Entire FAT 8.3 name
-    char filename[9];       // extended out so null chars fit
-    char file_extension[4]; // extended out so null chars fit
-} dir_t;
-
-typedef struct filesystem_s filesystem_t;
-
-struct mount {
-    bool present;
-    uint8_t id;
-    sATADevice* device;
-    sPartition* partition;
-    struct vfs_fs_type* filesystem;
+enum MOUNT_FLAGS {
+    MOUNT_PRESENT = 0x1,
 };
-typedef struct mount mount_t;
 
-// NOTE: This is not the same as linux inode because I am stupid and don't
-// understand it. I am just stealing the name.
-// TODO: I need to store sector information or some way for the fs to find the
-// file immediately.
-typedef struct inode_s {
-    int id;                // inode id in cache
-    mount_t* mount;        // Top level device information
-    char file[13];         // 8.3 Filename
-    dir_t* dir;            // File location and name
-    uint32_t init_sector;  // Initial sector of the filesystem
-    size_t f_size;         // File size
-    uint32_t init_cluster; // initial fat cluster, later this should be placed
-                           // in fat specific place
-    uint8_t loc_type;      // fat location type, either 0 -> ROOT or 1 -> DATA
-    void* fs_data;         // Data to fs specific information
-} inode_t;
-
-typedef struct vfs_file {
+struct vfs_file {
     void* file_ptr;
     unsigned char* read_ptr;
     size_t file_size;
-} FILE;
-
-// TODO: flesh out arguments
-typedef int (*f_read)(const inode_t* inode, char* buffer, size_t buffer_size);
-typedef void (*f_init)(sATADevice* device, uint32_t lba_start);
-
-struct filesystem_s {
-    uint8_t id;
-    uint8_t fs_type;
-    f_init fs_init;
-    f_read read_handler; // Reads inode
-    int (*find_inode)(inode_t* inode);
 };
 
-// Working on new vfs stuff:
+struct vfs_mount {
+    char* mount_point;         // Mount path, e.g. "/mnt/usb"
+    struct vfs_superblock* sb; // Associated superblock
+    sATADevice* device;        // Optional: back-reference to device
+    uint32_t lba_start;        // Optional: offset of the partition
+    int flags;                 // Optional: e.g., read-only
+    struct vfs_mount* next;    // Linked list of active mounts
+};
 
 // TODO: Add timestamp stuff
 struct vfs_inode {
@@ -112,7 +78,15 @@ struct vfs_inode {
     int ref_count;
     uint16_t permissions;
     uint8_t flags;
-    void* fs_data;
+    struct inode_ops* ops;
+    void* fs_data; // Filysystem specific, for FAT it stores fat_inode_info
+};
+
+struct inode_ops {
+    int (*open)(struct vfs_inode* inode, struct vfs_file* file);
+    int (*close)(struct vfs_inode* inode, struct vfs_file* file);
+    struct vfs_dentry* (*lookup)(struct vfs_inode* dir_inode,
+                                 struct vfs_dentry* child);
 };
 
 // TODO: Make helper function for creating new dentries???
@@ -120,7 +94,7 @@ struct vfs_dentry {
     char* name;
     struct vfs_inode* inode;
     struct vfs_dentry* parent; // Reference to parent's directory
-    void* fs_data;             // Filesystem specific data
+    void* fs_data; // Filesystem specific data, for FAT it stores fat_fs
     int ref_count;
     int flags;
 };
@@ -133,23 +107,29 @@ struct vfs_fs_type {
     struct vfs_fs_type* next;
 };
 
-typedef struct vfs_superblock {
+struct vfs_superblock {
     struct vfs_dentry* root_dentry;
     struct vfs_fs_type* fs_type;
     void* fs_data;
-    char* moint_point;
-} vfs_sb_t;
+    char* mount_point;
+};
 
+void vfs_init(size_t dhash_size);
 void register_filesystem(struct vfs_fs_type* fs);
-
-void vfs_init(uint8_t maximum_filesystems, uint8_t maximum_mounts,
-              size_t inode_cache_size);
-bool register_fs(uint8_t fs);
-struct vfs_file* vfs_open(dir_t* directory);
-void vfs_close(FILE* file);
-int mount(uint8_t id, sATADevice* device, sPartition* partition,
+int mount(const char* mount_point, sATADevice* device, sPartition* partition,
           uint8_t fs_type);
-struct vfs_dentry* vfs_alloc_dentry(const char* name);
-struct vfs_superblock* vfs_get_sb(int idx);
+
 int vfs_get_next_id();
 int vfs_get_id();
+void dentry_add(struct vfs_dentry* dentry);
+uint32_t dentry_hash(const void* key);
+bool dentry_compare(const void* key1, const void* key2);
+
+struct vfs_superblock* vfs_get_sb(int idx);
+
+struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name);
+struct vfs_dentry* vfs_resolve_path(const char* path);
+struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path);
+
+int vfs_open(const char* path, struct vfs_file* file);
+void vfs_close(struct vfs_file* file);

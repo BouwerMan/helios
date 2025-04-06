@@ -76,6 +76,7 @@ LINK_LIST=\
 $(LDFLAGS) \
 $(KERNEL_OBJS) \
 $(DRIVER_OBJS) \
+$(UTIL_OBJS) \
 $(LIBS) \
 #$(ARCHDIR)/crti.o \
 #$(ARCHDIR)/crtbegin.o \

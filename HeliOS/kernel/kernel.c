@@ -180,60 +180,39 @@ void kernel_main(void)
     list_devices();
     ctrl_init();
     puts("VFS Testing");
-    vfs_init(8, 8, 16);
+    vfs_init(64);
 
-    puts("Registering FAT16");
-    register_fs(FAT16);
-    puts("Registered FAT16\nMounting drive");
     sATADevice* fat_device = ctrl_get_device(3);
-    mount(0, fat_device, &fat_device->part_table[0], FAT16);
+    mount("/", fat_device, &fat_device->part_table[0], FAT16);
 
-#if 0
-    dir_t directory = {
-        .mount_id = 0,
-        .path = "",
-        .file_extension = "TXT",
-        .filename = "TEST2",
-    };
-    puts("Opening file");
-    FILE* data = vfs_open(&directory);
-    if (data) {
-        puts(data->read_ptr);
-        vfs_close(data);
-    }
-    // puts("Opening file again");
-    // FILE* data2 = vfs_open(&directory);
-    // if (data) {
-    //     // puts(data2->read_ptr);
-    //     vfs_close(data2);
-    // }
-
-#endif
-    puts("FAT_Dir testing");
+    puts("FAT and VFS testing");
     struct vfs_superblock* fat_sb = vfs_get_sb(0);
-    struct vfs_dentry* child = kmalloc(sizeof(struct vfs_dentry));
-    child->name = "dir";
-    child->ref_count = 1;
-    child->parent = fat_sb->root_dentry;
-    child->fs_data = fat_sb->fs_data;
-    child->flags = DENTRY_DIR;
-    child = fat_lookup(fat_sb->root_dentry->inode, child);
-    printf(
-        "Found inode? 0x%X, Inode name: %s, File size: %d, Init cluster: %d\n",
-        (void*)child, child->name, child->inode->f_size,
-        ((struct fat_inode_info*)child->inode->fs_data)->init_cluster);
 
-    struct vfs_dentry* sub = kmalloc(sizeof(struct vfs_dentry));
-    sub->name = "test2.txt";
-    sub->ref_count = 1;
-    sub->parent = child;
-    sub->fs_data = fat_sb->fs_data;
-    sub->flags = DENTRY_DIR;
-    sub = fat_lookup(child->inode, sub);
-    printf(
-        "Found inode? 0x%X, Inode name: %s, File size: %d, Init cluster: %d\n",
-        (void*)sub, sub->name, sub->inode->f_size,
-        ((struct fat_inode_info*)sub->inode->fs_data)->init_cluster);
+    struct vfs_dentry* dentry = vfs_resolve_path("/dir/test2.txt");
+    if (dentry->inode) {
+        printf("Found inode? 0x%X, Inode name: %s, File size: %d, Init "
+               "cluster: %d\n",
+               (void*)dentry, dentry->name, dentry->inode->f_size,
+               ((struct fat_inode_info*)dentry->inode->fs_data)->init_cluster);
+    } else {
+        puts("Could not find inode :/");
+    }
+    struct vfs_file f = { 0 };
+    int res2 = vfs_open("/dir/test2.txt", &f);
+    if (res2 < 0) {
+        puts("oh no");
+    } else {
+        printf("%s\n", f.read_ptr);
+    }
+    puts("open 2");
+    struct vfs_file f2 = { 0 };
+    res2 = vfs_open("/test2.txt", &f2);
+    if (res2 < 0) {
+        puts("oh no");
+    } else {
+        printf("f_size: %d\n", f2.file_size);
+        // printf("%s\n", f2.read_ptr);
+    }
 #endif
 
 #ifdef PRINTF_TESTING

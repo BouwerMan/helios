@@ -1,37 +1,44 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 
 // Hash table entry (slot may be filled or empty).
 struct ht_entry {
-    const char* key; // key is NULL if this slot is empty
+    const void* key; // key is NULL if this slot is empty
     void* value;
-} ht_entry;
+};
 
 // Hash table structure: create with ht_create, free with ht_destroy.
 struct ht {
-    struct ht_entry* entries;        // hash slots
-    size_t capacity;                 // size of _entries array
-    size_t length;                   // number of items in hash table
+    struct ht_entry* entries; // hash slots
+    size_t capacity;          // size of _entries array
+    size_t length;            // number of items in hash table
+    struct ht_ops* ops;
+};
+
+struct ht_ops {
+    uint32_t (*hash)(const void* key);
+    bool (*compare)(const void* key1, const void* key2);
     void (*destructor)(void* entry); // Destructor for entries, NULL if standard
                                      // free() is good enough
 };
 
 // Create hash table and return pointer to it, or NULL if out of memory.
-struct ht* ht_create(void (*destructor)(void* entry));
+struct ht* ht_create(size_t hash_size);
 
 // Free memory allocated for hash table, including allocated keys.
 void ht_destroy(struct ht* table);
 
 // Get item with given key (NUL-terminated) from hash table. Return
 // value (which was set with ht_set), or NULL if key not found.
-void* ht_get(struct ht* table, const char* key);
+void* ht_get(struct ht* table, const void* key);
 
 // Set item with given key (NUL-terminated) to value (which must not
 // be NULL). If not already present in table, key is copied to newly
 // allocated memory (keys are freed automatically when ht_destroy is
 // called). Return address of copied key, or NULL if out of memory.
-const char* ht_set(struct ht* table, const char* key, void* value);
+const char* ht_set(struct ht* table, const void* key, void* value);
 
 // Return number of items in hash table.
 size_t ht_length(struct ht* table);
@@ -53,3 +60,6 @@ struct ht_iter ht_iterator(struct ht* table);
 // and value to current item, and return true. If there are no more
 // items, return false. Don't call ht_set during iteration.
 bool ht_next(struct ht_iter* it);
+
+uint32_t hash_key(const void* key);
+bool compare_key(const void* key1, const void* key2);
