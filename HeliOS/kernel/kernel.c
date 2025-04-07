@@ -20,6 +20,7 @@
 // TODO: clean up inports, such as size_t coming from <stddef>;
 // TODO: Pretty sure PMM will perform weird things when reaching max memory
 // TODO: Project restructuring (drivers, kernel, lib, etc.)
+// TODO: Standardize return values
 #include "../arch/i386/vga.h"
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
@@ -37,6 +38,7 @@
 #include <kernel/timer.h>
 #include <kernel/tty.h>
 #include <stdio.h>
+#include <string.h>
 
 #ifdef KERNEL_DEBUG
 #define DEBUG_OUT(m) (puts(m))
@@ -82,10 +84,11 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     int i;
     uint32_t length = 0;
     for (i = 0; i < mbd->mmap_length; i += sizeof(multiboot_memory_map_t)) {
-        multiboot_memory_map_t* mmmt = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
+        multiboot_memory_map_t* mmmt
+            = (multiboot_memory_map_t*)(mbd->mmap_addr + i);
 
-        printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n", mmmt->addr_low, mmmt->len_low, mmmt->size,
-            mmmt->type);
+        printf("Start Addr: %x | Length: %x | Size: %x | Type: %d\n",
+               mmmt->addr_low, mmmt->len_low, mmmt->size, mmmt->type);
 
         length += mmmt->len_low;
         if (mmmt->type == MULTIBOOT_MEMORY_AVAILABLE) {
@@ -122,8 +125,8 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     uint32_t phys_alloc_start = (kernel_end + 0x1000) & 0xFFFFF000;
 #ifdef KERNEL_DEBUG
     printf("KERNEL START: 0x%X, KERNEL END: 0x%X\n", kernel_start, kernel_end);
-    printf("MEM LOW: 0x%X, MEM HIGH: 0x%X, PHYS START: 0x%X\n", mbd->mem_lower * 1024, mbd->mem_upper * 1024,
-        phys_alloc_start);
+    printf("MEM LOW: 0x%X, MEM HIGH: 0x%X, PHYS START: 0x%X\n",
+           mbd->mem_lower * 1024, mbd->mem_upper * 1024, phys_alloc_start);
 #endif
     init_memory(mbd->mem_upper * 1024, phys_alloc_start);
 
@@ -134,7 +137,7 @@ void kernel_early(multiboot_info_t* mbd, uint32_t magic)
     keyboard_init();
 }
 
-void kernel_main()
+void kernel_main(void)
 {
     printf("Welcome to %s. Version: %s\n", KERNEL_NAME, KERNEL_VERSION);
     printf("Detected CPU: ");
@@ -162,60 +165,54 @@ void kernel_main()
     kfree(test);
     int* test2 = (int*)kmalloc(sizeof(int));
     *test2 = 6435;
-    printf("\tkmalloc returned address: 0x%X, set value to: %d\n", test2, *test2);
+    printf("\tkmalloc returned address: 0x%X, set value to: %d\n", test2,
+           *test2);
     int* test3 = (int*)kmalloc(sizeof(int));
     *test3 = 2421;
-    printf("\tkmalloc returned address: 0x%X, set value to: %d\n", test3, *test3);
+    printf("\tkmalloc returned address: 0x%X, set value to: %d\n", test3,
+           *test3);
     kfree(test2);
     kfree(test3);
 #endif
 
+#define FS_TESTING
 #ifdef FS_TESTING
     list_devices();
     ctrl_init();
     puts("VFS Testing");
-    vfs_init(8, 8, 16);
+    vfs_init(64);
 
-    puts("Registering FAT16");
-    register_fs(FAT16);
-    puts("Registered FAT16\nMounting drive");
     sATADevice* fat_device = ctrl_get_device(3);
-    mount(0, fat_device, &fat_device->part_table[0], FAT16);
+    mount("/", fat_device, &fat_device->part_table[0], FAT16);
 
-    // puts("Time to initialize FAT");
-    // Device 3 is the FAT device, hardcoding for now
-    // init_fat(ctrl_get_device(3), 63);
-    // Here is the order for opening files:
-    // kernel requests vfs to open file at directory on drive X
-    //     Unsure if this is a good way to do this, maybe force the vfs to figure out drive
-    // vfs takes that information and sends it to the relevant filesystem driver
-    //     Driver needs to know: device to read from, filename, directory
+    puts("FAT and VFS testing");
+    struct vfs_superblock* fat_sb = vfs_get_sb(0);
 
-    dir_t directory = {
-        .mount_id = 0,
-        .path = "",
-        .file_extension = "TXT",
-        .filename = "TEST",
-    };
-    puts("Opening file");
-    FILE* data = vfs_open(&directory);
-    if (data) {
-        puts(data->read_ptr);
-        vfs_close(data);
+    struct vfs_dentry* dentry = vfs_resolve_path("/dir/test2.txt");
+    if (dentry->inode) {
+        printf("Found inode? 0x%X, Inode name: %s, File size: %d, Init "
+               "cluster: %d\n",
+               (void*)dentry, dentry->name, dentry->inode->f_size,
+               ((struct fat_inode_info*)dentry->inode->fs_data)->init_cluster);
+    } else {
+        puts("Could not find inode :/");
     }
-    puts("Opening file again");
-    FILE* data2 = vfs_open(&directory);
-    if (data) {
-        puts(data2->read_ptr);
-        vfs_close(data2);
+    struct vfs_file f = { 0 };
+    int res2 = vfs_open("/dir/test2.txt", &f);
+    if (res2 < 0) {
+        puts("oh no");
+    } else {
+        printf("%s\n", f.read_ptr);
     }
-// fat_close_file(data);
-// for (size_t i = 0; i < 4; i++) {
-//     sATADevice* dev = ctrl_get_device(i);
-//     if (dev->present) {
-//         init_fat(dev);
-//     }
-// }
+    puts("open 2");
+    struct vfs_file f2 = { 0 };
+    res2 = vfs_open("/test2.txt", &f2);
+    if (res2 < 0) {
+        puts("oh no");
+    } else {
+        printf("f_size: %d\n", f2.file_size);
+        // printf("%s\n", f2.read_ptr);
+    }
 #endif
 
 #ifdef PRINTF_TESTING
@@ -232,7 +229,11 @@ void kernel_main()
     printf("oct: %o\n", 4184);
 #endif // PRINTF_TESTING
 
-    // NOTE: I removed this for loop since that should reduce idle cpu usage (boot.asm calls hlt)
+    // asm volatile("1: jmp 1b");
+    puts("End breakpoint");
+
+    // NOTE: I removed this for loop since that should reduce idle cpu usage
+    // (boot.asm calls hlt)
     //
     // Stopping us from exiting kernel
     // for (;;)

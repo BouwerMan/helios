@@ -8,7 +8,7 @@
 // Testing
 #include <kernel/tty.h>
 
-#define BUF_SIZE 1024
+#define BUF_SIZE 16384
 
 static char buffer[BUF_SIZE] = { '\0' };
 static size_t pointer = 0;
@@ -60,7 +60,8 @@ int printf(const char* restrict format, ...)
 //       Add proper buffer flushing, the real printf only outputs when:
 //          \n is encountered
 //          an input needs to happen
-//          program exit (doesnt apply to kernel so we can just always write after function call)
+//          program exit (doesnt apply to kernel so we can just always write
+//          after function call)
 int vprintf(const char* restrict format, va_list args)
 {
     if (strlen(format) > BUF_SIZE) return EOVERFLOW;
@@ -95,8 +96,13 @@ int vprintf(const char* restrict format, va_list args)
         switch (*++format) {
         case 's': {
             const char* s = va_arg(args, const char*);
-            while (*s)
+            // TODO: Buffer overflow flushes or smthn similar
+            while (*s) {
+
                 buffer[pointer++] = *s++;
+                if (pointer >= BUF_SIZE) return pointer;
+            }
+
             break;
         }
         case 'c':

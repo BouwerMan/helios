@@ -21,7 +21,7 @@ export BOOTDIR=/boot
 export LIBDIR=$(EXEC_PREFIX)/lib
 export INCLUDEDIR=$(PREFIX)/include
 
-export CWARN=-Wall -Wextra -pedantic -std=gnu17
+export CWARN=-Wall -Wextra -pedantic -std=gnu23
 export CFLAGS=-O0 -g
 export CPPFLAGS=
 
@@ -54,7 +54,7 @@ iso: all
 	grub-mkrescue -o $(OSNAME).iso isodir
 
 qemu: iso
-	qemu-system-$(HOSTARCH) -cdrom $(OSNAME).iso -m 4096M -hdd fat:rw:./fat_dir -boot d
+	qemu-system-$(HOSTARCH) -cdrom $(OSNAME).iso -m 4096M -hdd ./fat.img -boot d -s
 
 bochs: iso
 	bochs -f bochs
