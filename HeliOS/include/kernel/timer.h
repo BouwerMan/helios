@@ -1,4 +1,5 @@
 #pragma once
+#include <kernel/interrupts.h>
 #include <stdint.h>
 
 void timer_phase(int hz);

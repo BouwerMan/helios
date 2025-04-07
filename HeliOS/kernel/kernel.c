@@ -190,10 +190,10 @@ void kernel_main(void)
 
     struct vfs_dentry* dentry = vfs_resolve_path("/dir/test2.txt");
     if (dentry->inode) {
-        printf("Found inode? 0x%X, Inode name: %s, File size: %d, Init "
-               "cluster: %d\n",
-               (void*)dentry, dentry->name, dentry->inode->f_size,
-               ((struct fat_inode_info*)dentry->inode->fs_data)->init_cluster);
+        dprintf("Found inode? 0x%X, Inode name: %s, File size: %d, Init "
+                "cluster: %d\n",
+                (void*)dentry, dentry->name, dentry->inode->f_size,
+                ((struct fat_inode_info*)dentry->inode->fs_data)->init_cluster);
     } else {
         puts("Could not find inode :/");
     }
@@ -213,6 +213,7 @@ void kernel_main(void)
         printf("f_size: %d\n", f2.file_size);
         // printf("%s\n", f2.read_ptr);
     }
+    dprintf("test %d\n", 14);
 #endif
 
 #ifdef PRINTF_TESTING

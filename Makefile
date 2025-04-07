@@ -22,7 +22,7 @@ export LIBDIR=$(EXEC_PREFIX)/lib
 export INCLUDEDIR=$(PREFIX)/include
 
 export CWARN=-Wall -Wextra -pedantic -std=gnu23
-export CFLAGS=-O0 -g
+export CFLAGS=-O2 -g
 export CPPFLAGS=
 
 # Configure the cross-compiler to use the desired system root.

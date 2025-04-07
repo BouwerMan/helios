@@ -1,7 +1,6 @@
 #include <kernel/asm.h>
-#include <kernel/interrupts.h>
 #include <kernel/sys.h>
-#include <stdio.h>
+#include <kernel/timer.h>
 
 const int PIT_CLK = 1193180;
 
