@@ -1,9 +1,9 @@
-export DEFAULT_HOST=i686-elf
+export DEFAULT_HOST=x86_64-elf
 export HOST?=$(DEFAULT_HOST)
-export HOSTARCH=i386
+export HOSTARCH=x86_64
 
 export PREFIX=$(HOME)/opt/cross/bin
-export TARGET=i386-elf
+export TARGET=x86_64-elf
 #export PATH=$(PREFIX)/bin:$(PATH)
 
 export OSNAME=HeliOS
@@ -22,7 +22,7 @@ export LIBDIR=$(EXEC_PREFIX)/lib
 export INCLUDEDIR=$(PREFIX)/include
 
 export CWARN=-Wall -Wextra -pedantic -std=gnu23
-export CFLAGS=-O2 -g
+export CFLAGS=-O2 -g -pipe -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
 export CPPFLAGS=
 
 # Configure the cross-compiler to use the desired system root.
@@ -47,11 +47,24 @@ headers:
 iso: all
 	mkdir -p isodir
 	mkdir -p isodir/boot
-	mkdir -p isodir/boot/grub
+	mkdir -p isodir/boot/limine
+	mkdir -p isodir/EFI/BOOT
 
 	cp sysroot/boot/$(OSNAME).kernel isodir/boot/$(OSNAME).kernel
-	cp grub.cfg isodir/boot/grub
-	grub-mkrescue -o $(OSNAME).iso isodir
+	cp -v limine.conf limine/limine-bios.sys limine/limine-bios-cd.bin \
+		  limine/limine-uefi-cd.bin isodir/boot/limine/
+	cp -v limine/BOOTX64.EFI isodir/EFI/BOOT/
+	cp -v limine/BOOTIA32.EFI isodir/EFI/BOOT/
+	
+	# Create the bootable ISO.
+	xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \
+			-no-emul-boot -boot-load-size 4 -boot-info-table -hfsplus \
+			-apm-block-size 2048 --efi-boot boot/limine/limine-uefi-cd.bin \
+			-efi-boot-part --efi-boot-image --protective-msdos-label \
+			isodir -o $(OSNAME).iso
+
+	# Install Limine stage 1 and 2 for legacy BIOS boot.
+	./limine/limine bios-install $(OSNAME).iso
 
 qemu: iso
 	qemu-system-$(HOSTARCH) -cdrom $(OSNAME).iso -m 4096M -hdd ./fat.img -boot d -s

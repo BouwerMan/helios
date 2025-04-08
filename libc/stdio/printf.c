@@ -1,3 +1,4 @@
+#include <kernel/screen.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -157,7 +158,7 @@ int sprintf(char* str, const char* __restrict format, ...)
 
 #if defined(__is_libk)
 // TODO: Make this call puts and output full string instead of each char
-static void print(const char* data) { tty_writestring(data); }
+static void print(const char* data) { screen_putstring(data); }
 
 #else
 // TODO: Proper libc print

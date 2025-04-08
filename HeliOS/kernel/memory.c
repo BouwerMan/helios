@@ -1,3 +1,4 @@
+#if 0
 #include <kernel/interrupts.h>
 #include <kernel/memory.h>
 #include <kernel/multiboot.h>
@@ -18,7 +19,7 @@ extern void write_cr3(uint32_t pointer);
 #define PAGE_FLAG_PRESENT (1 << 0)
 #define PAGE_FLAG_WRITE   (1 << 1)
 // How many entries wide the frame bitset is
-#define BITSET_WIDTH 32
+#define BITSET_WIDTH      32
 
 #define INDEX_FROM_BIT(a)                 (a / BITSET_WIDTH)
 #define OFFSET_FROM_BIT(a)                (a % BITSET_WIDTH)
@@ -61,17 +62,15 @@ void pmm_init(uint32_t mem_high)
     // Shrink number of frames
     nframes = nframes - (sizeof(uint32_t) * nframes) % PAGE_SIZE;
     // Allocate the bitmap
-    frame_bitset
-        = (uint32_t*)bootstrap_malloc_real(sizeof(uint32_t) * nframes, 1, NULL);
+    frame_bitset = (uint32_t*)bootstrap_malloc_real(sizeof(uint32_t) * nframes, 1, NULL);
     // printf("MIN: 0x%X, MAX: 0x%X\n", page_frame_min, page_frame_max);
     // First set all to used
     memset(frame_bitset, 0xFF, sizeof(uint32_t) * nframes);
     // NOTE: for now i will just select placement_ptr as start for phys, unsure
     // if there is a better way. Now we set unused (past placement_ptr)
     // TODO: make this a memset?
-    for (size_t i
-         = CEIL_DIV((placement_ptr - KERNEL_OFFSET) / PAGE_SIZE, BITSET_WIDTH);
-         i < INDEX_FROM_BIT(nframes); i++) {
+    for (size_t i = CEIL_DIV((placement_ptr - KERNEL_OFFSET) / PAGE_SIZE, BITSET_WIDTH); i < INDEX_FROM_BIT(nframes);
+         i++) {
         frame_bitset[i] = 0;
     }
 }
@@ -88,8 +87,7 @@ void init_memory(uint32_t mem_high, uint32_t phys_alloc_start)
     bootstrap_malloc_startat(address + KERNEL_OFFSET);
 
     uintptr_t pd_phys;
-    kernel_page_dir
-        = (page_dir_t*)bootstrap_malloc_real(sizeof(page_dir_t), 1, &pd_phys);
+    kernel_page_dir = (page_dir_t*)bootstrap_malloc_real(sizeof(page_dir_t), 1, &pd_phys);
     memset((unsigned char*)kernel_page_dir, 0, sizeof(page_dir_t));
     kernel_page_dir->physical_addr = pd_phys;
     uintptr_t map_addr = 0x0;
@@ -97,8 +95,7 @@ void init_memory(uint32_t mem_high, uint32_t phys_alloc_start)
     // point to beginning of directory. Also map kernel space.
     for (size_t i = 0; i < 1023; i++) {
         uintptr_t table_physaddr;
-        kernel_page_dir->tables[i] = (page_table_t*)bootstrap_malloc_real(
-            sizeof(page_table_t), 1, &table_physaddr);
+        kernel_page_dir->tables[i] = (page_table_t*)bootstrap_malloc_real(sizeof(page_table_t), 1, &table_physaddr);
         kernel_page_dir->physical_tables[i] = table_physaddr | 0x2;
         // Map kernel space (above 0xC0000000)
         if (i >= 768) {
@@ -110,8 +107,7 @@ void init_memory(uint32_t mem_high, uint32_t phys_alloc_start)
         }
     }
     // Map last entry to beginning of directory
-    kernel_page_dir->physical_tables[1023]
-        = kernel_page_dir->physical_addr | 0x3;
+    kernel_page_dir->physical_tables[1023] = kernel_page_dir->physical_addr | 0x3;
 
     write_cr3((uint32_t)kernel_page_dir->physical_addr);
 
@@ -144,8 +140,7 @@ uintptr_t get_physaddr(uintptr_t virtualaddr)
     unsigned long* pt = ((unsigned long*)0xFFC00000) + (0x400 * pdindex);
     // TODO: Here you need to check whether the PT entry is present.
 
-    return (uintptr_t)((pt[ptindex] & ~0xFFF)
-                       + ((unsigned long)virtualaddr & 0xFFF));
+    return (uintptr_t)((pt[ptindex] & ~0xFFF) + ((unsigned long)virtualaddr & 0xFFF));
 }
 
 // TODO: Maxes out at 32 frames.
@@ -209,9 +204,9 @@ static void clear_frame(uintptr_t frame_addr)
 
 uintptr_t kalloc_frames(size_t num_frames)
 {
-    if (num_frames == 0) return NULL;
+    if (num_frames == 0) return (uintptr_t)NULL;
     uint32_t first_frame = find_frames(num_frames);
-    if (first_frame == 0) return NULL;
+    if (first_frame == 0) return (uintptr_t)NULL;
     for (size_t i = first_frame; i < num_frames + first_frame; i++) {
         // printf("allocating frame 0x%X\n", (i * PAGE_SIZE));
         set_frame(i * PAGE_SIZE);
@@ -242,8 +237,7 @@ void page_fault(struct irq_regs* r)
     int reserved = r->err_code & 0x8;
     int id = r->err_code & 0x10;
 
-    printf("PAGE FAULT! p:%d,rw:%d,user:%d,res:%d,id:%d) at 0x%x\n", present,
-           rw, user, reserved, id, fault_addr);
+    printf("PAGE FAULT! p:%d,rw:%d,user:%d,res:%d,id:%d) at 0x%x\n", present, rw, user, reserved, id, fault_addr);
     printf("Caused by 0x%X\n", r->eip);
     panic("Page Fault");
 }
@@ -318,3 +312,4 @@ uint8_t test_pmm()
 
     return err_code;
 }
+#endif

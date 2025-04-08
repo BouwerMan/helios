@@ -40,29 +40,30 @@ LIBS:=$(LIBS) $(KERNEL_ARCH_LIBS)
 KERNEL_OBJS=\
 $(KERNEL_ARCH_OBJS) \
 $(BUILDDIR)/$(KERNELDIR)/kernel.o \
+$(BUILDDIR)/$(KERNELDIR)/screen.o \
 $(BUILDDIR)/$(KERNELDIR)/gdt.o \
-$(BUILDDIR)/$(KERNELDIR)/idt.o \
-$(BUILDDIR)/$(KERNELDIR)/isr.o \
-$(BUILDDIR)/$(KERNELDIR)/irq.o \
-$(BUILDDIR)/$(KERNELDIR)/timer.o \
-$(BUILDDIR)/$(KERNELDIR)/keyboard.o \
-$(BUILDDIR)/$(KERNELDIR)/panic.o \
-$(BUILDDIR)/$(KERNELDIR)/cpu.o \
-$(BUILDDIR)/$(KERNELDIR)/memory.o \
-$(BUILDDIR)/$(KERNELDIR)/liballoc.o \
-$(BUILDDIR)/$(KERNELDIR)/liballoc_hooks.o \
+# $(BUILDDIR)/$(KERNELDIR)/idt.o \
+# $(BUILDDIR)/$(KERNELDIR)/isr.o \
+# $(BUILDDIR)/$(KERNELDIR)/irq.o \
+# $(BUILDDIR)/$(KERNELDIR)/timer.o \
+# $(BUILDDIR)/$(KERNELDIR)/keyboard.o \
+# $(BUILDDIR)/$(KERNELDIR)/panic.o \
+# $(BUILDDIR)/$(KERNELDIR)/cpu.o \
+# $(BUILDDIR)/$(KERNELDIR)/memory.o \
+# $(BUILDDIR)/$(KERNELDIR)/liballoc.o \
+# $(BUILDDIR)/$(KERNELDIR)/liballoc_hooks.o \
 
 DRIVER_OBJS=\
-$(BUILDDIR)/$(DRIVERDIR)/pci/pci.o \
-$(BUILDDIR)/$(DRIVERDIR)/ata/controller.o \
-$(BUILDDIR)/$(DRIVERDIR)/ata/device.o \
-$(BUILDDIR)/$(DRIVERDIR)/ata/ata.o \
-$(BUILDDIR)/$(DRIVERDIR)/ata/partition.o \
-$(BUILDDIR)/$(DRIVERDIR)/fs/fat.o \
-$(BUILDDIR)/$(DRIVERDIR)/fs/vfs.o \
+# $(BUILDDIR)/$(DRIVERDIR)/pci/pci.o \
+# $(BUILDDIR)/$(DRIVERDIR)/ata/controller.o \
+# $(BUILDDIR)/$(DRIVERDIR)/ata/device.o \
+# $(BUILDDIR)/$(DRIVERDIR)/ata/ata.o \
+# $(BUILDDIR)/$(DRIVERDIR)/ata/partition.o \
+# $(BUILDDIR)/$(DRIVERDIR)/fs/fat.o \
+# $(BUILDDIR)/$(DRIVERDIR)/fs/vfs.o \
 
 UTIL_OBJS=\
-$(BUILDDIR)/$(UTILDIR)/ht.o \
+# $(BUILDDIR)/$(UTILDIR)/ht.o \
 
 OBJS=\
 $(KERNEL_OBJS) \
@@ -79,6 +80,7 @@ $(KERNEL_OBJS) \
 $(DRIVER_OBJS) \
 $(UTIL_OBJS) \
 $(LIBS) \
+$(ARCHDIR)/font.o \
 #$(ARCHDIR)/crti.o \
 #$(ARCHDIR)/crtbegin.o \
 #$(ARCHDIR)/crtend.o \
@@ -92,7 +94,7 @@ all: $(OSNAME).kernel
 
 $(OSNAME).kernel: $(OBJS) $(ARCHDIR)/linker.ld
 	$(CC) -T $(ARCHDIR)/linker.ld -o $(BUILDDIR)/$@ $(CFLAGS) $(LINK_LIST)
-	grub-file --is-x86-multiboot $(BUILDDIR)/$(OSNAME).kernel
+	# grub-file --is-x86-multiboot $(BUILDDIR)/$(OSNAME).kernel
 
 $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 	OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
@@ -107,7 +109,7 @@ $(BUILDDIR)/%.o: %.s
 
 $(BUILDDIR)/%.o: %.asm
 	@mkdir -p $(@D)
-	nasm -felf32 $< -o $@
+	nasm -felf64 $< -o $@
 
 clean:
 	rm -rvf $(BUILDDIR)

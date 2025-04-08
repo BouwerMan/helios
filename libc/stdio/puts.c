@@ -5,13 +5,11 @@
 
 int puts(const char* string)
 {
-    tty_writestring(string);
-    tty_putchar('\n');
+    screen_putstring(string);
+    screen_putchar('\n');
     return 0;
 }
 #else
 // TODO: Proper libc puts
-int puts(const char* string)
-{
-}
+int puts(const char* string) { }
 #endif

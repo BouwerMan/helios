@@ -7,6 +7,8 @@
 size_t strlen(const char*);
 void* memset(void*, int, size_t);
 void* memcpy(void* dest, const void* src, size_t count);
+void* memove(void* dest, const void* src, size_t n);
+int memcmp(const void* s1, const void* s2, size_t n);
 int strcmp(const char* str1, const char* str2);
 int strncmp(const char* str1, const char* str2, size_t count);
 char* strtok(char* str, const char* delimiters);

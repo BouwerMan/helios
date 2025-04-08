@@ -1,5 +1,6 @@
 #pragma once
 
+#include <kernel/screen.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -13,8 +14,7 @@
 
 static void print(const char* data);
 
-__attribute__((format(__printf__, 1, 2))) int
-printf(const char* __restrict format, ...);
+__attribute__((format(__printf__, 1, 2))) int printf(const char* __restrict format, ...);
 
 int vprintf(const char* __restrict, va_list);
 int sprintf(char* str, const char* __restrict format, ...);
