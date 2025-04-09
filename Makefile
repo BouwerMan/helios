@@ -21,8 +21,8 @@ export BOOTDIR=/boot
 export LIBDIR=$(EXEC_PREFIX)/lib
 export INCLUDEDIR=$(PREFIX)/include
 
-export CWARN=-Wall -Wextra -pedantic -std=gnu23
-export CFLAGS=-O2 -g -pipe -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2
+export CWARN=-Wall -Wextra -pedantic
+export CFLAGS=-O2 -g -pipe -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse3 -D__KDEBUG__ -std=gnu23
 export CPPFLAGS=
 
 # Configure the cross-compiler to use the desired system root.
@@ -67,7 +67,10 @@ iso: all
 	./limine/limine bios-install $(OSNAME).iso
 
 qemu: iso
-	qemu-system-$(HOSTARCH) -cdrom $(OSNAME).iso -m 4096M -hdd ./fat.img -boot d -s
+	qemu-system-$(HOSTARCH) -cdrom $(OSNAME).iso \
+		-m 4096M \
+		-hdd ./fat.img -boot d -s \
+		-serial stdio \
 
 bochs: iso
 	bochs -f bochs

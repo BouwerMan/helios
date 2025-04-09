@@ -28,11 +28,9 @@
 
 #define BOCHS_BREAKPOINT (asm volatile("xchgw %bx, %bx"))
 
-#define dprintf(fmt, ...)                                                      \
-    do {                                                                       \
-        if (DEBUG)                                                             \
-            printf("%s:%d:%s(): " fmt, __FILE__, __LINE__, __func__,           \
-                   __VA_ARGS__);                                               \
+#define dprintf(fmt, ...)                                                                                              \
+    do {                                                                                                               \
+        if (DEBUG) printf("%s:%d:%s(): " fmt, __FILE__, __LINE__, __func__, __VA_ARGS__);                              \
     } while (0)
 
 void panic(char* message);

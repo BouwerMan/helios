@@ -1,12 +1,18 @@
 #include <stdio.h>
 
 #if defined(__is_libk)
-#include <kernel/tty.h>
+#ifdef __KDEBUG__
+#include <drivers/serial.h>
+#endif
 
 int puts(const char* string)
 {
     screen_putstring(string);
     screen_putchar('\n');
+#ifdef __KDEBUG__
+    write_serial_s(string);
+    write_serial('\n');
+#endif
     return 0;
 }
 #else

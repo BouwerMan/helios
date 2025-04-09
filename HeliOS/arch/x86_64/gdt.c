@@ -1,12 +1,12 @@
-#include <kernel/gdt.h>
+#include "gdt.h"
 
 /* Our GDT, with 3 entries, and finally our special GDT pointer */
 struct gdt_entry gdt[3];
 struct gdt_ptr gp;
 
-/* This will be a function in start.asm. We use this to properly
+/* This will be a function in gdt.asm. We use this to properly
  *  reload the new segment registers */
-extern void gdt_flush();
+extern void gdt_flush(struct gdt_ptr* gp);
 
 /* Setup a descriptor in the Global Descriptor Table */
 void gdt_set_gate(uint8_t index, uint64_t base, uint32_t limit, uint8_t access, uint8_t gran)
@@ -37,22 +37,12 @@ void gdt_init()
     gp.offset = gdt;
 
     /* Our NULL descriptor */
-    gdt_set_gate(0, 0, 0, 0, 0);
-
-    /* The second entry is our Code Segment. The base address
-     *  is 0, the limit is 4GBytes, it uses 4KByte granularity,
-     *  uses 32-bit opcodes, and is a Code Segment descriptor.
-     *  Please check the table above in the tutorial in order
-     *  to see exactly what each value means */
-    gdt_set_gate(1, 0, 0xFFFFF, 0x9A, 0xCF);
-
-    /* The third entry is our Data Segment. It's EXACTLY the
-     *  same as our code segment, but the descriptor type in
-     *  this entry's access byte says it's a Data Segment */
-    gdt_set_gate(2, 0, 0xFFFFF, 0x92, 0xCF);
+    gdt_set_gate(0, 0, 0, 0, 0);             // NULL segment
+    gdt_set_gate(1, 0, 0xFFFFF, 0x9A, 0xA0); // Kernel code segment
+    gdt_set_gate(2, 0, 0xFFFFF, 0x92, 0xA0); // Kernel data segment
 
     /* Flush out the old GDT and install the new changes! */
-    gdt_flush();
+    gdt_flush(&gp);
 
     // TODO: Add logging to some kprintf type thing.
 }

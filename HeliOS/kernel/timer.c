@@ -1,6 +1,7 @@
 #include <kernel/asm.h>
 #include <kernel/sys.h>
 #include <kernel/timer.h>
+#include <stdio.h>
 
 const int PIT_CLK = 1193180;
 
@@ -8,16 +9,18 @@ const int PIT_CLK = 1193180;
  *  has been running for */
 unsigned int ticks = 0;
 unsigned long ticker = 0;
-uint32_t countdown = 0;
+uint64_t countdown = 0;
 static uint32_t phase = 18;
 
 void timer_phase(int hz)
 {
     phase = hz;
-    int divisor = PIT_CLK / hz;        /* Calculate our divisor */
-    outb(0x43, 0x36);                  /* Set our command byte 0x36 */
-    outb(0x40, divisor & 0xFF);        /* Set low byte of divisor */
-    outb(0x40, (divisor >> 8) & 0xFF); /* Set high byte of divisor */
+    int divisor = PIT_CLK / hz; /* Calculate our divisor */
+    uint8_t low = (uint8_t)(divisor & 0xFF);
+    uint8_t high = (uint8_t)((divisor >> 8) & 0xFF);
+    outb(0x43, 0x36); /* Set our command byte 0x36 */
+    outb(0x40, low);  /* Set low byte of divisor */
+    outb(0x40, high); /* Set high byte of divisor */
 }
 
 // NOTE: I have changed the timer phase so now it fires every ~1ms
@@ -27,7 +30,7 @@ void timer_phase(int hz)
  *  timer fires. By default, the timer fires 18.222 times
  *  per second. Why 18.222Hz? Some engineer at IBM must've
  *  been smoking something funky */
-void timer_handler(struct irq_regs* r)
+void timer_handler(struct registers* r)
 {
     /* Increment our 'tick count' */
     ticks++;
@@ -37,7 +40,6 @@ void timer_handler(struct irq_regs* r)
      *  display a message on the screen */
     if (ticks % phase == 0) {
         ticker++;
-        // puts("One second has passed");
     }
 }
 
@@ -61,7 +63,8 @@ void sleep(uint32_t millis)
  *  into IRQ0 */
 void timer_init()
 {
+    puts("Initializing timer to 1000Hz");
     /* Installs 'timer_handler' to IRQ0 */
-    irq_install_handler(0, timer_handler);
+    install_isr_handler(IRQ0, timer_handler);
     timer_phase(1000);
 }

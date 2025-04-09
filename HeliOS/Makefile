@@ -1,4 +1,4 @@
-CFLAGS?=-O0 -g -std=gnu17
+CFLAGS?=-O0 -g -std=gnu23
 CPPFLAGS?=
 LDFLAGS?=
 LIBS?=
@@ -41,11 +41,10 @@ KERNEL_OBJS=\
 $(KERNEL_ARCH_OBJS) \
 $(BUILDDIR)/$(KERNELDIR)/kernel.o \
 $(BUILDDIR)/$(KERNELDIR)/screen.o \
-$(BUILDDIR)/$(KERNELDIR)/gdt.o \
+$(BUILDDIR)/$(KERNELDIR)/timer.o \
 # $(BUILDDIR)/$(KERNELDIR)/idt.o \
 # $(BUILDDIR)/$(KERNELDIR)/isr.o \
 # $(BUILDDIR)/$(KERNELDIR)/irq.o \
-# $(BUILDDIR)/$(KERNELDIR)/timer.o \
 # $(BUILDDIR)/$(KERNELDIR)/keyboard.o \
 # $(BUILDDIR)/$(KERNELDIR)/panic.o \
 # $(BUILDDIR)/$(KERNELDIR)/cpu.o \
@@ -54,6 +53,7 @@ $(BUILDDIR)/$(KERNELDIR)/gdt.o \
 # $(BUILDDIR)/$(KERNELDIR)/liballoc_hooks.o \
 
 DRIVER_OBJS=\
+$(BUILDDIR)/$(DRIVERDIR)/serial.o \
 # $(BUILDDIR)/$(DRIVERDIR)/pci/pci.o \
 # $(BUILDDIR)/$(DRIVERDIR)/ata/controller.o \
 # $(BUILDDIR)/$(DRIVERDIR)/ata/device.o \
@@ -109,7 +109,7 @@ $(BUILDDIR)/%.o: %.s
 
 $(BUILDDIR)/%.o: %.asm
 	@mkdir -p $(@D)
-	nasm -felf64 $< -o $@
+	nasm -felf64 -g -F dwarf $< -o $@
 
 clean:
 	rm -rvf $(BUILDDIR)

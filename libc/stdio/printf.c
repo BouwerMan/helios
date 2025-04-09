@@ -6,19 +6,20 @@
 #include <stdio.h>
 #include <string.h>
 
-// Testing
-#include <kernel/tty.h>
+#ifdef __KDEBUG__
+#include <drivers/serial.h>
+#endif
 
 #define BUF_SIZE 16384
 
 static char buffer[BUF_SIZE] = { '\0' };
 static size_t pointer = 0;
 
-static void parse_hex(unsigned int value, bool cap)
+static void parse_hex(uint64_t value, bool cap)
 {
     const char* fmt = cap ? "0123456789ABCDEF" : "0123456789abcdef";
     bool zero = true; // Stores if all digits so far have been zero
-    for (int i = 7; i >= 0; i--) {
+    for (int i = 15; i >= 0; i--) {
         char c = fmt[(value >> (i * 4)) & 0xF];
         // if we have only seen zeros, we just skip them
         if (zero && c == '0') continue;
@@ -110,12 +111,12 @@ int vprintf(const char* restrict format, va_list args)
             buffer[pointer++] = (char)va_arg(args, int); // Char promotes to int
             break;
         case 'x': {
-            unsigned int value = va_arg(args, unsigned int);
+            unsigned int value = va_arg(args, unsigned long long);
             parse_hex(value, false);
             break;
         }
         case 'X': {
-            unsigned int value = va_arg(args, unsigned int);
+            unsigned int value = va_arg(args, unsigned long long);
             parse_hex(value, true);
             break;
         }
@@ -151,14 +152,20 @@ int sprintf(char* str, const char* __restrict format, ...)
     va_list args;
     va_start(args, format);
     int result = vprintf(format, args);
-    str = buffer;
+    strcpy(str, buffer);
     va_end(args);
     return result;
 }
 
 #if defined(__is_libk)
 // TODO: Make this call puts and output full string instead of each char
-static void print(const char* data) { screen_putstring(data); }
+static void print(const char* data)
+{
+    screen_putstring(data);
+#ifdef __KDEBUG__
+    write_serial_s(data);
+#endif
+}
 
 #else
 // TODO: Proper libc print

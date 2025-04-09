@@ -1,6 +1,15 @@
 #pragma once
 #include <limine.h>
+#include <stddef.h>
 #include <stdint.h>
+
+enum COLORS {
+    COLOR_WHITE = 0x00FFFFFF,
+    COLOR_BLACK = 0x00000000,
+    COLOR_RED = 0x00FF0000,
+    COLOR_GREEN = 0x0000FF00,
+    COLOR_BLUE = 0x000000FF,
+};
 
 #define PSF1_FONT_MAGIC 0x0436
 
@@ -25,7 +34,18 @@ typedef struct {
 
 #define PIXEL uint32_t /* pixel pointer */
 
+struct screen_info {
+    size_t cx;    // Cursor position x
+    size_t cy;    // Cursor position y
+    uint32_t fgc; // foregound color
+    uint32_t bgc; // background color
+    int scanline; // Number of bytes in each line
+    struct limine_framebuffer* fb;
+    char* fb_buffer;
+    PSF_font* font; // Font info
+};
+
 void screen_init(struct limine_framebuffer* fb, uint32_t fg_color, uint32_t bg_color);
+void set_color(uint32_t fg, uint32_t bg);
 void screen_putstring(const char* s);
 void screen_putchar(char c);
-static void screen_putchar_at(unsigned short int c, int cx, int cy, uint32_t fg, uint32_t bg);

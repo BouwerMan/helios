@@ -21,17 +21,15 @@
 // TODO: Pretty sure PMM will perform weird things when reaching max memory
 // TODO: Project restructuring (drivers, kernel, lib, etc.)
 // TODO: Standardize return values
+#include "../arch/x86_64/gdt.h"
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
 #include <drivers/fs/fat.h>
 #include <drivers/fs/vfs.h>
 #include <drivers/pci/pci.h>
+#include <drivers/serial.h>
 #include <kernel/cpu.h>
-#include <kernel/gdt.h>
-#include <kernel/interrupts.h>
-#include <kernel/keyboard.h>
 #include <kernel/liballoc.h>
-#include <kernel/memory.h>
 #include <kernel/multiboot.h>
 #include <kernel/screen.h>
 #include <kernel/sys.h>
@@ -39,6 +37,7 @@
 #include <kernel/tty.h>
 #include <limine.h>
 #include <stdio.h>
+#include <string.h>
 
 // Set the base revision to 3, this is recommended as this is the latest
 // base revision described by the Limine boot protocol specification.
@@ -100,12 +99,24 @@ void kernel_main(void)
     //     fb_ptr[i * (framebuffer->pitch / 4) + i] = 0xffffff;
     // }
 
-    screen_init(framebuffer, 0xFFFFFF, 0x000000);
-
+    screen_init(framebuffer, COLOR_WHITE, COLOR_BLACK);
+    init_serial();
+    write_serial_s("\n\nInitialized serial output, expect a lot of debug messages :)\n\n");
     printf("Welcome to %s. Version: %s\n", KERNEL_NAME, KERNEL_VERSION);
 
+    puts("Initializing GDT");
     gdt_init();
+    puts("Initialized GDT, surely it won't break :)");
+
+    puts("Initializing IDT");
+    idt_init();
+    puts("Initializing Timer");
+    timer_init();
+
+    sleep(10000);
+    puts("10 seconds or so passed");
 
     // We're done, just hang...
+    puts("entering infinite loop");
     hcf();
 }
