@@ -8,3 +8,4 @@ sysroot/
 *.iso
 mnt/
 limine/
+*.o

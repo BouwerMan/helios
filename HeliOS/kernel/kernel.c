@@ -22,19 +22,10 @@
 // TODO: Project restructuring (drivers, kernel, lib, etc.)
 // TODO: Standardize return values
 #include "../arch/x86_64/gdt.h"
-#include <drivers/ata/controller.h>
-#include <drivers/ata/device.h>
-#include <drivers/fs/fat.h>
-#include <drivers/fs/vfs.h>
-#include <drivers/pci/pci.h>
 #include <drivers/serial.h>
-#include <kernel/cpu.h>
-#include <kernel/liballoc.h>
-#include <kernel/multiboot.h>
 #include <kernel/screen.h>
 #include <kernel/sys.h>
 #include <kernel/timer.h>
-#include <kernel/tty.h>
 #include <limine.h>
 #include <stdio.h>
 #include <string.h>
@@ -101,7 +92,7 @@ void kernel_main(void)
 
     screen_init(framebuffer, COLOR_WHITE, COLOR_BLACK);
     init_serial();
-    write_serial_s("\n\nInitialized serial output, expect a lot of debug messages :)\n\n");
+    write_serial_string("\n\nInitialized serial output, expect a lot of debug messages :)\n\n");
     printf("Welcome to %s. Version: %s\n", KERNEL_NAME, KERNEL_VERSION);
 
     puts("Initializing GDT");

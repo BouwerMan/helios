@@ -35,12 +35,21 @@ void screen_init(struct limine_framebuffer* fb, uint32_t fg_color, uint32_t bg_c
     sc.font = (PSF_font*)&_binary_font_psf_start;
 }
 
+/**
+ * @brief Sets the foreground and background colors for text rendering.
+ * @param fg The foreground color (e.g., 0xFFFFFF for white).
+ * @param bg The background color (e.g., 0x000000 for black).
+ */
 void set_color(uint32_t fg, uint32_t bg)
 {
     sc.fgc = fg;
     sc.bgc = bg;
 }
 
+/**
+ * @brief Writes a null-terminated string to the screen.
+ * @param s The null-terminated string to write to the screen.
+ */
 void screen_putstring(const char* s)
 {
     while (*s) {
@@ -49,6 +58,18 @@ void screen_putstring(const char* s)
     }
 }
 
+/**
+ * @brief Writes a character to the screen at the current cursor position.
+ *
+ * This function handles special characters such as newline ('\n') and backspace ('\b').
+ * For regular characters, it renders them at the current cursor position and advances
+ * the cursor. If the cursor reaches the end of a line or the bottom of the screen,
+ * it wraps to the next line or scrolls the screen, respectively.
+ *
+ * @param c The character to write to the screen.
+ *
+ * @TODO: Need to implement a couple more special chars like \t
+ */
 void screen_putchar(char c)
 {
     switch (c) {
@@ -66,7 +87,6 @@ void screen_putchar(char c)
         sc.cx = 0;
         sc.cy++;
     }
-    // TODO: Scrolling
     if (sc.cy >= sc.fb->height / sc.font->height) {
         scroll();
         sc.cy = sc.cy - 2;
@@ -103,13 +123,20 @@ static void scroll()
     memset(last_row, sc.bgc, copy_size);
 }
 
-static void screen_putchar_at(
-    /* note that this is int, not char as it's a unicode character */
-    unsigned short int c,
-    /* cursor position on screen, in characters not in pixels */
-    int cx, int cy,
-    /* foreground and background colors, say 0xFFFFFF and 0x000000 */
-    uint32_t fg, uint32_t bg)
+/**
+ * @brief Draws a character at a specific position on the screen with specified colors.
+ *
+ * This function renders a Unicode character at the given cursor position
+ * on the screen using the provided foreground and background colors. It
+ * utilizes a PSF font to determine the glyph representation of the character.
+ *
+ * @param c  The Unicode character to display.
+ * @param cx The x-coordinate of the cursor position (in characters, not pixels).
+ * @param cy The y-coordinate of the cursor position (in characters, not pixels).
+ * @param fg The foreground color (e.g., 0xFFFFFF for white).
+ * @param bg The background color (e.g., 0x000000 for black).
+ */
+static void screen_putchar_at(unsigned short int c, int cx, int cy, uint32_t fg, uint32_t bg)
 {
     /* cast the address to PSF header struct */
     PSF_font* font = (PSF_font*)&_binary_font_psf_start;

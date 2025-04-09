@@ -8,7 +8,19 @@ struct gdt_ptr gp;
  *  reload the new segment registers */
 extern void gdt_flush(struct gdt_ptr* gp);
 
-/* Setup a descriptor in the Global Descriptor Table */
+/**
+ * @brief Sets up a descriptor in the Global Descriptor Table (GDT).
+ *
+ * This function configures a GDT entry with the specified base address, limit,
+ * access flags, and granularity. The GDT is used by the CPU to define memory
+ * segments and their properties.
+ *
+ * @param index The index of the GDT entry to configure.
+ * @param base The base address of the memory segment.
+ * @param limit The limit of the memory segment (size - 1).
+ * @param access The access flags that define the segment's type and permissions.
+ * @param gran The granularity and size flags for the segment.
+ */
 void gdt_set_gate(uint8_t index, uint64_t base, uint32_t limit, uint8_t access, uint8_t gran)
 {
     /* Setup the descriptor base address */
@@ -25,11 +37,17 @@ void gdt_set_gate(uint8_t index, uint64_t base, uint32_t limit, uint8_t access, 
     gdt[index].access = access;
 }
 
-/* Should be called by main. This will setup the special GDT
- *  pointer, set up the first 3 entries in our GDT, and then
- *  finally call gdt_flush() in our assembler file in order
- *  to tell the processor where the new GDT is and update the
- *  new segment registers */
+/**
+ * @brief Initializes the Global Descriptor Table (GDT).
+ *
+ * This function sets up the GDT pointer and defines the first three entries
+ * in the GDT: a NULL descriptor, a kernel code segment, and a kernel data segment.
+ * After setting up the entries, it flushes the old GDT and loads the new one
+ * using the `gdt_flush` function.
+ *
+ * @note This function should be called during system initialization to ensure
+ *       proper memory segmentation for the kernel.
+ */
 void gdt_init()
 {
     /* Setup the GDT pointer and limit */
@@ -43,6 +61,4 @@ void gdt_init()
 
     /* Flush out the old GDT and install the new changes! */
     gdt_flush(&gp);
-
-    // TODO: Add logging to some kprintf type thing.
 }

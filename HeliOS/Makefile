@@ -74,6 +74,8 @@ $(UTIL_OBJS) \
 #$(ARCHDIR)/crtend.o \
 #$(ARCHDIR)/crtn.o \
 
+# TODO: Add fonts to specific location, could also be on disk somewhere once filesystems exist
+
 LINK_LIST=\
 $(LDFLAGS) \
 $(KERNEL_OBJS) \

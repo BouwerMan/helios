@@ -10,7 +10,7 @@ int puts(const char* string)
     screen_putstring(string);
     screen_putchar('\n');
 #ifdef __KDEBUG__
-    write_serial_s(string);
+    write_serial_string(string);
     write_serial('\n');
 #endif
     return 0;

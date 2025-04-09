@@ -163,7 +163,7 @@ static void print(const char* data)
 {
     screen_putstring(data);
 #ifdef __KDEBUG__
-    write_serial_s(data);
+    write_serial_string(data);
 #endif
 }
 

@@ -1,8 +1,18 @@
 #include "../arch/x86_64/ports.h"
 #include <drivers/serial.h>
-#include <stdio.h>
 
-int init_serial()
+/**
+ * @brief Initializes the serial port for communication.
+ *
+ * This function configures the serial port by setting the baud rate, enabling
+ * interrupts, and configuring the data format. It also performs a loopback
+ * test to verify the functionality of the serial port. If the test fails,
+ * the function returns an error code.
+ *
+ * @return 0 if the serial port is initialized successfully, 1 if the loopback
+ *         test fails.
+ */
+int init_serial(void)
 {
     outb(PORT + 1, 0x00); // Disable all interrupts
     outb(PORT + 3, 0x80); // Enable DLAB (set baud rate divisor)
@@ -25,8 +35,16 @@ int init_serial()
     return 0;
 }
 
-static int is_transmit_empty() { return inb(PORT + 5) & 0x20; }
+static int is_transmit_empty(void) { return inb(PORT + 5) & 0x20; }
 
+/**
+ * @brief Writes a character to the serial port.
+ *
+ * This function waits until the serial port is ready to transmit data,
+ * then sends the specified character.
+ *
+ * @param a The character to write to the serial port.
+ */
 void write_serial(char a)
 {
     while (is_transmit_empty() == 0)
@@ -34,7 +52,15 @@ void write_serial(char a)
     outb(PORT, a);
 }
 
-void write_serial_s(const char* s)
+/**
+ * @brief Writes a null-terminated string to the serial port.
+ *
+ * This function iterates through each character in the provided string
+ * and writes it to the serial port using `write_serial`.
+ *
+ * @param s The null-terminated string to write to the serial port.
+ */
+void write_serial_string(const char* s)
 {
     while (*s)
         write_serial(*s++);
