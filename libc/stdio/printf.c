@@ -10,7 +10,7 @@
 #include <drivers/serial.h>
 #endif
 
-#define BUF_SIZE 16384
+#define BUF_SIZE 8192
 
 static char buffer[BUF_SIZE] = { '\0' };
 static size_t pointer = 0;
@@ -111,12 +111,12 @@ int vprintf(const char* restrict format, va_list args)
             buffer[pointer++] = (char)va_arg(args, int); // Char promotes to int
             break;
         case 'x': {
-            unsigned int value = va_arg(args, unsigned long long);
+            unsigned long long value = va_arg(args, unsigned long long);
             parse_hex(value, false);
             break;
         }
         case 'X': {
-            unsigned int value = va_arg(args, unsigned long long);
+            unsigned long long value = va_arg(args, unsigned long long);
             parse_hex(value, true);
             break;
         }

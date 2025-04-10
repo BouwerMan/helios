@@ -44,6 +44,9 @@ __attribute__((used, section(".limine_requests"))) static volatile LIMINE_BASE_R
 __attribute__((used, section(".limine_requests"))) static volatile struct limine_framebuffer_request framebuffer_request
     = { .id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0 };
 
+__attribute__((used, section(".limine_requests"))) static volatile struct limine_memmap_request memmap_request
+    = { .id = LIMINE_MEMMAP_REQUEST, .revision = 0 };
+
 // Finally, define the start and end markers for the Limine requests.
 // These can also be moved anywhere, to any .c file, as seen fit.
 
@@ -81,14 +84,13 @@ void kernel_main(void)
         hcf();
     }
 
+    // Ensure we got a memory map
+    if (memmap_request.response == NULL || memmap_request.response->entry_count < 1) {
+        hcf();
+    }
+
     // Fetch the first framebuffer.
     framebuffer = framebuffer_request.response->framebuffers[0];
-
-    // Note: we assume the framebuffer model is RGB with 32-bit pixels.
-    // for (size_t i = 0; i < 100; i++) {
-    //     volatile uint32_t* fb_ptr = framebuffer->address;
-    //     fb_ptr[i * (framebuffer->pitch / 4) + i] = 0xffffff;
-    // }
 
     screen_init(framebuffer, COLOR_WHITE, COLOR_BLACK);
     init_serial();
@@ -104,8 +106,20 @@ void kernel_main(void)
     puts("Initializing Timer");
     timer_init();
 
-    sleep(10000);
-    puts("10 seconds or so passed");
+    puts("Reading Memory Map");
+    size_t total_len = 0;
+    for (size_t i = 0; i < memmap_request.response->entry_count; i++) {
+        struct limine_memmap_entry* entry = memmap_request.response->entries[i];
+        printf("Start Addr: %x | Length: %x | Type: %d\n", entry->base, entry->length, entry->type);
+        total_len += entry->length;
+    }
+    printf("Total memory length: %x\n", total_len);
+
+    puts("printf testing:");
+    printf("Hex: 0x%x 0x%X 0x%X\n", 0x14AF, 0x410BC, 0xABCDEF1221FEDCBA);
+    printf("pos dec: %d\n", 5611);
+    printf("neg dec: %d\n", -468);
+    printf("unsigned int: %d\n", 4184);
 
     // We're done, just hang...
     puts("entering infinite loop");
