@@ -18,6 +18,7 @@ __attribute__((format(__printf__, 1, 2))) int printf(const char* __restrict form
 
 int vprintf(const char* __restrict, va_list);
 int sprintf(char* str, const char* __restrict format, ...);
+int snprintf(char* str, size_t buf_size, const char* __restrict format, ...);
 
 // putchar.c
 int putchar(int);

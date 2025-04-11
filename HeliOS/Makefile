@@ -29,7 +29,7 @@ DEFINES:=
 DEFINES+=-DKMALLOC_TESTING
 DEFINES+=-D__KDEBUG__
 # DEFINES+=-DFS_TESTING
-# DEFINES+=-DMEM_MAP_DUMP
+DEFINES+=-D__PMM_DEBUG__
 # DEFINES+=-DPRINTF_TESTING
 
 CFLAGS:=$(CFLAGS) $(KERNEL_ARCH_CFLAGS)
@@ -43,11 +43,11 @@ $(BUILDDIR)/$(KERNELDIR)/kernel.o \
 $(BUILDDIR)/$(KERNELDIR)/screen.o \
 $(BUILDDIR)/$(KERNELDIR)/timer.o \
 $(BUILDDIR)/$(KERNELDIR)/memory/pmm.o \
+$(BUILDDIR)/$(KERNELDIR)/panic.o \
 # $(BUILDDIR)/$(KERNELDIR)/idt.o \
 # $(BUILDDIR)/$(KERNELDIR)/isr.o \
 # $(BUILDDIR)/$(KERNELDIR)/irq.o \
 # $(BUILDDIR)/$(KERNELDIR)/keyboard.o \
-# $(BUILDDIR)/$(KERNELDIR)/panic.o \
 # $(BUILDDIR)/$(KERNELDIR)/cpu.o \
 # $(BUILDDIR)/$(KERNELDIR)/memory.o \
 # $(BUILDDIR)/$(KERNELDIR)/liballoc.o \
@@ -64,6 +64,7 @@ $(BUILDDIR)/$(DRIVERDIR)/serial.o \
 # $(BUILDDIR)/$(DRIVERDIR)/fs/vfs.o \
 
 UTIL_OBJS=\
+$(BUILDDIR)/$(UTILDIR)/log.o \
 # $(BUILDDIR)/$(UTILDIR)/ht.o \
 
 OBJS=\
@@ -105,7 +106,7 @@ $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 
 $(BUILDDIR)/%.o: %.c
 	mkdir -p $(@D)
-	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS) $(DEFINES)
+	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS) $(DEFINES) $(GDEFINES)
 
 $(BUILDDIR)/%.o: %.s
 	@mkdir -p $(@D)

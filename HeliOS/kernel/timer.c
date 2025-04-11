@@ -1,7 +1,7 @@
 #include <kernel/asm.h>
-#include <kernel/sys.h>
 #include <kernel/timer.h>
 #include <stdio.h>
+#include <util/log.h>
 
 // Some IBM employee had a very fun time when designing this fucker.
 const int PIT_CLK = 1193180;
@@ -88,7 +88,7 @@ void sleep(uint64_t millis)
  */
 void timer_init(void)
 {
-    puts("Initializing timer to 1000Hz");
+    log_debug("Initializing timer to 1000Hz");
     /* Installs 'timer_handler' to IRQ0 */
     install_isr_handler(IRQ0, timer_handler);
     timer_phase(1000);

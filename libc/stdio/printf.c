@@ -157,15 +157,19 @@ int sprintf(char* str, const char* __restrict format, ...)
     return result;
 }
 
+int snprintf(char* str, size_t buf_size, const char* __restrict format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    int result = vprintf(format, args);
+    strncpy(str, buffer, buf_size);
+    va_end(args);
+    return result;
+}
+
 #if defined(__is_libk)
 // TODO: Make this call puts and output full string instead of each char
-static void print(const char* data)
-{
-    screen_putstring(data);
-#ifdef __KDEBUG__
-    write_serial_string(data);
-#endif
-}
+static void print(const char* data) { screen_putstring(data); }
 
 #else
 // TODO: Proper libc print

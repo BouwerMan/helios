@@ -24,6 +24,7 @@ export INCLUDEDIR=$(PREFIX)/include
 export CWARN=-Wall -Wextra -pedantic
 export CFLAGS=-O2 -g -pipe -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse3 -D__KDEBUG__ -std=gnu23
 export CPPFLAGS=
+export GDEFINES=-D__KDEBUG__ -DLOG_LEVEL=0 -DENABLE_SERIAL_LOGGING
 
 # Configure the cross-compiler to use the desired system root.
 export SYSROOT="$(shell pwd)/sysroot"

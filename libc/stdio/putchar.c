@@ -10,9 +10,6 @@ int putchar(int ic)
 #if defined(__is_libk)
     char c = (char)ic;
     screen_putchar(c);
-#ifdef __KDEBUG__
-    write_serial(c);
-#endif
 #else
     // TODO: Implement stdio and the write system call.
 #endif

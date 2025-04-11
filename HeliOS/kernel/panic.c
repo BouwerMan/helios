@@ -1,14 +1,13 @@
-#include <kernel/sys.h>
-#include <kernel/tty.h>
+#include <kernel/screen.h>
 #include <stdio.h>
+#include <util/log.h>
 
 // Very rudimentary panic, still relies on libc and stuff.
 void panic(char* message)
 {
-    // asm volatile("cli");
-    // tty_setcolor(VGA_COLOR_RED);
-    // puts("KERNEL PANIC!");
-    // puts(message);
+    __asm__ volatile("cli");
+    set_color(COLOR_RED, COLOR_BLACK);
+    log_error("KERNEL PANIC!\n%s", message);
     for (;;)
-        asm volatile("hlt");
+        __asm__ volatile("hlt");
 }

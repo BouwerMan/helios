@@ -1,19 +1,19 @@
 /**
- *   HeliOS is an open source hobby OS development project.
- *   Copyright (C) 2024  Dylan Parks
+ * HeliOS is an open source hobby OS development project.
+ * Copyright (C) 2024  Dylan Parks
  *
- *   This program is free software: you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation, either version 3 of the License, or
- *   (at your option) any later version.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- *   This program is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *   GNU General Public License for more details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *   You should have received a copy of the GNU General Public License
- *    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 // MASTER TODO
@@ -30,6 +30,7 @@
 #include <limine.h>
 #include <stdio.h>
 #include <string.h>
+#include <util/log.h>
 
 // Set the base revision to 3, this is recommended as this is the latest
 // base revision described by the Limine boot protocol specification.
@@ -47,6 +48,9 @@ __attribute__((used, section(".limine_requests"))) static volatile struct limine
 
 __attribute__((used, section(".limine_requests"))) static volatile struct limine_memmap_request memmap_request
     = { .id = LIMINE_MEMMAP_REQUEST, .revision = 0 };
+
+__attribute__((used, section(".limine_requests"))) static volatile struct limine_hhdm_request hhdm_request
+    = { .id = LIMINE_HHDM_REQUEST, .revision = 0 };
 
 // Finally, define the start and end markers for the Limine requests.
 // These can also be moved anywhere, to any .c file, as seen fit.
@@ -92,6 +96,11 @@ void kernel_main(void)
         hcf();
     }
 
+    // Ensure we got a hhdm
+    if (hhdm_request.response == NULL) {
+        hcf();
+    }
+
     // Fetch the first framebuffer.
     framebuffer = framebuffer_request.response->framebuffers[0];
 
@@ -100,24 +109,26 @@ void kernel_main(void)
     write_serial_string("\n\nInitialized serial output, expect a lot of debug messages :)\n\n");
     printf("Welcome to %s. Version: %s\n", KERNEL_NAME, KERNEL_VERSION);
 
-    puts("Initializing GDT");
+    log_info("Initializing GDT");
     gdt_init();
-    puts("Initialized GDT, surely it won't break :)");
-
-    puts("Initializing IDT");
+    log_info("Initializing IDT");
     idt_init();
-    puts("Initializing Timer");
+    log_info("Initializing Timer");
     timer_init();
 
-    pmm_init(memmap_request.response);
+    log_info("Initializing PMM");
+    pmm_init(memmap_request.response, hhdm_request.response->offset);
+    // TODO: allocate and deallocate physical pages
 
-    puts("printf testing:");
-    printf("Hex: 0x%x 0x%X 0x%X\n", 0x14AF, 0x410BC, 0xABCDEF1221FEDCBA);
-    printf("pos dec: %d\n", 5611);
-    printf("neg dec: %d\n", -468);
-    printf("unsigned int: %d\n", 4184);
+    // TODO: VMM initialization
+
+    // puts("printf testing:");
+    // printf("Hex: 0x%x 0x%X 0x%X\n", 0x14AF, 0x410BC, 0xABCDEF1221FEDCBA);
+    // printf("pos dec: %d\n", 5611);
+    // printf("neg dec: %d\n", -468);
+    // printf("unsigned int: %d\n", 4184);
 
     // We're done, just hang...
-    puts("entering infinite loop");
+    log_warn("entering infinite loop");
     hcf();
 }
