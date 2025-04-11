@@ -2,8 +2,8 @@
 #include <string.h>
 
 /* import our font that's in the object file we've created above */
-extern char _binary_font_psf_start;
-extern char _binary_font_psf_end;
+extern char _binary_fonts_font_psf_start;
+extern char _binary_fonts_font_psf_end;
 
 uint16_t* unicode = NULL;
 
@@ -32,7 +32,7 @@ void screen_init(struct limine_framebuffer* fb, uint32_t fg_color, uint32_t bg_c
     sc.fb = fb;
     sc.fb_buffer = (char*)fb->address;
     sc.scanline = fb->pitch;
-    sc.font = (PSF_font*)&_binary_font_psf_start;
+    sc.font = (PSF_font*)&_binary_fonts_font_psf_start;
 }
 
 /**
@@ -139,7 +139,7 @@ static void scroll()
 static void screen_putchar_at(unsigned short int c, int cx, int cy, uint32_t fg, uint32_t bg)
 {
     /* cast the address to PSF header struct */
-    PSF_font* font = (PSF_font*)&_binary_font_psf_start;
+    PSF_font* font = (PSF_font*)&_binary_fonts_font_psf_start;
     /* we need to know how many bytes encode one row */
     int bytesperline = (font->width + 7) / 8;
     /* unicode translation */
@@ -148,7 +148,7 @@ static void screen_putchar_at(unsigned short int c, int cx, int cy, uint32_t fg,
     }
     /* get the glyph for the character. If there's no
        glyph for a given character, we'll display the first glyph. */
-    unsigned char* glyph = (unsigned char*)&_binary_font_psf_start + font->headersize
+    unsigned char* glyph = (unsigned char*)&_binary_fonts_font_psf_start + font->headersize
         + (c > 0 && c < font->numglyph ? c : 0) * font->bytesperglyph;
     /* calculate the upper left corner on screen where we want to display.
        we only do this once, and adjust the offset later. This is faster. */

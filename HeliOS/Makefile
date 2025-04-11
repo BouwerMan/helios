@@ -42,6 +42,7 @@ $(KERNEL_ARCH_OBJS) \
 $(BUILDDIR)/$(KERNELDIR)/kernel.o \
 $(BUILDDIR)/$(KERNELDIR)/screen.o \
 $(BUILDDIR)/$(KERNELDIR)/timer.o \
+$(BUILDDIR)/$(KERNELDIR)/memory/pmm.o \
 # $(BUILDDIR)/$(KERNELDIR)/idt.o \
 # $(BUILDDIR)/$(KERNELDIR)/isr.o \
 # $(BUILDDIR)/$(KERNELDIR)/irq.o \
@@ -69,6 +70,7 @@ OBJS=\
 $(KERNEL_OBJS) \
 $(DRIVER_OBJS) \
 $(UTIL_OBJS) \
+$(BUILDDIR)/fonts/font.o \
 #$(ARCHDIR)/crti.o \
 #$(ARCHDIR)/crtbegin.o \
 #$(ARCHDIR)/crtend.o \
@@ -82,7 +84,7 @@ $(KERNEL_OBJS) \
 $(DRIVER_OBJS) \
 $(UTIL_OBJS) \
 $(LIBS) \
-$(ARCHDIR)/font.o \
+$(BUILDDIR)/fonts/font.o \
 #$(ARCHDIR)/crti.o \
 #$(ARCHDIR)/crtbegin.o \
 #$(ARCHDIR)/crtend.o \
@@ -112,6 +114,10 @@ $(BUILDDIR)/%.o: %.s
 $(BUILDDIR)/%.o: %.asm
 	@mkdir -p $(@D)
 	nasm -felf64 -g -F dwarf $< -o $@
+
+$(BUILDDIR)/%.o: %.psf
+	@mkdir -p $(@D)
+	objcopy -O elf64-x86-64 -B i386 -I binary $< $@
 
 clean:
 	rm -rvf $(BUILDDIR)

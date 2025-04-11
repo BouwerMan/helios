@@ -33,6 +33,11 @@
         if (DEBUG) printf("%s:%d:%s(): " fmt, __FILE__, __LINE__, __func__, __VA_ARGS__);                              \
     } while (0)
 
+#define dputs(msg)                                                                                                     \
+    do {                                                                                                               \
+        if (DEBUG) printf("%s:%d:%s(): " msg, __FILE__, __LINE__, __func__);                                           \
+    } while (0)
+
 void panic(char* message);
 
 #endif /* SYS_H */

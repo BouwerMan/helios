@@ -8,6 +8,6 @@ CompileFlags:
     - "-Wall"
     - "-Wextra"
     - "-pedantic"
-    - "--target=i386"
+    - "--target=x86_64"
     - "-std=gnu23"
     - "-xc"

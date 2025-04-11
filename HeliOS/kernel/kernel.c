@@ -23,6 +23,7 @@
 // TODO: Standardize return values
 #include "../arch/x86_64/gdt.h"
 #include <drivers/serial.h>
+#include <kernel/memory/pmm.h>
 #include <kernel/screen.h>
 #include <kernel/sys.h>
 #include <kernel/timer.h>
@@ -50,7 +51,9 @@ __attribute__((used, section(".limine_requests"))) static volatile struct limine
 // Finally, define the start and end markers for the Limine requests.
 // These can also be moved anywhere, to any .c file, as seen fit.
 
-__attribute__((used, section(".limine_requests_start"))) static volatile LIMINE_REQUESTS_START_MARKER;
+__attribute__((used,
+               section(".limine_requests_"
+                       "start"))) static volatile LIMINE_REQUESTS_START_MARKER;
 
 __attribute__((used, section(".limine_requests_end"))) static volatile LIMINE_REQUESTS_END_MARKER;
 
@@ -106,14 +109,7 @@ void kernel_main(void)
     puts("Initializing Timer");
     timer_init();
 
-    puts("Reading Memory Map");
-    size_t total_len = 0;
-    for (size_t i = 0; i < memmap_request.response->entry_count; i++) {
-        struct limine_memmap_entry* entry = memmap_request.response->entries[i];
-        printf("Start Addr: %x | Length: %x | Type: %d\n", entry->base, entry->length, entry->type);
-        total_len += entry->length;
-    }
-    printf("Total memory length: %x\n", total_len);
+    pmm_init(memmap_request.response);
 
     puts("printf testing:");
     printf("Hex: 0x%x 0x%X 0x%X\n", 0x14AF, 0x410BC, 0xABCDEF1221FEDCBA);
