@@ -10,58 +10,58 @@
 #define PIC1_DATA    0x21
 #define PIC2_COMMAND 0xA0
 #define PIC2_DATA    0xA1
-#define PIC_EOI      0x20
+#define PIC_EOI	     0x20
 
 #define ICW1_INIT 0x10
 #define ICW1_ICW4 0x01
 #define ICW4_8086 0x01
 
 enum IRQn {
-    IRQ0 = 32,
-    IRQ1 = 33,
-    IRQ2 = 34,
-    IRQ3 = 35,
-    IRQ4 = 36,
-    IRQ5 = 37,
-    IRQ6 = 38,
-    IRQ7 = 39,
-    IRQ8 = 40,
-    IRQ9 = 41,
-    IRQ10 = 42,
-    IRQ11 = 43,
-    IRQ12 = 44,
-    IRQ13 = 45,
-    IRQ14 = 46,
-    IRQ15 = 47,
+	IRQ0 = 32,
+	IRQ1 = 33,
+	IRQ2 = 34,
+	IRQ3 = 35,
+	IRQ4 = 36,
+	IRQ5 = 37,
+	IRQ6 = 38,
+	IRQ7 = 39,
+	IRQ8 = 40,
+	IRQ9 = 41,
+	IRQ10 = 42,
+	IRQ11 = 43,
+	IRQ12 = 44,
+	IRQ13 = 45,
+	IRQ14 = 46,
+	IRQ15 = 47,
 };
 
 typedef struct {
-    uint16_t isr_low;   // The lower 16 bits of the ISR's address
-    uint16_t kernel_cs; // The GDT segment selector that the CPU will load into CS before calling the ISR
-    uint8_t ist;        // The IST in the TSS that the CPU will load into RSP; set to zero for now
-    uint8_t attributes; // Type and attributes; see the IDT page
-    uint16_t isr_mid;   // The higher 16 bits of the lower 32 bits of the ISR's address
-    uint32_t isr_high;  // The higher 32 bits of the ISR's address
-    uint32_t reserved;  // Set to zero
+	uint16_t isr_low;   // The lower 16 bits of the ISR's address
+	uint16_t kernel_cs; // The GDT segment selector that the CPU will load into CS before calling the ISR
+	uint8_t ist; // The IST in the TSS that the CPU will load into RSP; set to zero for now
+	uint8_t attributes; // Type and attributes; see the IDT page
+	uint16_t isr_mid; // The higher 16 bits of the lower 32 bits of the ISR's address
+	uint32_t isr_high; // The higher 32 bits of the ISR's address
+	uint32_t reserved; // Set to zero
 } __attribute__((packed)) idt_entry_t;
 
 typedef struct {
-    uint16_t limit;
-    uint64_t base;
+	uint16_t limit;
+	uint64_t base;
 } __attribute__((packed)) idtr_t;
 
 struct xmm_reg {
-    uint64_t low;
-    uint64_t high;
+	uint64_t low;
+	uint64_t high;
 };
 
 struct registers {
-    uint64_t ds;
-    // struct xmm_reg xmm[16]; // had to remove these, probably dont have them enabled
-    uint64_t rdi, rsi, rbp, useless, rbx, rdx, rcx, rax;
-    uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
-    uint64_t int_no, err_code;
-    uint64_t rip, cs, rflags, rsp, ss;
+	uint64_t ds;
+	// struct xmm_reg xmm[16]; // had to remove these, probably dont have them enabled
+	uint64_t rdi, rsi, rbp, useless, rbx, rdx, rcx, rax;
+	uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
+	uint64_t int_no, err_code;
+	uint64_t rip, cs, rflags, rsp, ss;
 } __attribute__((packed));
 
 // IDT

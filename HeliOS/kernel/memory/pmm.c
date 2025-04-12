@@ -69,7 +69,7 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 	// First pass: Calculate the highest address and total usable memory length.
 	for (size_t i = 0; i < mmap->entry_count; i++) {
 		struct limine_memmap_entry* entry = mmap->entries[i];
-		log_debug("%d. Start Addr: %x | Length: %x | Type: %d", i,
+		log_debug("%zu. Start Addr: %lx | Length: %lx | Type: %lu", i,
 			  entry->base, entry->length, entry->type);
 		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
 		high_addr = entry->base + entry->length;
@@ -81,7 +81,7 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 	bitmap_size = bitmap_size_bytes / sizeof(uint64_t);
 	total_page_count = bitmap_size * BITSET_WIDTH;
 	log_debug(
-		"Highest address: 0x%x, Total memory length: %x, requires a %d byte bitmap",
+		"Highest address: 0x%lx, Total memory length: %zx, requires a %zu byte bitmap",
 		high_addr, total_len, bitmap_size_bytes);
 
 	// Second pass: Find a suitable location for the bitmap.
@@ -93,7 +93,7 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 		// Check if the memory region is large enough to hold the bitmap.
 		if (!(entry->length > bitmap_size_bytes)) continue;
 		log_debug(
-			"Found valid location for bitmap at mmap entry: %d, base: 0x%x, length: %d",
+			"Found valid location for bitmap at mmap entry: %zu, base: 0x%lx, length: %lu",
 			i, entry->base, entry->length);
 
 		// Align the base address.
@@ -109,8 +109,8 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 	}
 
 	log_debug("Located valid PMM bitmap location");
-	log_debug("Putting bitmap at location: 0x%x, HHDM_OFFSET: 0x%x", bitmap,
-		  hhdm_offset);
+	log_debug("Putting bitmap at location: 0x%lx, HHDM_OFFSET: 0x%lx",
+		  (uint64_t)bitmap, hhdm_offset);
 
 	// Initialize the bitmap: Mark all pages as allocated.
 	memset(bitmap, UINT8_MAX, bitmap_size_bytes);
@@ -141,7 +141,7 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 		}
 	}
 
-	log_info("PMM Initialized: %d free pages out of %d total pages",
+	log_info("PMM Initialized: %zu free pages out of %zu total pages",
 		 free_page_count, total_page_count);
 #ifdef __PMM_TEST__
 	pmm_test();
@@ -229,7 +229,7 @@ void* pmm_alloc_contiguous(size_t count)
 			cont_len = 0;
 		}
 	}
-	log_warn("No valid contiguous range found for %d pages", count);
+	log_warn("No valid contiguous range found for %zu pages", count);
 	return NULL;
 
 allocate_page:
@@ -257,7 +257,7 @@ void pmm_free_contiguous(void* addr, size_t count)
 {
 	uint64_t page_index = (uint64_t)addr / PAGE_SIZE;
 	if (page_index >= total_page_count) {
-		log_error("Attempted to free page out of bounds: %d",
+		log_error("Attempted to free page out of bounds: %lu",
 			  page_index);
 		return;
 	}

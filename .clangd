@@ -8,6 +8,9 @@ CompileFlags:
     - "-Wall"
     - "-Wextra"
     - "-pedantic"
+    - "-Wno-empty-translation-unit"
+    - "-Wno-unused-function"
     - "--target=x86_64"
     - "-std=gnu23"
     - "-xc"
+

@@ -77,7 +77,7 @@ static void hcf(void)
 {
 	for (;;) {
 #if defined(__x86_64__)
-		asm("hlt");
+		__asm__("hlt");
 #elif defined(__aarch64__) || defined(__riscv)
 		asm("wfi");
 #elif defined(__loongarch64)
@@ -121,7 +121,7 @@ void kernel_main(void)
 	init_serial();
 	write_serial_string(
 		"\n\nInitialized serial output, expect a lot of debug messages :)\n\n");
-	log_info("Welcome to %s. Version: %s\n", KERNEL_NAME, KERNEL_VERSION);
+	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
 
 	log_info("Initializing GDT");
 	gdt_init();

@@ -87,8 +87,8 @@ void vmm_map(void* virt_addr, void* phys_addr, uint64_t flags)
 		pt[pt_i] = (uint64_t)phys_addr | flags;
 	} else {
 		log_warn(
-			"Tried to map existing entry, virt_addr: 0x%x, phys_addr: 0x%x",
-			virt_addr, phys_addr);
+			"Tried to map existing entry, virt_addr: 0x%lx, phys_addr: 0x%lx",
+			(uint64_t)virt_addr, (uint64_t)phys_addr);
 		invalidate(virt_addr);
 		pt[pt_i] = (uint64_t)phys_addr | flags;
 	}
@@ -151,8 +151,8 @@ void vmm_unmap(void* virt_addr, bool free_phys)
 
 not_present:
 	log_error(
-		"Couldn't taverse tables for 0x%x, something in the chain was already marked not present",
-		virt_addr);
+		"Couldn't traverse tables for 0x%lx, something in the chain was already marked not present",
+		(uint64_t)virt_addr);
 }
 
 // TODO: Actually use this
