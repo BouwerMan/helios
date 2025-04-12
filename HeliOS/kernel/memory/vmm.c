@@ -87,8 +87,8 @@ void vmm_map(void* virt_addr, void* phys_addr, uint64_t flags)
 		pt[pt_i] = (uint64_t)phys_addr | flags;
 	} else {
 		log_warn(
-		    "Tried to map existing entry, virt_addr: 0x%x, phys_addr: 0x%x",
-		    virt_addr, phys_addr);
+			"Tried to map existing entry, virt_addr: 0x%x, phys_addr: 0x%x",
+			virt_addr, phys_addr);
 		invalidate(virt_addr);
 		pt[pt_i] = (uint64_t)phys_addr | flags;
 	}
@@ -102,7 +102,7 @@ void* vmm_translate(void* virt_addr)
 	if (!(pml4[pml4_i] & PAGE_PRESENT)) return NULL;
 
 	uint64_t* pdpt =
-	    (uint64_t*)PHYS_TO_VIRT(pml4[pml4_i] & PAGE_FRAME_MASK);
+		(uint64_t*)PHYS_TO_VIRT(pml4[pml4_i] & PAGE_FRAME_MASK);
 	uint64_t pdpt_i = VADDR_PDPT_INDEX(va);
 	if (!(pdpt[pdpt_i] & PAGE_PRESENT)) return NULL;
 
@@ -129,7 +129,7 @@ void vmm_unmap(void* virt_addr, bool free_phys)
 	if (!(pml4[pml4_i] & PAGE_PRESENT)) goto not_present;
 
 	uint64_t* pdpt =
-	    (uint64_t*)PHYS_TO_VIRT(pml4[pml4_i] & PAGE_FRAME_MASK);
+		(uint64_t*)PHYS_TO_VIRT(pml4[pml4_i] & PAGE_FRAME_MASK);
 	uint64_t pdpt_i = VADDR_PDPT_INDEX(va);
 	if (!(pdpt[pdpt_i] & PAGE_PRESENT)) goto not_present;
 
@@ -151,8 +151,8 @@ void vmm_unmap(void* virt_addr, bool free_phys)
 
 not_present:
 	log_error(
-	    "Couldn't taverse tables for 0x%x, something in the chain was already marked not present",
-	    virt_addr);
+		"Couldn't taverse tables for 0x%x, something in the chain was already marked not present",
+		virt_addr);
 }
 
 // TODO: Actually use this
@@ -191,5 +191,5 @@ void vmm_test()
 	}
 
 	log_info(
-	    "VMM test passed: mapping, translation, and memory match successful.\n");
+		"VMM test passed: mapping, translation, and memory match successful.\n");
 }

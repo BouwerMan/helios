@@ -37,7 +37,8 @@
 // See specification for further info.
 
 __attribute__((
-    used, section(".limine_requests"))) static volatile LIMINE_BASE_REVISION(3);
+	used,
+	section(".limine_requests"))) static volatile LIMINE_BASE_REVISION(3);
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -45,32 +46,31 @@ __attribute__((
 // once or marked as used with the "used" attribute as done here.
 
 __attribute__((
-    used,
-    section(
-	".limine_requests"))) static volatile struct limine_framebuffer_request
-    framebuffer_request = { .id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0 };
+	used,
+	section(".limine_requests"))) static volatile struct limine_framebuffer_request
+	framebuffer_request = { .id = LIMINE_FRAMEBUFFER_REQUEST,
+				.revision = 0 };
 
 __attribute__((
-    used,
-    section(".limine_requests"))) static volatile struct limine_memmap_request
-    memmap_request = { .id = LIMINE_MEMMAP_REQUEST, .revision = 0 };
+	used,
+	section(".limine_requests"))) static volatile struct limine_memmap_request
+	memmap_request = { .id = LIMINE_MEMMAP_REQUEST, .revision = 0 };
 
 __attribute__((
-    used,
-    section(".limine_requests"))) static volatile struct limine_hhdm_request
-    hhdm_request = { .id = LIMINE_HHDM_REQUEST, .revision = 0 };
+	used,
+	section(".limine_requests"))) static volatile struct limine_hhdm_request
+	hhdm_request = { .id = LIMINE_HHDM_REQUEST, .revision = 0 };
 
 // Finally, define the start and end markers for the Limine requests.
 // These can also be moved anywhere, to any .c file, as seen fit.
 
 __attribute__((
-    used,
-    section(
-	".limine_requests_start"))) static volatile LIMINE_REQUESTS_START_MARKER;
+	used,
+	section(".limine_requests_start"))) static volatile LIMINE_REQUESTS_START_MARKER;
 
 __attribute__((
-    used,
-    section(".limine_requests_end"))) static volatile LIMINE_REQUESTS_END_MARKER;
+	used,
+	section(".limine_requests_end"))) static volatile LIMINE_REQUESTS_END_MARKER;
 
 // Halt and catch fire function.
 static void hcf(void)
@@ -120,7 +120,7 @@ void kernel_main(void)
 	screen_init(framebuffer, COLOR_WHITE, COLOR_BLACK);
 	init_serial();
 	write_serial_string(
-	    "\n\nInitialized serial output, expect a lot of debug messages :)\n\n");
+		"\n\nInitialized serial output, expect a lot of debug messages :)\n\n");
 	log_info("Welcome to %s. Version: %s\n", KERNEL_NAME, KERNEL_VERSION);
 
 	log_info("Initializing GDT");

@@ -44,7 +44,7 @@
 
 uint64_t bitmap_phys = 0; ///< Physical address of the bitmap.
 uint64_t* bitmap =
-    NULL; ///< Pointer to the virtual memory mapped to bitmap_phys. free is 0, allocated is 1
+	NULL; ///< Pointer to the virtual memory mapped to bitmap_phys. free is 0, allocated is 1
 size_t bitmap_size = 0; ///< Size of the bitmap in terms of uint64_t entries.
 
 static size_t free_page_count = 0;
@@ -71,20 +71,18 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 		struct limine_memmap_entry* entry = mmap->entries[i];
 		log_debug("%d. Start Addr: %x | Length: %x | Type: %d", i,
 			  entry->base, entry->length, entry->type);
-		if (entry->type == LIMINE_MEMMAP_USABLE) {
-			high_addr = entry->base + entry->length;
-			total_len += entry->length;
-		}
+		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
+		high_addr = entry->base + entry->length;
+		total_len += entry->length;
 	}
 
 	// Calculate the size of the bitmap in bytes and entries.
-	size_t bitmap_size_bytes =
-	    high_addr / PAGE_SIZE / UINT8_WIDTH; // 1 bit per page.
+	size_t bitmap_size_bytes = high_addr / PAGE_SIZE / UINT8_WIDTH;
 	bitmap_size = bitmap_size_bytes / sizeof(uint64_t);
 	total_page_count = bitmap_size * BITSET_WIDTH;
 	log_debug(
-	    "Highest address: 0x%x, Total memory length: %x, requires a %d byte bitmap",
-	    high_addr, total_len, bitmap_size_bytes);
+		"Highest address: 0x%x, Total memory length: %x, requires a %d byte bitmap",
+		high_addr, total_len, bitmap_size_bytes);
 
 	// Second pass: Find a suitable location for the bitmap.
 	for (size_t i = 0; i < mmap->entry_count; i++) {
@@ -93,18 +91,16 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
 
 		// Check if the memory region is large enough to hold the bitmap.
-		if (entry->length > bitmap_size_bytes) {
-			log_debug(
-			    "Found valid location for bitmap at mmap entry: %d, base: 0x%x, length: %d",
-			    i, entry->base, entry->length);
+		if (!(entry->length > bitmap_size_bytes)) continue;
+		log_debug(
+			"Found valid location for bitmap at mmap entry: %d, base: 0x%x, length: %d",
+			i, entry->base, entry->length);
 
-			bitmap_phys =
-			    align_up(entry->base); // Align the base address.
-			bitmap = (uint64_t*)align_up(
-			    bitmap_phys +
-			    hhdm_offset); // Map to virtual memory.
-			break;
-		}
+		// Align the base address.
+		bitmap_phys = align_up(entry->base);
+		// Map to virtual memory.
+		bitmap = (uint64_t*)align_up(bitmap_phys + hhdm_offset);
+		break;
 	}
 
 	// Ensure a valid location for the bitmap was found.
@@ -126,26 +122,21 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
 
 		uint64_t start =
-		    align_up(entry->base); // Align the start address.
+			align_up(entry->base); // Align the start address.
 		uint64_t end = align_down(
-		    entry->base + entry->length); // Align the end address.
+			entry->base + entry->length); // Align the end address.
 
 		for (uint64_t addr = start; addr < end; addr += PAGE_SIZE) {
 			// Skip pages that overlap with the bitmap itself.
 			if (addr >= bitmap_phys &&
 			    addr < (bitmap_phys + bitmap_size_bytes))
 				continue;
-			uint64_t page_index =
-			    addr / PAGE_SIZE; // Calculate the page index.
-			uint64_t word_index =
-			    page_index /
-			    BITSET_WIDTH; // Calculate the word index in the bitmap.
-			uint64_t bit_offset =
-			    page_index %
-			    BITSET_WIDTH; // Calculate the bit offset within the word.
+			uint64_t page_index = addr / PAGE_SIZE;
+			uint64_t word_index = page_index / BITSET_WIDTH;
+			uint64_t bit_offset = page_index % BITSET_WIDTH;
 
-			bitmap[word_index] &=
-			    ~(1ULL << bit_offset); // Mark as free
+			// Mark as free
+			bitmap[word_index] &= ~(1ULL << bit_offset);
 			free_page_count++;
 		}
 	}
@@ -170,10 +161,10 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 void* pmm_alloc_page(void)
 {
 	for (size_t word = 0; word < bitmap_size; word++) {
-		if (bitmap[word] == UINT64_MAX)
-			continue; // Skip fully used words in the bitmap
-		int bit = __builtin_ffsll(~bitmap[word]) -
-			  1; // Find the first free bit in the word
+		// Skip fully used words in the bitmap
+		if (bitmap[word] == UINT64_MAX) continue;
+		// Find the first free bit in the word
+		int bit = __builtin_ffsll(~bitmap[word]) - 1;
 		// bit can be -1 if ffsll is called with all allocated
 		if (bit < 0) continue;
 		bitmap[word] |= (1ULL << bit); // Set page as used
@@ -268,7 +259,7 @@ void pmm_free_contiguous(void* addr, size_t count)
 	if (page_index >= total_page_count) {
 		log_error("Attempted to free page out of bounds: %d",
 			  page_index);
-		panic("PMM Error");
+		return;
 	}
 	uint64_t end_index = page_index + count;
 	for (; page_index < end_index; page_index++) {
