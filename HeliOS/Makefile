@@ -106,7 +106,7 @@ $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 
 $(BUILDDIR)/%.o: %.c
 	mkdir -p $(@D)
-	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS) $(DEFINES) $(GDEFINES)
+	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS) $(DEFINES) $(GDEFINES) $(TESTS)
 
 $(BUILDDIR)/%.o: %.s
 	@mkdir -p $(@D)
