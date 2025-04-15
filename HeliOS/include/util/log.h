@@ -64,4 +64,13 @@
 #define log_error(fmt, ...) ((void)0)
 #endif
 
+#if LOG_LEVEL <= LOG_LEVEL_DEBUG
+#define log_debug_long(msg) \
+	log_long_message("DEBUG", __FILE__, __LINE__, __func__, msg)
+#else
+#define log_debug_long(msg) ((void)0)
+#endif
+
 void log_output(const char* msg);
+void log_long_message(const char* tag, const char* file, int line,
+		      const char* func, const char* msg);

@@ -25,6 +25,7 @@ ARCHDIR=arch/$(HOSTARCH)
 include $(ARCHDIR)/make.config
 
 DEFINES:=
+DEFINES+=-DLIMINE_API_REVISION=3
 # DEFINES+=-DKERNEL_DEBUG
 DEFINES+=-DKMALLOC_TESTING
 DEFINES+=-D__KDEBUG__
@@ -43,29 +44,30 @@ $(BUILDDIR)/$(KERNELDIR)/kernel.o \
 $(BUILDDIR)/$(KERNELDIR)/screen.o \
 $(BUILDDIR)/$(KERNELDIR)/timer.o \
 $(BUILDDIR)/$(KERNELDIR)/memory/pmm.o \
+$(BUILDDIR)/$(KERNELDIR)/memory/vmm.o \
 $(BUILDDIR)/$(KERNELDIR)/panic.o \
+$(BUILDDIR)/$(KERNELDIR)/liballoc.o \
+$(BUILDDIR)/$(KERNELDIR)/liballoc_hooks.o \
 # $(BUILDDIR)/$(KERNELDIR)/idt.o \
 # $(BUILDDIR)/$(KERNELDIR)/isr.o \
 # $(BUILDDIR)/$(KERNELDIR)/irq.o \
 # $(BUILDDIR)/$(KERNELDIR)/keyboard.o \
 # $(BUILDDIR)/$(KERNELDIR)/cpu.o \
 # $(BUILDDIR)/$(KERNELDIR)/memory.o \
-# $(BUILDDIR)/$(KERNELDIR)/liballoc.o \
-# $(BUILDDIR)/$(KERNELDIR)/liballoc_hooks.o \
 
 DRIVER_OBJS=\
 $(BUILDDIR)/$(DRIVERDIR)/serial.o \
-# $(BUILDDIR)/$(DRIVERDIR)/pci/pci.o \
-# $(BUILDDIR)/$(DRIVERDIR)/ata/controller.o \
-# $(BUILDDIR)/$(DRIVERDIR)/ata/device.o \
-# $(BUILDDIR)/$(DRIVERDIR)/ata/ata.o \
-# $(BUILDDIR)/$(DRIVERDIR)/ata/partition.o \
-# $(BUILDDIR)/$(DRIVERDIR)/fs/fat.o \
-# $(BUILDDIR)/$(DRIVERDIR)/fs/vfs.o \
+$(BUILDDIR)/$(DRIVERDIR)/pci/pci.o \
+$(BUILDDIR)/$(DRIVERDIR)/ata/controller.o \
+$(BUILDDIR)/$(DRIVERDIR)/ata/device.o \
+$(BUILDDIR)/$(DRIVERDIR)/ata/ata.o \
+$(BUILDDIR)/$(DRIVERDIR)/ata/partition.o \
+$(BUILDDIR)/$(DRIVERDIR)/fs/fat.o \
+$(BUILDDIR)/$(DRIVERDIR)/fs/vfs.o \
 
 UTIL_OBJS=\
 $(BUILDDIR)/$(UTILDIR)/log.o \
-# $(BUILDDIR)/$(UTILDIR)/ht.o \
+$(BUILDDIR)/$(UTILDIR)/ht.o \
 
 OBJS=\
 $(KERNEL_OBJS) \

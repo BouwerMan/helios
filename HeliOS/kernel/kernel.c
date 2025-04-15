@@ -22,13 +22,17 @@
 // TODO: Project restructuring (drivers, kernel, lib, etc.)
 // TODO: Standardize return values
 #include "../arch/x86_64/gdt.h"
+#include <drivers/ata/controller.h>
+#include <drivers/fs/vfs.h>
+#include <drivers/pci/pci.h>
 #include <drivers/serial.h>
+#include <kernel/liballoc.h>
 #include <kernel/memory/pmm.h>
+#include <kernel/memory/vmm.h>
 #include <kernel/screen.h>
 #include <kernel/sys.h>
 #include <kernel/timer.h>
 #include <limine.h>
-#include <stdio.h>
 #include <string.h>
 #include <util/log.h>
 
@@ -60,6 +64,12 @@ __attribute__((
 	used,
 	section(".limine_requests"))) static volatile struct limine_hhdm_request
 	hhdm_request = { .id = LIMINE_HHDM_REQUEST, .revision = 0 };
+
+__attribute__((
+	used,
+	section(".limine_requests"))) static volatile struct limine_executable_address_request
+	exe_addr_req = { .id = LIMINE_EXECUTABLE_ADDRESS_REQUEST,
+			 .revision = 0 };
 
 // Finally, define the start and end markers for the Limine requests.
 // These can also be moved anywhere, to any .c file, as seen fit.
@@ -114,6 +124,11 @@ void kernel_main(void)
 		hcf();
 	}
 
+	// Ensure we get an executable address
+	if (exe_addr_req.response == NULL) {
+		hcf();
+	}
+
 	// Fetch the first framebuffer.
 	framebuffer = framebuffer_request.response->framebuffers[0];
 
@@ -132,17 +147,40 @@ void kernel_main(void)
 
 	log_info("Initializing PMM");
 	pmm_init(memmap_request.response, hhdm_request.response->offset);
-	// TODO: allocate and deallocate physical pages
-	pmm_free_page(pmm_alloc_page());
-	pmm_free_page(pmm_alloc_page());
 
 	// TODO: VMM initialization
+	log_info("Initializing VMM");
+	vmm_init(memmap_request.response, exe_addr_req.response,
+		 hhdm_request.response->offset);
 
-	// puts("printf testing:");
-	// printf("Hex: 0x%x 0x%X 0x%X\n", 0x14AF, 0x410BC, 0xABCDEF1221FEDCBA);
-	// printf("pos dec: %d\n", 5611);
-	// printf("neg dec: %d\n", -468);
-	// printf("unsigned int: %d\n", 4184);
+	list_devices();
+	ctrl_init();
+	vfs_init(64);
+
+	sATADevice* fat_device = ctrl_get_device(3);
+	mount("/", fat_device, &fat_device->part_table[0], FAT16);
+
+	struct vfs_file f = { 0 };
+	int res2 = vfs_open("/dir/test2.txt", &f);
+	if (res2 < 0) {
+		log_error("oh no");
+	} else {
+		log_info("%s", f.read_ptr);
+	}
+	log_debug("open 2");
+	struct vfs_file f2 = { 0 };
+	res2 = vfs_open("/test2.txt", &f2);
+	if (res2 < 0) {
+		log_error("oh no");
+	} else {
+		log_debug("f_size: %zu, at %lx", f2.file_size,
+			  (uint64_t)f2.read_ptr);
+		// FIXME: Currently hardfaults after a bit, probably some weirdness
+		// with the VMM and such
+		// log_debug_long(f2.read_ptr);
+	}
+	vfs_close(&f);
+	vfs_close(&f2);
 
 	// We're done, just hang...
 	log_warn("entering infinite loop");

@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 size_t strlen(const char*);
+size_t strnlen(const char* str, const size_t maxlen);
 void* memset(void*, int, size_t);
 void* memcpy(void* dest, const void* src, size_t count);
 void* memove(void* dest, const void* src, size_t n);

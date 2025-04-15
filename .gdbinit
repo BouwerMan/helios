@@ -3,8 +3,7 @@ target remote localhost:1234
 
 set print pretty on
 
-break isr_common_stub
-break isr_handler
+break vmm.c:23
 
 # Inspect page tables
 #x /8wg &page_tables_start

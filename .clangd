@@ -4,6 +4,7 @@ CompileFlags:
     - "-isystem/home/dylan/code/osdev/libc/include"
     - "-nostdlibinc"
     - "-D__is_libk"
+    - "-DLIMINE_API_REVISION=3"
     - "-Wunused-variable"
     - "-Wall"
     - "-Wextra"

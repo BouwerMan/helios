@@ -3,7 +3,7 @@
 #include <drivers/pci/pci.h>
 #include <kernel/asm.h>
 #include <stddef.h>
-#include <stdio.h>
+#include <util/log.h>
 
 /* port-bases */
 static const int PORTBASE_PRIMARY = 0x1F0;
@@ -19,66 +19,80 @@ static sATAController ctrls[2];
 
 void ctrl_init()
 {
-    ide_ctrl = get_device_by_class(IDE_CTRL_CLASS, IDE_CTRL_SUBCLASS);
-    if (!ide_ctrl) {
-        puts("Could not get IDE controller.");
-        return;
-    }
+	ide_ctrl = get_device_by_class(IDE_CTRL_CLASS, IDE_CTRL_SUBCLASS);
+	if (!ide_ctrl) {
+		log_error("Could not get IDE controller.");
+		return;
+	}
 
-    // maybe needed to check if I/O space is enabled?
-    uint32_t status = pci_config_read_word(ide_ctrl->bus, ide_ctrl->dev, ide_ctrl->func, 0x04);
-    if ((uint8_t)status == 0xFF) {
-        puts("Floating IDE bus");
-        return;
-    }
+	// maybe needed to check if I/O space is enabled?
+	uint32_t status = pci_config_read_word(ide_ctrl->bus, ide_ctrl->dev,
+					       ide_ctrl->func, 0x04);
+	if ((uint8_t)status == 0xFF) {
+		log_error("Floating IDE bus");
+		return;
+	}
 
-    ctrls[0].id = DEVICE_PRIMARY;
-    ctrls[0].irq = CTRL_IRQ_BASE;
-    ctrls[0].port_base = PORTBASE_PRIMARY;
+	ctrls[0].id = DEVICE_PRIMARY;
+	ctrls[0].irq = CTRL_IRQ_BASE;
+	ctrls[0].port_base = PORTBASE_PRIMARY;
 
-    ctrls[1].id = DEVICE_SECONDARY;
-    ctrls[1].irq = CTRL_IRQ_BASE + 1;
-    ctrls[1].port_base = PORTBASE_SECONDARY;
+	ctrls[1].id = DEVICE_SECONDARY;
+	ctrls[1].irq = CTRL_IRQ_BASE + 1;
+	ctrls[1].port_base = PORTBASE_SECONDARY;
 
-    for (size_t i = 0; i < 2; i++) {
-        printf("Initializing controller: %d\n", ctrls[i].id);
+	for (size_t i = 0; i < 2; i++) {
+		log_info("Initializing controller: %d", ctrls[i].id);
 
-        ctrls[i].use_irq = false;
-        ctrls[i].use_dma = false;
+		ctrls[i].use_irq = false;
+		ctrls[i].use_dma = false;
 
-        // Init attached drives, beginning with slave
-        for (short int j = 1; j >= 0; j--) {
-            ctrls[i].devices[j].present = false;
-            ctrls[i].devices[j].id = i * 2 + j;
-            ctrls[i].devices[j].ctrl = ctrls + i;
-            device_init(ctrls[i].devices + j);
-        }
-    }
+		// Init attached drives, beginning with slave
+		for (short int j = 1; j >= 0; j--) {
+			ctrls[i].devices[j].present = false;
+			ctrls[i].devices[j].id = i * 2 + j;
+			ctrls[i].devices[j].ctrl = ctrls + i;
+			device_init(ctrls[i].devices + j);
+		}
+	}
 }
 
-sATADevice* ctrl_get_device(uint8_t id) { return ctrls[id / 2].devices + id % 2; }
+sATADevice* ctrl_get_device(uint8_t id)
+{
+	return ctrls[id / 2].devices + id % 2;
+}
 
-void ctrl_outb(sATAController* ctrl, uint16_t reg, uint8_t value) { outb(ctrl->port_base + reg, value); }
+void ctrl_outb(sATAController* ctrl, uint16_t reg, uint8_t value)
+{
+	outb(ctrl->port_base + reg, value);
+}
 
-uint8_t ctrl_inb(sATAController* ctrl, uint16_t reg) { return inb(ctrl->port_base + reg); }
-uint16_t ctrl_inw(sATAController* ctrl, uint16_t reg) { return inw(ctrl->port_base + reg); }
+uint8_t ctrl_inb(sATAController* ctrl, uint16_t reg)
+{
+	return inb(ctrl->port_base + reg);
+}
+uint16_t ctrl_inw(sATAController* ctrl, uint16_t reg)
+{
+	return inw(ctrl->port_base + reg);
+}
 
 void ctrl_inws(sATAController* ctrl, uint16_t reg, uint16_t* buff, size_t count)
 {
-    for (size_t i = 0; i < count; i++)
-        buff[i] = inw(ctrl->port_base + reg);
+	for (size_t i = 0; i < count; i++)
+		buff[i] = inw(ctrl->port_base + reg);
 }
 
-void ctrl_outws(sATAController* ctrl, uint16_t reg, const uint16_t* buff, size_t count)
+void ctrl_outws(sATAController* ctrl, uint16_t reg, const uint16_t* buff,
+		size_t count)
 {
-    for (size_t i = 0; i < count; i++)
-        outword(ctrl->port_base + reg, buff[i]);
+	for (size_t i = 0; i < count; i++)
+		outword(ctrl->port_base + reg, buff[i]);
 }
 
 void ctrl_wait(sATAController* ctrl)
 {
-    inb(ctrl->port_base + ATA_REG_STATUS);
-    inb(ctrl->port_base + ATA_REG_STATUS);
-    inb(ctrl->port_base + ATA_REG_STATUS);
-    inb(ctrl->port_base + ATA_REG_STATUS);
+	inb(ctrl->port_base + ATA_REG_STATUS);
+	inb(ctrl->port_base + ATA_REG_STATUS);
+	inb(ctrl->port_base + ATA_REG_STATUS);
+	inb(ctrl->port_base + ATA_REG_STATUS);
 }
