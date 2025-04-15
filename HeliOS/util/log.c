@@ -5,10 +5,10 @@
 
 void log_output(const char* msg)
 {
-	printf("%s", msg); // Console / screen output
 #if ENABLE_SERIAL_LOGGING
 	write_serial_string(msg); // Custom serial output
 #endif
+	printf("%s", msg); // Console / screen output
 }
 
 void log_long_message(const char* tag, const char* file, int line,

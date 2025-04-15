@@ -119,8 +119,9 @@ void vmm_init(struct limine_memmap_response* mmap,
 	// TODO: Actually use this once CR3 is set
 	pml4[510] = VIRT_TO_PHYS(pml4) | PAGE_PRESENT | PAGE_WRITE;
 
-	// Identity map first 64 MiB
-	for (uint64_t vaddr = 0; vaddr < LOW_IDENTITY; vaddr += PAGE_SIZE) {
+	// Identity map first 64 MiB, skip first 1 MiB
+	for (uint64_t vaddr = 0x100000; vaddr < LOW_IDENTITY;
+	     vaddr += PAGE_SIZE) {
 		vmm_map((void*)vaddr, (void*)vaddr, PAGE_PRESENT | PAGE_WRITE);
 	}
 

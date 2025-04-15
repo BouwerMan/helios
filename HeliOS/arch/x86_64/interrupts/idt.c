@@ -1,5 +1,6 @@
 #include "idt.h"
 #include "../ports.h"
+#include <kernel/screen.h>
 #include <string.h>
 #include <util/log.h>
 
@@ -62,20 +63,23 @@ const char* exception_messages[] = {
 static void default_exception_handler(struct registers* registers)
 {
 	log_error(
-		"Recieved interrupt #%lx with error code %lx on the default handler!\n",
+		"Recieved interrupt #%lx with error code %lx on the default handler!",
 		registers->int_no, registers->err_code);
-	log_error("Exception: %s\n", exception_messages[registers->int_no]);
-	log_error("RIP: %lx, RSP: %lx, RBP: %lx\n", registers->rip,
+	log_error("Exception: %s", exception_messages[registers->int_no]);
+	log_error("RIP: %lx, RSP: %lx, RBP: %lx", registers->rip,
 		  registers->rsp, registers->rbp);
-	log_error("RAX: %lx, RBX: %lx, RCX: %lx, RDX: %lx\n", registers->rax,
+	log_error("RAX: %lx, RBX: %lx, RCX: %lx, RDX: %lx", registers->rax,
 		  registers->rbx, registers->rcx, registers->rdx);
-	log_error("RDI: %lx, RSI: %lx, RFLAGS: %lx, DS: %lx\n", registers->rdi,
+	log_error("RDI: %lx, RSI: %lx, RFLAGS: %lx, DS: %lx", registers->rdi,
 		  registers->rsi, registers->rflags, registers->ds);
-	log_error("CS: %lx, SS: %lx\n", registers->cs, registers->ss);
-	log_error("R8: %lx, R9: %lx, R10: %lx, R11: %lx\n", registers->r8,
+	log_error("CS: %lx, SS: %lx", registers->cs, registers->ss);
+	log_error("R8: %lx, R9: %lx, R10: %lx, R11: %lx", registers->r8,
 		  registers->r9, registers->r10, registers->r11);
-	log_error("R12: %lx, R13: %lx, R14: %lx, R15: %lx\n", registers->r12,
+	log_error("R12: %lx, R13: %lx, R14: %lx, R15: %lx", registers->r12,
 		  registers->r13, registers->r14, registers->r15);
+	uint64_t fault_addr;
+	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
+	log_error("Fault addr: %lx", fault_addr);
 
 	__asm__ volatile("cli; hlt");
 }
@@ -280,9 +284,10 @@ void isr_handler(struct registers* r)
 		/* Display the description for the Exception that occurred.
          *  In this tutorial, we will simply halt the system using an
          *  infinite loop */
-		if (handler)
+		if (handler) {
+			screen_clear();
 			handler(r);
-		else {
+		} else {
 			log_error("%s\n%s",
 				  (char*)exception_messages[r->int_no],
 				  "Exception. System Halted!");

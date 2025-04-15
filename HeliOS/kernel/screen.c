@@ -1,5 +1,8 @@
+#include <drivers/serial.h>
 #include <kernel/screen.h>
+#include <kernel/timer.h>
 #include <string.h>
+#include <util/log.h>
 
 /* import our font that's in the object file we've created above */
 extern char _binary_fonts_font_psf_start;
@@ -35,6 +38,21 @@ void screen_init(struct limine_framebuffer* fb, uint32_t fg_color,
 	sc.fb_buffer = (char*)fb->address;
 	sc.scanline = fb->pitch;
 	sc.font = (PSF_font*)&_binary_fonts_font_psf_start;
+	log_debug("Framebuffer at %p, scanline: %x", fb->address, sc.scanline);
+	log_debug(
+		"Framebuffer stats: height = %lx, width = %lx, size in bytes = %lx",
+		fb->height, fb->width, fb->height * fb->width);
+	log_debug("Font height: %x, font width: %x", sc.font->height,
+		  sc.font->width);
+	log_debug("wrap option 1: %lx, option 2: %lx",
+		  fb->width / sc.font->width, fb->pitch / sc.font->width);
+}
+
+void screen_clear()
+{
+	memset(sc.fb_buffer, 0, sc.fb->pitch * sc.fb->height);
+	sc.cx = 0;
+	sc.cy = 0;
 }
 
 /**
@@ -82,16 +100,21 @@ void screen_putchar(char c)
 	case '\b':
 		if (sc.cx == 0) break;
 		screen_putchar_at(' ', --sc.cx, sc.cy, sc.fgc, sc.bgc);
+		break;
 	default:
+		// write_serial(c);
+		// if (c == 'p') sleep(5000);
 		screen_putchar_at(c, sc.cx++, sc.cy, sc.fgc, sc.bgc);
+		break;
 	}
-	if (sc.cx >= (size_t)sc.scanline) {
+	if (sc.cx >= sc.fb->width / (sc.font->width + 1)) {
 		sc.cx = 0;
 		sc.cy++;
 	}
 	if (sc.cy >= sc.fb->height / sc.font->height) {
 		scroll();
-		sc.cy = sc.cy - 2;
+		sc.cy = sc.cy - 1;
+		sc.cx = 0;
 	}
 }
 

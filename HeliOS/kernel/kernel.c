@@ -132,10 +132,10 @@ void kernel_main(void)
 	// Fetch the first framebuffer.
 	framebuffer = framebuffer_request.response->framebuffers[0];
 
-	screen_init(framebuffer, COLOR_WHITE, COLOR_BLACK);
 	init_serial();
 	write_serial_string(
 		"\n\nInitialized serial output, expect a lot of debug messages :)\n\n");
+	screen_init(framebuffer, COLOR_WHITE, COLOR_BLACK);
 	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
 
 	log_info("Initializing GDT");
@@ -165,7 +165,7 @@ void kernel_main(void)
 	if (res2 < 0) {
 		log_error("oh no");
 	} else {
-		log_info("%s", f.read_ptr);
+		// log_info("%s", f.read_ptr);
 	}
 	log_debug("open 2");
 	struct vfs_file f2 = { 0 };
@@ -175,8 +175,6 @@ void kernel_main(void)
 	} else {
 		log_debug("f_size: %zu, at %lx", f2.file_size,
 			  (uint64_t)f2.read_ptr);
-		// FIXME: Currently hardfaults after a bit, probably some weirdness
-		// with the VMM and such
 		// log_debug_long(f2.read_ptr);
 	}
 	vfs_close(&f);
