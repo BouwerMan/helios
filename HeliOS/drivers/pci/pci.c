@@ -47,15 +47,12 @@ const pci_device_t* get_device_by_id(uint16_t device_id)
 const pci_device_t* get_device_by_class(uint8_t base_class, uint8_t sub_class)
 {
 	for (uint8_t i = 0; i <= device_idx; i++) {
-		if (devices[i]->base_class == base_class &&
-		    devices[i]->sub_class == sub_class)
-			return devices[i];
+		if (devices[i]->base_class == base_class && devices[i]->sub_class == sub_class) return devices[i];
 	}
 	return NULL;
 }
 
-const uint32_t pci_config_read_word(uint8_t bus, uint8_t slot, uint8_t func,
-				    uint8_t offset)
+uint32_t pci_config_read_word(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
 {
 	uint32_t address;
 	uint32_t lbus = (uint32_t)bus;
@@ -64,11 +61,14 @@ const uint32_t pci_config_read_word(uint8_t bus, uint8_t slot, uint8_t func,
 	uint16_t tmp = 0;
 
 	// Create configuration
-	address = (uint32_t)((lbus << 16) | (lslot << 11) | (lfunc << 8) |
-			     (offset & 0xFC) | ((uint32_t)(0x80000000)));
+	address = (uint32_t)((lbus << 16) | (lslot << 11) | (lfunc << 8) | (offset & 0xFC) | ((uint32_t)(0x80000000)));
 
 	outdword(IOPORT_PCI_CFG_ADDR, address);
 	return indword(IOPORT_PCI_CFG_DATA);
+}
+
+uint32_t pci_config_write_word()
+{
 }
 
 void list_devices()
@@ -81,8 +81,7 @@ void list_devices()
 				if ((val & 0xFFFF) == VENDOR_INVALID) continue;
 
 				log_info("\t(%d, %d, %d) 0x%X", i, j, k, val);
-				pci_device_t* dev = (pci_device_t*)kmalloc(
-					sizeof(pci_device_t));
+				pci_device_t* dev = (pci_device_t*)kmalloc(sizeof(pci_device_t));
 				dev->bus = i;
 				dev->dev = j;
 				dev->func = k;
@@ -95,6 +94,8 @@ void list_devices()
 				val = pci_config_read_word(i, j, k, 0xC);
 				dev->type = (val >> 16) & 0xFF;
 				devices[device_idx++] = dev;
+				val = pci_config_read_word(i, j, k, 0x4);
+				log_info("status and command: %x", val);
 			}
 		}
 	}

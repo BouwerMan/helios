@@ -49,7 +49,8 @@ static bool device_identify(sATADevice* device, uint16_t cmd)
 	// ata-atapi-8 7.12
 	sATAController* ctrl = device->ctrl;
 
-	uint32_t device_select = device->id & SLAVE_BIT ? 0xB0 : 0xA0;
+	uint32_t device_select = device->id & SLAVE_BIT ? DRIVE_SLAVE :
+							  DRIVE_MASTER;
 
 	// printf("Selecting device %d, using value: 0x%X\n", device->id, device_select);
 	ctrl_outb(ctrl, ATA_REG_DRIVE_SELECT, device_select);
@@ -91,12 +92,14 @@ static bool device_identify(sATADevice* device, uint16_t cmd)
 		device->info[i] = ctrl_inw(ctrl, ATA_REG_DATA);
 	}
 
-	if (!(device->info[49] & (1 << 9))) {
+	if (!(device->info[49] & LBA_SUPPORT)) {
 		log_error("Device %d does not support lba", device->id);
 		return false;
 	}
 
-	uint32_t lba_num = device->info[60] | (device->info[61] << 16);
+	// TODO: Need to support more than 128GB disks
+	uint32_t lba_num = device->info[ATA_INFO_SECTORS_LOW] |
+			   (device->info[ATA_INFO_SECTORS_HIGH] << 16);
 	log_info("Device %d LBA support: 0x%X", device->id, lba_num);
 	return true;
 }

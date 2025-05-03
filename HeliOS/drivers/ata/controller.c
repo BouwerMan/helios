@@ -1,7 +1,8 @@
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
 #include <drivers/pci/pci.h>
-#include <kernel/asm.h>
+#include <kernel/liballoc.h>
+#include <kernel/memory/vmm.h>
 #include <stddef.h>
 #include <util/log.h>
 
@@ -26,8 +27,7 @@ void ctrl_init()
 	}
 
 	// maybe needed to check if I/O space is enabled?
-	uint32_t status = pci_config_read_word(ide_ctrl->bus, ide_ctrl->dev,
-					       ide_ctrl->func, 0x04);
+	uint32_t status = pci_config_read_word(ide_ctrl->bus, ide_ctrl->dev, ide_ctrl->func, 0x04);
 	if ((uint8_t)status == 0xFF) {
 		log_error("Floating IDE bus");
 		return;
@@ -41,11 +41,26 @@ void ctrl_init()
 	ctrls[1].irq = CTRL_IRQ_BASE + 1;
 	ctrls[1].port_base = PORTBASE_SECONDARY;
 
+	uint32_t bar4 = pci_config_read_word(ide_ctrl->bus, ide_ctrl->dev, ide_ctrl->func, BAR4);
+	if ((bar4 & 1) == 1) {
+		log_debug("BAR4: %x, actual base: %x", bar4, bar4 & 0xFFFFFFFC);
+		ctrls[0].bmr_base = bar4 & 0xFFFFFFFC;
+		ctrls[1].bmr_base = (bar4 & 0xFFFFFFFC) + 0x8;
+	}
 	for (size_t i = 0; i < 2; i++) {
 		log_info("Initializing controller: %d", ctrls[i].id);
 
 		ctrls[i].use_irq = false;
-		ctrls[i].use_dma = false;
+		ctrls[i].use_dma = true;
+
+		if (ctrls[i].use_dma) {
+			ctrls[i].prdt = vmm_alloc_pages(1, false);
+			log_debug("prdt: %p", (void*)ctrls[i].prdt);
+			// TODO: clean up on kmalloc fail
+			uint32_t prdt_phys = (uintptr_t)vmm_translate(ctrls[i].prdt);
+			log_debug("Writing PRDT addr: %x", prdt_phys);
+			ctrl_bmr_outd(ctrls + i, BMR_REG_PRDT, prdt_phys);
+		}
 
 		// Init attached drives, beginning with slave
 		for (short int j = 1; j >= 0; j--) {
@@ -82,8 +97,7 @@ void ctrl_inws(sATAController* ctrl, uint16_t reg, uint16_t* buff, size_t count)
 		buff[i] = inw(ctrl->port_base + reg);
 }
 
-void ctrl_outws(sATAController* ctrl, uint16_t reg, const uint16_t* buff,
-		size_t count)
+void ctrl_outws(sATAController* ctrl, uint16_t reg, const uint16_t* buff, size_t count)
 {
 	for (size_t i = 0; i < count; i++)
 		outword(ctrl->port_base + reg, buff[i]);

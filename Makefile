@@ -74,6 +74,7 @@ qemu: iso
 		-hdd ./fat.img -boot d -s \
 		-serial stdio \
 		-d cpu_reset \
+		-D log.txt \
 
 bochs: iso
 	bochs -f bochs

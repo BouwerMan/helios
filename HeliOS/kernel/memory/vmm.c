@@ -12,10 +12,13 @@ uint64_t* pml4 = NULL;
 
 // Bitmap allocator stuff
 static uint64_t* bitmap = NULL;
-static size_t bitmap_size =
-	0; ///< Size of the bitmap in terms of uint64_t entries.
+static size_t bitmap_size = 0; ///< Size of the bitmap in terms of uint64_t entries.
 static size_t total_page_count = 0;
 static size_t free_page_count = 0;
+
+static uint64_t g_hhdm_offset;
+#define PHYS_TO_VIRT(p) ((void*)((uintptr_t)(p) + g_hhdm_offset))
+#define VIRT_TO_PHYS(v) ((uintptr_t)(v) - g_hhdm_offset)
 
 /**
  * @brief Loads the physical address of the PML4 table into the CR3 register.
@@ -51,20 +54,15 @@ static inline void vmm_load_cr3(uintptr_t pml4_phys_addr)
  * @param exe Pointer to the Limine executable address response structure.
  * @param hhdm_offset Offset for the Higher Half Direct Map (HHDM).
  */
-static void map_memmap_entry(struct limine_memmap_entry* entry,
-			     struct limine_executable_address_response* exe,
+static void map_memmap_entry(struct limine_memmap_entry* entry, struct limine_executable_address_response* exe,
 			     uint64_t hhdm_offset)
 {
-	for (uint64_t addr = entry->base; addr < entry->base + entry->length;
-	     addr += PAGE_SIZE) {
-		vmm_map((void*)(addr + hhdm_offset), (void*)addr,
-			PAGE_PRESENT | PAGE_WRITE);
+	for (uint64_t addr = entry->base; addr < entry->base + entry->length; addr += PAGE_SIZE) {
+		vmm_map((void*)(addr + hhdm_offset), (void*)addr, PAGE_PRESENT | PAGE_WRITE);
 		// We have to manually map the kernel section, so we map it a second time to exe->virtual_base
-		if (entry->type != LIMINE_MEMMAP_EXECUTABLE_AND_MODULES)
-			continue;
+		if (entry->type != LIMINE_MEMMAP_EXECUTABLE_AND_MODULES) continue;
 		uint64_t exe_virt = (addr - entry->base) + exe->virtual_base;
-		vmm_map((void*)exe_virt, (void*)addr,
-			PAGE_PRESENT | PAGE_WRITE);
+		vmm_map((void*)exe_virt, (void*)addr, PAGE_PRESENT | PAGE_WRITE);
 		exe_size += PAGE_SIZE;
 	}
 }
@@ -77,14 +75,11 @@ static void map_memmap_entry(struct limine_memmap_entry* entry,
  */
 static bool is_valid_entry(struct limine_memmap_entry* entry)
 {
-	return entry->type == LIMINE_MEMMAP_USABLE ||
-	       entry->type == LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE ||
-	       entry->type == LIMINE_MEMMAP_EXECUTABLE_AND_MODULES ||
-	       entry->type == LIMINE_MEMMAP_FRAMEBUFFER;
+	return entry->type == LIMINE_MEMMAP_USABLE || entry->type == LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE ||
+	       entry->type == LIMINE_MEMMAP_EXECUTABLE_AND_MODULES || entry->type == LIMINE_MEMMAP_FRAMEBUFFER;
 }
 
-static bool ranges_overlap(uint64_t a_start, uint64_t a_end, uint64_t b_start,
-			   uint64_t b_end)
+static bool ranges_overlap(uint64_t a_start, uint64_t a_end, uint64_t b_start, uint64_t b_end)
 {
 	return !(a_end <= b_start || a_start >= b_end);
 }
@@ -99,17 +94,15 @@ static bool ranges_overlap(uint64_t a_start, uint64_t a_end, uint64_t b_start,
  * @param exe Pointer to the Limine executable address response structure.
  * @param hhdm_offset Offset for the Higher Half Direct Map (HHDM).
  */
-void vmm_init(struct limine_memmap_response* mmap,
-	      struct limine_executable_address_response* exe,
-	      uint64_t hhdm_offset)
+void vmm_init(struct limine_memmap_response* mmap, struct limine_executable_address_response* exe, uint64_t hhdm_offset)
 {
+	g_hhdm_offset = hhdm_offset;
+	log_debug("hhdm_offset: %lx", g_hhdm_offset);
 	uint64_t* pml4_phys = pmm_alloc_page();
 	pml4 = PHYS_TO_VIRT(pml4_phys);
-	log_debug("pml4_phys: %lx, pml4_virt: %lx", (uint64_t)pml4_phys,
-		  (uint64_t)pml4);
+	log_debug("pml4_phys: %lx, pml4_virt: %lx", (uint64_t)pml4_phys, (uint64_t)pml4);
 	if (pml4 == NULL) {
-		log_error(
-			"VMM Initialization failed. PMM didn't return a valid page");
+		log_error("VMM Initialization failed. PMM didn't return a valid page");
 		panic("VMM Initialization failed.");
 	}
 	log_debug("pml4 address: %p", pml4);
@@ -120,8 +113,7 @@ void vmm_init(struct limine_memmap_response* mmap,
 	pml4[510] = VIRT_TO_PHYS(pml4) | PAGE_PRESENT | PAGE_WRITE;
 
 	// Identity map first 64 MiB, skip first 1 MiB
-	for (uint64_t vaddr = 0x100000; vaddr < LOW_IDENTITY;
-	     vaddr += PAGE_SIZE) {
+	for (uint64_t vaddr = 0x100000; vaddr < LOW_IDENTITY; vaddr += PAGE_SIZE) {
 		vmm_map((void*)vaddr, (void*)vaddr, PAGE_PRESENT | PAGE_WRITE);
 	}
 
@@ -141,21 +133,16 @@ void vmm_init(struct limine_memmap_response* mmap,
 	uint64_t kernel_start = exe->virtual_base;
 	uint64_t kernel_end = kernel_start + exe_size;
 	log_info("Kernel range: [%lx - %lx)", kernel_start, kernel_end);
-	log_info("Heap range:   [%lx - %lx)", KERNEL_HEAP_BASE,
-		 KERNEL_HEAP_LIMIT);
-	log_info("Recursive slot: [%lx - %lx)", 0xFFFFFE0000000000,
-		 0xFFFFFEFFFFFFFFFF);
-	if (ranges_overlap(kernel_start, kernel_end, KERNEL_HEAP_BASE,
-			   KERNEL_HEAP_LIMIT)) {
+	log_info("Heap range:   [%lx - %lx)", KERNEL_HEAP_BASE, KERNEL_HEAP_LIMIT);
+	log_info("Recursive slot: [%lx - %lx)", 0xFFFFFE0000000000, 0xFFFFFEFFFFFFFFFF);
+	if (ranges_overlap(kernel_start, kernel_end, KERNEL_HEAP_BASE, KERNEL_HEAP_LIMIT)) {
 		panic("KERNEL AND KERNEL HEAP OVERLAP");
 	}
 
-	size_t bitmap_size_bytes = (KERNEL_HEAP_LIMIT - KERNEL_HEAP_BASE) /
-				   PAGE_SIZE / UINT8_WIDTH;
+	size_t bitmap_size_bytes = (KERNEL_HEAP_LIMIT - KERNEL_HEAP_BASE) / PAGE_SIZE / UINT8_WIDTH;
 	bitmap_size = bitmap_size_bytes / sizeof(uintptr_t);
 	total_page_count = bitmap_size * BITSET_WIDTH;
-	log_debug("Bitmap size bytes: %zu, total pages: %zu", bitmap_size_bytes,
-		  total_page_count);
+	log_debug("Bitmap size bytes: %zu, total pages: %zu", bitmap_size_bytes, total_page_count);
 	// NOTE: Initially setting up kernel heap as bump allocator, can move to something more complex
 	// if needed (reuse of pages)
 	size_t req_pages = CEIL_DIV(bitmap_size_bytes, PAGE_SIZE);
@@ -185,7 +172,7 @@ void vmm_init(struct limine_memmap_response* mmap,
  * @note The function assumes that the bitmap and page table structures are
  *       properly initialized before calling.
  */
-void* vmm_alloc_pages(size_t count)
+void* vmm_alloc_pages(size_t count, bool contiguous)
 {
 	if (count == 0) {
 		log_warn("count cannot be 0");
@@ -197,12 +184,14 @@ void* vmm_alloc_pages(size_t count)
 	for (size_t i = 0; i < total_page_count; i++) {
 		uint64_t word_offset = i / BITSET_WIDTH;
 		uint64_t bit_offset = i % BITSET_WIDTH;
+		bool is_free = (bitmap[word_offset] & (1ULL << bit_offset)) == 0;
 
-		if ((bitmap[word_offset] & (1ULL << bit_offset)) == 0) {
+		if (is_free) {
 			if (cont_start == SIZE_MAX) cont_start = i;
-			cont_len++;
 
-			if (cont_len >= count) goto allocate_page;
+			bool valid_len = (++cont_len) >= count;
+			if (valid_len && !contiguous) goto allocate_pages;
+			if (valid_len && contiguous) goto allocate_pages_contiguous;
 		} else {
 			cont_start = SIZE_MAX;
 			cont_len = 0;
@@ -211,14 +200,43 @@ void* vmm_alloc_pages(size_t count)
 	log_warn("No valid contiguous range found for %zu pages", count);
 	return NULL;
 
-allocate_page:
+allocate_pages:
+	// Allocate contiguous in virtual memory, not necissarily in physical memory
 	for (size_t i = cont_start; i < cont_start + count; i++) {
+		// Calculate bitmap offsets
 		uint64_t word_offset = i / BITSET_WIDTH;
 		uint64_t bit_offset = i % BITSET_WIDTH;
+
+		// Setting page as used
 		bitmap[word_offset] |= (1ULL << bit_offset);
+
 		uint64_t virt_addr = KERNEL_HEAP_BASE + (i * PAGE_SIZE);
 		void* phys_addr = pmm_alloc_page();
+		log_debug("Allocating page at phys %p, and virt %lx", phys_addr, virt_addr);
 		vmm_map((void*)virt_addr, phys_addr, PAGE_PRESENT | PAGE_WRITE);
+	}
+	free_page_count -= count;
+	return (void*)(KERNEL_HEAP_BASE + (cont_start * PAGE_SIZE));
+
+allocate_pages_contiguous:
+	void* phys_addr = pmm_alloc_contiguous(count);
+	uint64_t start_virt_addr = KERNEL_HEAP_BASE + (cont_start * PAGE_SIZE);
+	log_debug("Allocating %zu contiguous pages, starting at phys %p, and virt %lx", count, phys_addr,
+		  start_virt_addr);
+
+	for (size_t virt_i = cont_start, phys_i = 0; virt_i < cont_start + count; virt_i++, phys_i++) {
+		// Calculate bitmap offsets
+		uint64_t word_offset = virt_i / BITSET_WIDTH;
+		uint64_t bit_offset = virt_i % BITSET_WIDTH;
+
+		// Setting page as used
+		bitmap[word_offset] |= (1ULL << bit_offset);
+
+		uint64_t virt_addr = KERNEL_HEAP_BASE + (virt_i * PAGE_SIZE);
+		size_t phys_i = virt_i - cont_start;
+		uint64_t map_phys = (uintptr_t)phys_addr + (phys_i * PAGE_SIZE);
+
+		vmm_map((void*)virt_addr, (void*)map_phys, PAGE_PRESENT | PAGE_WRITE);
 	}
 	free_page_count -= count;
 	return (void*)(KERNEL_HEAP_BASE + (cont_start * PAGE_SIZE));
@@ -241,8 +259,7 @@ void vmm_free_pages(void* addr, size_t count)
 {
 	uint64_t page_index = ((uint64_t)addr - KERNEL_HEAP_BASE) / PAGE_SIZE;
 	if (page_index >= total_page_count) {
-		log_error("Attempted to free page out of bounds: %lu",
-			  page_index);
+		log_error("Attempted to free page out of bounds: %lu", page_index);
 		return;
 	}
 	log_debug("Freeing index %ld", page_index);
@@ -251,8 +268,7 @@ void vmm_free_pages(void* addr, size_t count)
 		uint64_t word_offset = page_index / BITSET_WIDTH;
 		uint64_t bit_offset = page_index % BITSET_WIDTH;
 		bitmap[word_offset] &= ~(1ULL << bit_offset);
-		vmm_unmap((void*)(KERNEL_HEAP_BASE + (page_index * PAGE_SIZE)),
-			  true);
+		vmm_unmap((void*)(KERNEL_HEAP_BASE + (page_index * PAGE_SIZE)), true);
 	}
 	free_page_count += count;
 }
@@ -298,6 +314,8 @@ static uint64_t vmm_alloc_table()
  */
 void vmm_map(void* virt_addr, void* phys_addr, uint64_t flags)
 {
+	// log_debug("Mapping virt_addr: %p, to phys_addr: %p", virt_addr,
+	// 	  phys_addr);
 	flags |= PAGE_PRESENT | PAGE_WRITE;
 	uint64_t pml4_i = VADDR_PML4_INDEX(virt_addr);
 	if ((pml4[pml4_i] & PAGE_PRESENT) == 0) {
@@ -305,15 +323,13 @@ void vmm_map(void* virt_addr, void* phys_addr, uint64_t flags)
 	}
 
 	// Extract the physical address and convert it to a usable virtual pointer
-	uint64_t* pdpt = (uint64_t*)PHYS_TO_VIRT(pml4[pml4_i] &
-						 ~FLAGS_MASK); // Mask off flags
+	uint64_t* pdpt = (uint64_t*)PHYS_TO_VIRT(pml4[pml4_i] & ~FLAGS_MASK); // Mask off flags
 	uint64_t pdpt_i = VADDR_PDPT_INDEX(virt_addr);
 	if ((pdpt[pdpt_i] & PAGE_PRESENT) == 0) {
 		pdpt[pdpt_i] = vmm_alloc_table() | flags;
 	}
 
-	uint64_t* pd = (uint64_t*)PHYS_TO_VIRT(pdpt[pdpt_i] &
-					       ~FLAGS_MASK); // Mask off flags
+	uint64_t* pd = (uint64_t*)PHYS_TO_VIRT(pdpt[pdpt_i] & ~FLAGS_MASK); // Mask off flags
 	uint64_t pd_i = VADDR_PD_INDEX(virt_addr);
 	if ((pd[pd_i] & PAGE_PRESENT) == 0) {
 		pd[pd_i] = vmm_alloc_table() | flags;
@@ -325,9 +341,8 @@ void vmm_map(void* virt_addr, void* phys_addr, uint64_t flags)
 	if ((pt[pt_i] & PAGE_PRESENT) == 0) {
 		pt[pt_i] = (uint64_t)phys_addr | flags;
 	} else {
-		log_warn(
-			"Tried to map existing entry, virt_addr: 0x%lx, phys_addr: 0x%lx",
-			(uint64_t)virt_addr, (uint64_t)phys_addr);
+		log_warn("Tried to map existing entry, virt_addr: 0x%lx, phys_addr: 0x%lx", (uint64_t)virt_addr,
+			 (uint64_t)phys_addr);
 		invalidate(virt_addr);
 		pt[pt_i] = (uint64_t)phys_addr | flags;
 	}
@@ -336,26 +351,32 @@ void vmm_map(void* virt_addr, void* phys_addr, uint64_t flags)
 void* vmm_translate(void* virt_addr)
 {
 	uint64_t va = (uint64_t)virt_addr;
+	log_debug("Translating virtual address %lx", va);
 
 	uint64_t pml4_i = VADDR_PML4_INDEX(va);
 	if (!(pml4[pml4_i] & PAGE_PRESENT)) return NULL;
 
-	uint64_t* pdpt =
-		(uint64_t*)PHYS_TO_VIRT(pml4[pml4_i] & PAGE_FRAME_MASK);
+	uint64_t* pdpt = (uint64_t*)PHYS_TO_VIRT(pml4[pml4_i] & PAGE_FRAME_MASK);
+	log_debug("pml4: %p, pml4_i: %lu, pdpt: %p", (void*)pml4, pml4_i, (void*)pdpt);
 	uint64_t pdpt_i = VADDR_PDPT_INDEX(va);
 	if (!(pdpt[pdpt_i] & PAGE_PRESENT)) return NULL;
 
 	uint64_t* pd = (uint64_t*)PHYS_TO_VIRT(pdpt[pdpt_i] & PAGE_FRAME_MASK);
+	log_debug("pdpt: %p, pdpt_i: %lu, pd: %p", (void*)pdpt, pdpt_i, (void*)pd);
 	uint64_t pd_i = VADDR_PD_INDEX(va);
 	if (!(pd[pd_i] & PAGE_PRESENT)) return NULL;
 
 	uint64_t* pt = (uint64_t*)PHYS_TO_VIRT(pd[pd_i] & PAGE_FRAME_MASK);
+	log_debug("pd: %p, pd_i: %lu, pt: %p", (void*)pt, pd_i, (void*)pt);
 	uint64_t pt_i = VADDR_PT_INDEX(va);
 	if (!(pt[pt_i] & PAGE_PRESENT)) return NULL;
 
 	uint64_t frame = pt[pt_i] & PAGE_FRAME_MASK;
 	uint64_t offset = va & 0xFFF;
 
+	log_debug("pt[pt_i]: %lx, pt_i: %lu, frame: %lx, offset: %lx", pt[pt_i], pt_i, frame, offset);
+
+	log_debug("Translating %p, got %p as phys address", virt_addr, (void*)(frame + offset));
 	return (void*)(frame + offset);
 }
 
@@ -382,8 +403,7 @@ void vmm_unmap(void* virt_addr, bool free_phys)
 	uint64_t pml4_i = VADDR_PML4_INDEX(va);
 	if (!(pml4[pml4_i] & PAGE_PRESENT)) goto not_present;
 
-	uint64_t* pdpt =
-		(uint64_t*)PHYS_TO_VIRT(pml4[pml4_i] & PAGE_FRAME_MASK);
+	uint64_t* pdpt = (uint64_t*)PHYS_TO_VIRT(pml4[pml4_i] & PAGE_FRAME_MASK);
 	uint64_t pdpt_i = VADDR_PDPT_INDEX(va);
 	if (!(pdpt[pdpt_i] & PAGE_PRESENT)) goto not_present;
 
@@ -404,7 +424,6 @@ void vmm_unmap(void* virt_addr, bool free_phys)
 	return;
 
 not_present:
-	log_error(
-		"Couldn't traverse tables for 0x%lx, something in the chain was already marked not present",
-		(uint64_t)virt_addr);
+	log_error("Couldn't traverse tables for 0x%lx, something in the chain was already marked not present",
+		  (uint64_t)virt_addr);
 }

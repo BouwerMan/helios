@@ -11,12 +11,12 @@
 
 #define LOW_IDENTITY	   0x4000000 // 64 MiB
 #define PAGE_TABLE_ENTRIES 512
-#define KERNEL_HEAP_BASE   0xFFFFFFFFC0000000UL
-#define KERNEL_HEAP_LIMIT  0xFFFFFFFFE0000000UL
-#define KERNEL_VIRT_BASE   0xFFFFFFFF80000000UL
-#define HHDM_OFFSET	   0xffff800000000000UL // TODO: make this not hardcoded
-#define PHYS_TO_VIRT(p)	   ((void*)((uintptr_t)(p) + HHDM_OFFSET))
-#define VIRT_TO_PHYS(v)	   ((uintptr_t)(v) - HHDM_OFFSET)
+#define KERNEL_HEAP_BASE   0xFFFFFFFFC0000000ULL
+#define KERNEL_HEAP_LIMIT  0xFFFFFFFFE0000000ULL
+#define KERNEL_VIRT_BASE   0xFFFFFFFF80000000ULL
+#define HHDM_OFFSET	   0xffff800000000000ULL // TODO: make this not hardcoded
+// #define PHYS_TO_VIRT(p)	   ((void*)((uintptr_t)(p) + HHDM_OFFSET))
+// #define VIRT_TO_PHYS(v)	   ((uintptr_t)(v) - HHDM_OFFSET)
 
 #define FLAGS_MASK	   0xFFF
 #define PAGE_FRAME_MASK	   (~0xFFFULL)
@@ -36,8 +36,10 @@ void vmm_init(struct limine_memmap_response* mmap,
 	      uint64_t hhdm_offset);
 void vmm_map(void* virt_addr, void* phys_addr, uint64_t flags);
 void vmm_unmap(void* virt_addr, bool free_phys);
-void* vmm_alloc_pages(size_t pages);
+void* vmm_alloc_pages(size_t count, bool contiguous);
 void vmm_free_pages(void* addr, size_t count);
 // For testing
 void* vmm_translate(void* virt_addr);
+void* recursive_vmm_translate(void* addr);
+uint64_t test_virt_to_phys(uint64_t virt_addr);
 void vmm_dump_page_table();
