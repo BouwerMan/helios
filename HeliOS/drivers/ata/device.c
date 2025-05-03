@@ -29,8 +29,7 @@ void device_init(sATADevice* device)
 		device->rw_handler = ata_read_write;
 		log_info("Device %d is an ATA-device", device->id);
 		// Read partition table
-		if (!ata_read_write(device, OP_READ, buffer, 0,
-				    device->sec_size, 1)) {
+		if (!ata_read_write(device, OP_READ, buffer, 0, device->sec_size, 1)) {
 			log_error("Unable to read partition table");
 			device->present = false;
 			return;
@@ -49,8 +48,7 @@ static bool device_identify(sATADevice* device, uint16_t cmd)
 	// ata-atapi-8 7.12
 	sATAController* ctrl = device->ctrl;
 
-	uint32_t device_select = device->id & SLAVE_BIT ? DRIVE_SLAVE :
-							  DRIVE_MASTER;
+	uint32_t device_select = device->id & SLAVE_BIT ? DRIVE_SLAVE : DRIVE_MASTER;
 
 	// printf("Selecting device %d, using value: 0x%X\n", device->id, device_select);
 	ctrl_outb(ctrl, ATA_REG_DRIVE_SELECT, device_select);
@@ -84,8 +82,7 @@ static bool device_identify(sATADevice* device, uint16_t cmd)
 	// IDK if this second wait is needed
 	ctrl_wait(ctrl);
 	if (ctrl_inb(ctrl, ATA_REG_STATUS) & CMD_ST_ERROR) {
-		log_error("Device %d has error 0x%X", device->id,
-			  ctrl_inb(ctrl, ATA_REG_ERROR));
+		log_error("Device %d has error 0x%X", device->id, ctrl_inb(ctrl, ATA_REG_ERROR));
 		return false;
 	}
 	for (size_t i = 0; i < 256; i++) {
@@ -98,8 +95,7 @@ static bool device_identify(sATADevice* device, uint16_t cmd)
 	}
 
 	// TODO: Need to support more than 128GB disks
-	uint32_t lba_num = device->info[ATA_INFO_SECTORS_LOW] |
-			   (device->info[ATA_INFO_SECTORS_HIGH] << 16);
+	uint32_t lba_num = device->info[ATA_INFO_SECTORS_LOW] | (device->info[ATA_INFO_SECTORS_HIGH] << 16);
 	log_info("Device %d LBA support: 0x%X", device->id, lba_num);
 	return true;
 }
@@ -109,14 +105,11 @@ bool device_poll(sATADevice* device)
 	uint32_t elapsed = 0;
 	sATAController* ctrl = device->ctrl;
 	uint8_t status = ctrl_inb(ctrl, ATA_REG_STATUS);
-	while (status & CMD_ST_BUSY && !(status & CMD_ST_DRQ) &&
-	       elapsed < ATA_WAIT_TIMEOUT) {
-		if (status & CMD_ST_ERROR || status & CMD_ST_DISK_FAULT)
-			return false;
-		sleep(20);
-		elapsed += 20;
+	while (status & CMD_ST_BUSY && !(status & CMD_ST_DRQ) && elapsed < 100000) {
+		if (status & CMD_ST_ERROR || status & CMD_ST_DISK_FAULT) return false;
+		elapsed++;
 		status = ctrl_inb(ctrl, ATA_REG_STATUS);
 	}
-	if (elapsed >= ATA_WAIT_TIMEOUT) return false;
+	if (elapsed >= 100000) return false;
 	return true;
 }

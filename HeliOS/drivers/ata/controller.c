@@ -66,6 +66,7 @@ void ctrl_init()
 		ctrls[i].ide_ctrl = ide_ctrl;
 
 		if (ctrls[i].use_dma) {
+			// TODO: Make sure this is in low 4GB
 			ctrls[i].prdt = vmm_alloc_pages(1, false);
 			log_debug("prdt: %p", (void*)ctrls[i].prdt);
 			// TODO: clean up on kmalloc fail
