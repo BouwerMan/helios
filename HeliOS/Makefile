@@ -1,4 +1,4 @@
-CFLAGS?=-O0 -g -std=gnu17
+CFLAGS?=-O0 -g -std=gnu23
 CPPFLAGS?=
 LDFLAGS?=
 LIBS?=
@@ -25,11 +25,12 @@ ARCHDIR=arch/$(HOSTARCH)
 include $(ARCHDIR)/make.config
 
 DEFINES:=
+DEFINES+=-DLIMINE_API_REVISION=3
 # DEFINES+=-DKERNEL_DEBUG
 DEFINES+=-DKMALLOC_TESTING
 DEFINES+=-D__KDEBUG__
 # DEFINES+=-DFS_TESTING
-# DEFINES+=-DMEM_MAP_DUMP
+DEFINES+=-D__PMM_DEBUG__
 # DEFINES+=-DPRINTF_TESTING
 
 CFLAGS:=$(CFLAGS) $(KERNEL_ARCH_CFLAGS)
@@ -40,19 +41,22 @@ LIBS:=$(LIBS) $(KERNEL_ARCH_LIBS)
 KERNEL_OBJS=\
 $(KERNEL_ARCH_OBJS) \
 $(BUILDDIR)/$(KERNELDIR)/kernel.o \
-$(BUILDDIR)/$(KERNELDIR)/gdt.o \
-$(BUILDDIR)/$(KERNELDIR)/idt.o \
-$(BUILDDIR)/$(KERNELDIR)/isr.o \
-$(BUILDDIR)/$(KERNELDIR)/irq.o \
+$(BUILDDIR)/$(KERNELDIR)/screen.o \
 $(BUILDDIR)/$(KERNELDIR)/timer.o \
-$(BUILDDIR)/$(KERNELDIR)/keyboard.o \
+$(BUILDDIR)/$(KERNELDIR)/memory/pmm.o \
+$(BUILDDIR)/$(KERNELDIR)/memory/vmm.o \
 $(BUILDDIR)/$(KERNELDIR)/panic.o \
-$(BUILDDIR)/$(KERNELDIR)/cpu.o \
-$(BUILDDIR)/$(KERNELDIR)/memory.o \
 $(BUILDDIR)/$(KERNELDIR)/liballoc.o \
 $(BUILDDIR)/$(KERNELDIR)/liballoc_hooks.o \
+# $(BUILDDIR)/$(KERNELDIR)/idt.o \
+# $(BUILDDIR)/$(KERNELDIR)/isr.o \
+# $(BUILDDIR)/$(KERNELDIR)/irq.o \
+# $(BUILDDIR)/$(KERNELDIR)/keyboard.o \
+# $(BUILDDIR)/$(KERNELDIR)/cpu.o \
+# $(BUILDDIR)/$(KERNELDIR)/memory.o \
 
 DRIVER_OBJS=\
+$(BUILDDIR)/$(DRIVERDIR)/serial.o \
 $(BUILDDIR)/$(DRIVERDIR)/pci/pci.o \
 $(BUILDDIR)/$(DRIVERDIR)/ata/controller.o \
 $(BUILDDIR)/$(DRIVERDIR)/ata/device.o \
@@ -62,16 +66,20 @@ $(BUILDDIR)/$(DRIVERDIR)/fs/fat.o \
 $(BUILDDIR)/$(DRIVERDIR)/fs/vfs.o \
 
 UTIL_OBJS=\
+$(BUILDDIR)/$(UTILDIR)/log.o \
 $(BUILDDIR)/$(UTILDIR)/ht.o \
 
 OBJS=\
 $(KERNEL_OBJS) \
 $(DRIVER_OBJS) \
 $(UTIL_OBJS) \
+$(BUILDDIR)/fonts/font.o \
 #$(ARCHDIR)/crti.o \
 #$(ARCHDIR)/crtbegin.o \
 #$(ARCHDIR)/crtend.o \
 #$(ARCHDIR)/crtn.o \
+
+# TODO: Add fonts to specific location, could also be on disk somewhere once filesystems exist
 
 LINK_LIST=\
 $(LDFLAGS) \
@@ -79,6 +87,7 @@ $(KERNEL_OBJS) \
 $(DRIVER_OBJS) \
 $(UTIL_OBJS) \
 $(LIBS) \
+$(BUILDDIR)/fonts/font.o \
 #$(ARCHDIR)/crti.o \
 #$(ARCHDIR)/crtbegin.o \
 #$(ARCHDIR)/crtend.o \
@@ -92,14 +101,14 @@ all: $(OSNAME).kernel
 
 $(OSNAME).kernel: $(OBJS) $(ARCHDIR)/linker.ld
 	$(CC) -T $(ARCHDIR)/linker.ld -o $(BUILDDIR)/$@ $(CFLAGS) $(LINK_LIST)
-	grub-file --is-x86-multiboot $(BUILDDIR)/$(OSNAME).kernel
+	# grub-file --is-x86-multiboot $(BUILDDIR)/$(OSNAME).kernel
 
 $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 	OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
 
 $(BUILDDIR)/%.o: %.c
 	mkdir -p $(@D)
-	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS) $(DEFINES)
+	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS) $(DEFINES) $(GDEFINES) $(TESTS)
 
 $(BUILDDIR)/%.o: %.s
 	@mkdir -p $(@D)
@@ -107,7 +116,11 @@ $(BUILDDIR)/%.o: %.s
 
 $(BUILDDIR)/%.o: %.asm
 	@mkdir -p $(@D)
-	nasm -felf32 $< -o $@
+	nasm -felf64 -g -F dwarf $< -o $@
+
+$(BUILDDIR)/%.o: %.psf
+	@mkdir -p $(@D)
+	objcopy -O elf64-x86-64 -B i386 -I binary $< $@
 
 clean:
 	rm -rvf $(BUILDDIR)

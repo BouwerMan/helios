@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 // Inline assembly utilities
-static inline void halt() { asm volatile("hlt"); }
+static inline void halt() { __asm__ volatile("hlt"); }
 
 static inline void outb(uint16_t port, uint8_t val)
 {
@@ -28,10 +28,7 @@ static inline uint8_t inb(uint16_t port)
  * @param port the port
  * @param val the value
  */
-static inline void outword(uint16_t port, uint16_t val)
-{
-    __asm__ volatile("out	%%ax,%%dx" : : "a"(val), "d"(port));
-}
+static inline void outword(uint16_t port, uint16_t val) { __asm__ volatile("out	%%ax,%%dx" : : "a"(val), "d"(port)); }
 
 /**
  * Outputs the dword <val> to the I/O-Port <port>

@@ -36,6 +36,8 @@ $(BUILDDIR)/string/strdup.o \
 $(BUILDDIR)/string/strcat.o \
 $(BUILDDIR)/string/memset.o \
 $(BUILDDIR)/string/memcpy.o \
+$(BUILDDIR)/string/memmove.o \
+$(BUILDDIR)/string/memcmp.o \
 $(BUILDDIR)/stdio/printf.o \
 $(BUILDDIR)/stdio/putchar.o \
 $(BUILDDIR)/stdio/puts.o \

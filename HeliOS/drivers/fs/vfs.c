@@ -2,9 +2,9 @@
 #include <drivers/fs/vfs.h>
 #include <kernel/liballoc.h>
 #include <kernel/sys.h>
-#include <stdio.h>
 #include <string.h>
 #include <util/ht.h>
+#include <util/log.h>
 
 struct vfs_fs_type* fs_list = NULL;
 struct vfs_mount* mount_list = NULL;
@@ -18,8 +18,8 @@ static void register_mount(struct vfs_mount* mnt);
 
 static void add_superblock(struct vfs_superblock* sb)
 {
-    if (sb_idx >= 8) return;
-    sb_list[sb_idx++] = sb;
+	if (sb_idx >= 8) return;
+	sb_list[sb_idx++] = sb;
 }
 
 /**
@@ -40,15 +40,15 @@ static void add_superblock(struct vfs_superblock* sb)
  */
 void vfs_init(size_t dhash_size)
 {
-    sb_list = kmalloc(sizeof(uintptr_t) * 8);
+	sb_list = kmalloc(sizeof(uintptr_t) * 8);
 
-    // TODO: Implement dentry destructors
-    dentry_ht = ht_create(dhash_size);
-    dentry_ht->ops->hash = dentry_hash;
-    dentry_ht->ops->compare = dentry_compare;
+	// TODO: Implement dentry destructors
+	dentry_ht = ht_create(dhash_size);
+	dentry_ht->ops->hash = dentry_hash;
+	dentry_ht->ops->compare = dentry_compare;
 
-    // TODO: Better way to init all the filesystems
-    fat_init();
+	// TODO: Better way to init all the filesystems
+	fat_init();
 }
 
 /**
@@ -64,12 +64,12 @@ void vfs_init(size_t dhash_size)
  */
 static struct vfs_fs_type* find_filesystem(uint8_t fs_type)
 {
-    struct vfs_fs_type* p = fs_list;
-    while (p) {
-        if (p->fs_type == fs_type) return p;
-        p = p->next;
-    }
-    return NULL;
+	struct vfs_fs_type* p = fs_list;
+	while (p) {
+		if (p->fs_type == fs_type) return p;
+		p = p->next;
+	}
+	return NULL;
 }
 
 /**
@@ -86,8 +86,8 @@ static struct vfs_fs_type* find_filesystem(uint8_t fs_type)
  */
 struct vfs_dentry* dget(struct vfs_dentry* dentry)
 {
-    dentry->ref_count++;
-    return dentry;
+	dentry->ref_count++;
+	return dentry;
 }
 
 /**
@@ -96,7 +96,7 @@ struct vfs_dentry* dget(struct vfs_dentry* dentry)
  */
 void dentry_add(struct vfs_dentry* dentry)
 {
-    ht_set(dentry_ht, dentry, dentry);
+	ht_set(dentry_ht, dentry, dentry);
 }
 
 /**
@@ -113,38 +113,39 @@ void dentry_add(struct vfs_dentry* dentry)
  */
 struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
 {
-    // FIXME: I'm doing some funky stuff between inodes and dentrys that
-    // probably is bad
-    struct vfs_dentry* found;
-    // Have to allocate some stuff beforehand for the filesystem and hash table
-    // checks
-    struct vfs_dentry* child = kmalloc(sizeof(struct vfs_dentry));
-    if (!child) return NULL;
-    child->name = strdup(name);
-    if (!child->name) {
-        kfree(child);
-        return NULL;
-    }
-    child->parent = parent;
-    child->fs_data = parent->fs_data;
-    // Check hash table first if found exit
-    if ((found = ht_get(dentry_ht, child)) != NULL) {
-        // Since we found it, we free all the child init stuff then return found
-        kfree(child->name);
-        kfree(child);
-        return dget(found);
-    }
+	// FIXME: I'm doing some funky stuff between inodes and dentrys that
+	// probably is bad
+	struct vfs_dentry* found;
+	// Have to allocate some stuff beforehand for the filesystem and hash table
+	// checks
+	struct vfs_dentry* child = kmalloc(sizeof(struct vfs_dentry));
+	if (!child) return NULL;
+	child->name = strdup(name);
+	if (!child->name) {
+		kfree(child);
+		return NULL;
+	}
+	child->parent = parent;
+	child->fs_data = parent->fs_data;
+	// Check hash table first if found exit
+	if ((found = ht_get(dentry_ht, child)) != NULL) {
+		// Since we found it, we free all the child init stuff then return found
+		kfree(child->name);
+		kfree(child);
+		return dget(found);
+	}
 
-    if (!parent->inode || !parent->inode->ops || !parent->inode->ops->lookup) {
-        puts("Invalid inode operations");
-        kfree(child->name);
-        kfree(child);
-        return NULL; // Handle invalid inode or missing lookup operation
-    }
+	if (!parent->inode || !parent->inode->ops ||
+	    !parent->inode->ops->lookup) {
+		log_error("Invalid inode operations");
+		kfree(child->name);
+		kfree(child);
+		return NULL; // Handle invalid inode or missing lookup operation
+	}
 
-    // Can just return the end result, if not found then child is a negative
-    // dentry (inode == NULL). Otherwise it was properly found.
-    return parent->inode->ops->lookup(parent->inode, child);
+	// Can just return the end result, if not found then child is a negative
+	// dentry (inode == NULL). Otherwise it was properly found.
+	return parent->inode->ops->lookup(parent->inode, child);
 }
 
 #define FNV_PRIME  0x01000193 ///< The FNV prime constant.
@@ -162,22 +163,22 @@ struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
  */
 uint32_t dentry_hash(const void* key)
 {
-    struct vfs_dentry* dkey = (struct vfs_dentry*)key;
-    uint32_t hash = FNV_OFFSET;
-    // Initially hash the parent inode id
-    uint8_t* id_bytes = (uint8_t*)&dkey->parent->inode->id;
-    for (int i = 0; i < 4; i++) {
-        hash ^= id_bytes[i];
-        hash *= FNV_PRIME;
-    }
+	struct vfs_dentry* dkey = (struct vfs_dentry*)key;
+	uint32_t hash = FNV_OFFSET;
+	// Initially hash the parent inode id
+	uint8_t* id_bytes = (uint8_t*)&dkey->parent->inode->id;
+	for (int i = 0; i < 4; i++) {
+		hash ^= id_bytes[i];
+		hash *= FNV_PRIME;
+	}
 
-    // Use that as a starting point for the name hash
-    for (const char* p = dkey->name; *p; p++) {
-        hash ^= (uint32_t)(unsigned char)(*p);
-        hash *= FNV_PRIME;
-    }
+	// Use that as a starting point for the name hash
+	for (const char* p = dkey->name; *p; p++) {
+		hash ^= (uint32_t)(unsigned char)(*p);
+		hash *= FNV_PRIME;
+	}
 
-    return hash;
+	return hash;
 }
 
 /**
@@ -192,10 +193,10 @@ uint32_t dentry_hash(const void* key)
  */
 bool dentry_compare(const void* key1, const void* key2)
 {
-    struct vfs_dentry* dkey1 = (struct vfs_dentry*)key1;
-    struct vfs_dentry* dkey2 = (struct vfs_dentry*)key2;
-    return (strcmp(dkey1->name, dkey2->name) == 0)
-        && (dkey1->parent->inode->id == dkey2->parent->inode->id);
+	struct vfs_dentry* dkey1 = (struct vfs_dentry*)key1;
+	struct vfs_dentry* dkey2 = (struct vfs_dentry*)key2;
+	return (strcmp(dkey1->name, dkey2->name) == 0) &&
+	       (dkey1->parent->inode->id == dkey2->parent->inode->id);
 }
 
 /**
@@ -215,29 +216,29 @@ bool dentry_compare(const void* key1, const void* key2)
  */
 int vfs_open(const char* path, struct vfs_file* file)
 {
-    // Just going to have this do the path walking
-    // linux kernel takes inode as argument, might want that in the future.
-    // Would probably jsut confuse myself because then you need a wrapper
-    // function (open()) that travels the path and then calls this for fs
-    // specific open().
+	// Just going to have this do the path walking
+	// linux kernel takes inode as argument, might want that in the future.
+	// Would probably jsut confuse myself because then you need a wrapper
+	// function (open()) that travels the path and then calls this for fs
+	// specific open().
 
-    struct vfs_dentry* dentry = vfs_resolve_path(path);
-    if (!dentry) return -1;
-    if (!dentry->inode) return -1;
+	struct vfs_dentry* dentry = vfs_resolve_path(path);
+	if (!dentry) return -1;
+	if (!dentry->inode) return -1;
 
-    if (dentry->inode->f_size == 0) return -1; // Invalid file size
-    file->file_ptr = kmalloc(dentry->inode->f_size);
-    if (!file->file_ptr) return -2; // mem alloc failure
+	if (dentry->inode->f_size == 0) return -1; // Invalid file size
+	file->file_ptr = kmalloc(dentry->inode->f_size);
+	if (!file->file_ptr) return -2; // mem alloc failure
 
-    file->file_size = dentry->inode->f_size;
-    file->read_ptr = file->file_ptr;
+	file->file_size = dentry->inode->f_size;
+	file->read_ptr = file->file_ptr;
 
-    int ret = dentry->inode->ops->open(dentry->inode, file);
-    if (ret < 0) {
-        kfree(file->file_ptr);
-        return ret;
-    }
-    return 0;
+	int ret = dentry->inode->ops->open(dentry->inode, file);
+	if (ret < 0) {
+		kfree(file->file_ptr);
+		return ret;
+	}
+	return 0;
 }
 
 /**
@@ -246,9 +247,9 @@ int vfs_open(const char* path, struct vfs_file* file)
  */
 void vfs_close(struct vfs_file* file)
 {
-    // TODO: should probably flush buffers or smthn. Maybe update meta data
-    kfree(file->file_ptr);
-    kfree(file);
+	// TODO: should probably flush buffers or smthn. Maybe update meta data
+	kfree(file->file_ptr);
+	kfree(file);
 }
 
 /**
@@ -269,43 +270,45 @@ void vfs_close(struct vfs_file* file)
  *  - -1 on failure (e.g., memory allocation failure or missing mount function).
  */
 int mount(const char* mount_point, sATADevice* device, sPartition* partition,
-          uint8_t fs_type)
+	  uint8_t fs_type)
 {
-    // building mount struct
-    struct vfs_mount* mount = kmalloc(sizeof(struct vfs_mount));
-    if (!mount) return -1;
-    mount->mount_point = strdup(mount_point);
-    if (!mount->mount_point) {
-        kfree(mount);
-        return -1;
-    }
-    mount->device = device;
-    mount->lba_start = partition->start;
-    mount->flags = partition->present ? MOUNT_PRESENT : 0;
-    mount->next = NULL;
+	// building mount struct
+	struct vfs_mount* mount = kmalloc(sizeof(struct vfs_mount));
+	if (!mount) return -1;
+	mount->mount_point = strdup(mount_point);
+	if (!mount->mount_point) {
+		kfree(mount);
+		return -1;
+	}
+	mount->device = device;
+	mount->lba_start = partition->start;
+	mount->flags = partition->present ? MOUNT_PRESENT : 0;
+	mount->next = NULL;
 
-    // If it is present we add it to the array and init filesystem
-    if (mount->flags & MOUNT_PRESENT) {
-        puts("Adding mount");
-        register_mount(mount);
-        // Set rootfs
-        puts("Initializing filesystem");
-        struct vfs_fs_type* fs = find_filesystem(fs_type);
-        if (fs->mount == NULL) panic("uh oh mount function dont exist");
-        struct vfs_superblock* sb = fs->mount(device, partition->start, 0);
-        if (!mount) {
-            kfree(mount->mount_point);
-            kfree(mount);
-            return -1;
-        }
-        mount->sb = sb;
-        add_superblock(sb);
-        if (mount->mount_point[0] == '/' && (strlen(mount->mount_point) == 1)) {
-            rootfs = mount->sb;
-        }
-        return 0;
-    }
-    return 1;
+	// If it is present we add it to the array and init filesystem
+	if (mount->flags & MOUNT_PRESENT) {
+		log_info("Adding mount");
+		register_mount(mount);
+		// Set rootfs
+		log_info("Initializing filesystem");
+		struct vfs_fs_type* fs = find_filesystem(fs_type);
+		if (fs->mount == NULL) panic("uh oh mount function dont exist");
+		struct vfs_superblock* sb =
+			fs->mount(device, partition->start, 0);
+		if (!mount) {
+			kfree(mount->mount_point);
+			kfree(mount);
+			return -1;
+		}
+		mount->sb = sb;
+		add_superblock(sb);
+		if (mount->mount_point[0] == '/' &&
+		    (strlen(mount->mount_point) == 1)) {
+			rootfs = mount->sb;
+		}
+		return 0;
+	}
+	return 1;
 }
 
 /**
@@ -318,12 +321,12 @@ int mount(const char* mount_point, sATADevice* device, sPartition* partition,
  */
 static void register_mount(struct vfs_mount* mnt)
 {
-    if (mount_list == NULL) {
-        mount_list = mnt;
-    } else {
-        mnt->next = mount_list;
-        mount_list = mnt;
-    }
+	if (mount_list == NULL) {
+		mount_list = mnt;
+	} else {
+		mnt->next = mount_list;
+		mount_list = mnt;
+	}
 }
 
 /**
@@ -336,22 +339,31 @@ static void register_mount(struct vfs_mount* mnt)
  */
 void register_filesystem(struct vfs_fs_type* fs)
 {
-    if (fs_list == NULL) {
-        fs_list = fs;
-    } else {
-        fs->next = fs_list; // Add fs to beginning of list
-        fs_list = fs;
-    }
+	if (fs_list == NULL) {
+		fs_list = fs;
+	} else {
+		fs->next = fs_list; // Add fs to beginning of list
+		fs_list = fs;
+	}
 }
 
 /// Gets superblock for idx
-struct vfs_superblock* vfs_get_sb(int idx) { return sb_list[idx]; }
+struct vfs_superblock* vfs_get_sb(int idx)
+{
+	return sb_list[idx];
+}
 
 int uuid = 1; // Always points to next available id, 0 = invalid id
 /// Returns new unique ID to use
-int vfs_get_next_id() { return uuid++; }
+int vfs_get_next_id()
+{
+	return uuid++;
+}
 /// Returns most recent allocated id
-int vfs_get_id() { return uuid - 1; }
+int vfs_get_id()
+{
+	return uuid - 1;
+}
 
 /**
  * @brief Resolves an absolute path to a VFS dentry, starting from the correct
@@ -367,32 +379,32 @@ int vfs_get_id() { return uuid - 1; }
  */
 struct vfs_dentry* vfs_resolve_path(const char* path)
 {
-    // TODO: Should check/normalize path
+	// TODO: Should check/normalize path
 
-    struct vfs_mount* match = NULL;
-    size_t match_len = 0;
+	struct vfs_mount* match = NULL;
+	size_t match_len = 0;
 
-    // Traverse mount_list
-    for (struct vfs_mount* m = mount_list; m; m = m->next) {
-        size_t len = strlen(m->mount_point);
-        if (strncmp(path, m->mount_point, len) == 0
-            && (path[len] == '/' || path[len] == '\0')) {
-            if (len > match_len) {
-                match = m;
-                match_len = len;
-            }
-        }
-    }
+	// Traverse mount_list
+	for (struct vfs_mount* m = mount_list; m; m = m->next) {
+		size_t len = strlen(m->mount_point);
+		if (strncmp(path, m->mount_point, len) == 0 &&
+		    (path[len] == '/' || path[len] == '\0')) {
+			if (len > match_len) {
+				match = m;
+				match_len = len;
+			}
+		}
+	}
 
-    if (!match) {
-        return vfs_walk_path(rootfs->root_dentry, path + 1);
-    }
+	if (!match) {
+		return vfs_walk_path(rootfs->root_dentry, path + 1);
+	}
 
-    // Now create relative path for further fs dentry walking
-    const char* rel_path = path + match_len;
-    if (*rel_path == '/') rel_path++; // Skip leading '/' (NEEDED?)
+	// Now create relative path for further fs dentry walking
+	const char* rel_path = path + match_len;
+	if (*rel_path == '/') rel_path++; // Skip leading '/' (NEEDED?)
 
-    return vfs_walk_path(match->sb->root_dentry, rel_path);
+	return vfs_walk_path(match->sb->root_dentry, rel_path);
 }
 
 /**
@@ -411,15 +423,15 @@ struct vfs_dentry* vfs_resolve_path(const char* path)
  */
 struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path)
 {
-    const size_t path_len = strlen(path);
-    char buffer[path_len + 1];
-    strncpy(buffer, path, path_len + 1);
-    char* token = strtok(buffer, "/");
+	const size_t path_len = strlen(path);
+	char buffer[path_len + 1];
+	strncpy(buffer, path, path_len + 1);
+	char* token = strtok(buffer, "/");
 
-    struct vfs_dentry* parent = root;
-    while (token != NULL) {
-        parent = dentry_lookup(parent, token);
-        token = strtok(NULL, "/");
-    }
-    return parent;
+	struct vfs_dentry* parent = root;
+	while (token != NULL) {
+		parent = dentry_lookup(parent, token);
+		token = strtok(NULL, "/");
+	}
+	return parent;
 }

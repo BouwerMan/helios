@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <string.h>
 
 /**
@@ -15,11 +16,13 @@
  *
  * @return A pointer to the memory area `bufptr`.
  */
-void* memset(void* bufptr, int value, size_t size)
+void* memset(void* s, int c, size_t n)
 {
-    unsigned char* buf = (unsigned char*)bufptr;
-    for (size_t i = 0; i < size; i++) {
-        buf[i] = (unsigned char)value;
+    uint8_t* p = (uint8_t*)s;
+
+    for (size_t i = 0; i < n; i++) {
+        p[i] = (uint8_t)c;
     }
-    return bufptr;
+
+    return s;
 }

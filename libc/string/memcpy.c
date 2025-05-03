@@ -9,16 +9,21 @@
  * if they do, the behavior is undefined. Use `memmove()` if overlapping areas
  * are possible.
  *
- * @param   dest    Pointer to the destination buffer where the content is to be copied.
+ * @param   dest    Pointer to the destination buffer where the content is to be
+ * copied.
  * @param   src     Pointer to the source of data to be copied.
  * @param   count   Number of bytes to copy.
  *
  * @return A pointer to the destination buffer dest.
  */
-void* memcpy(void* dest, const void* src, size_t count)
+void* memcpy(void* restrict dest, const void* restrict src, size_t n)
 {
-    for (size_t i = 0; i < count; i++) {
-        ((uint8_t*)dest)[i] = ((uint8_t*)src)[i];
+    uint8_t* restrict pdest = (uint8_t* restrict)dest;
+    const uint8_t* restrict psrc = (const uint8_t* restrict)src;
+
+    for (size_t i = 0; i < n; i++) {
+        pdest[i] = psrc[i];
     }
+
     return dest;
 }

@@ -1,67 +1,96 @@
 #include <kernel/asm.h>
-#include <kernel/sys.h>
 #include <kernel/timer.h>
+#include <util/log.h>
 
+// Some IBM employee had a very fun time when designing this fucker.
 const int PIT_CLK = 1193180;
 
 /* This will keep track of how many ticks that the system
  *  has been running for */
 unsigned int ticks = 0;
 unsigned long ticker = 0;
-uint32_t countdown = 0;
+uint64_t countdown = 0;
 static uint32_t phase = 18;
 
+/**
+ * Sets the timer phase by configuring the Programmable Interval Timer (PIT).
+ *
+ * This function calculates the divisor based on the desired frequency (in Hz)
+ * and programs the PIT to generate interrupts at the specified frequency.
+ *
+ * @param hz The desired frequency in hertz (Hz).
+ */
 void timer_phase(int hz)
 {
-    phase = hz;
-    int divisor = PIT_CLK / hz;        /* Calculate our divisor */
-    outb(0x43, 0x36);                  /* Set our command byte 0x36 */
-    outb(0x40, divisor & 0xFF);        /* Set low byte of divisor */
-    outb(0x40, (divisor >> 8) & 0xFF); /* Set high byte of divisor */
+	phase = hz;
+	int divisor = PIT_CLK / hz; /* Calculate our divisor */
+	uint8_t low = (uint8_t)(divisor & 0xFF);
+	uint8_t high = (uint8_t)((divisor >> 8) & 0xFF);
+	outb(0x43, 0x36); /* Set our command byte 0x36 */
+	outb(0x40, low);  /* Set low byte of divisor */
+	outb(0x40, high); /* Set high byte of divisor */
 }
 
-// NOTE: I have changed the timer phase so now it fires every ~1ms
-//
-/* Handles the timer. In this case, it's very simple: We
- *  increment the 'timer_ticks' variable every time the
- *  timer fires. By default, the timer fires 18.222 times
- *  per second. Why 18.222Hz? Some engineer at IBM must've
- *  been smoking something funky */
-void timer_handler(struct irq_regs* r)
+/**
+ * Handles the timer interrupt.
+ *
+ * This function is called whenever the timer fires. It increments the global
+ * tick count and manages the sleep countdown. Additionally, it performs an
+ * action every `phase` ticks, such as updating a ticker variable.
+ *
+ * @param r Unused parameter representing the CPU registers at the time of the interrupt.
+ */
+void timer_handler(struct registers* r)
 {
-    /* Increment our 'tick count' */
-    ticks++;
-    // Decrement sleep countdown, should be every 1ms
-    if (countdown > 0) countdown--;
-    /* Every 18 clocks (approximately 1 second), we will
+	(void)r;
+	/* Increment our 'tick count' */
+	ticks++;
+	// Decrement sleep countdown, should be every 1ms
+	if (countdown > 0) countdown--;
+	/* Every 18 clocks (approximately 1 second), we will
      *  display a message on the screen */
-    if (ticks % phase == 0) {
-        ticker++;
-        // puts("One second has passed");
-    }
+	if (ticks % phase == 0) {
+		ticker++;
+	}
 }
 
 /* Waits until the timer at least one time.
  * Added optimize attribute to stop compiler from
  * optimizing away the while loop and causing the kernel to hang. */
-void __attribute__((optimize("O0"))) timer_poll()
+void __attribute__((optimize("O0"))) timer_poll(void)
 {
-    while (0 == ticks) { }
+	while (0 == ticks) {
+	}
 }
 
-void sleep(uint32_t millis)
+/**
+ * @brief Suspends execution of the current thread for a specified duration.
+ *
+ * This function blocks the thread by setting a countdown timer and halting
+ * execution in a loop until the countdown reaches zero. The countdown is
+ * decremented externally by the timer interrupt handler.
+ *
+ * @param millis The duration to sleep, in milliseconds.
+ */
+void sleep(uint64_t millis)
 {
-    countdown = millis;
-    while (countdown > 0) {
-        halt();
-    }
+	countdown = millis;
+	while (countdown > 0) {
+		halt();
+	}
 }
 
-/* Sets up the system clock by installing the timer handler
- *  into IRQ0 */
-void timer_init()
+/**
+ * Initializes the system timer to generate interrupts at a frequency of 1000Hz.
+ *
+ * This function sets up the timer by installing the `timer_handler` as the
+ * interrupt service routine (ISR) for IRQ0 and configuring the timer phase.
+ * The timer is essential for task scheduling and timekeeping in the system.
+ */
+void timer_init(void)
 {
-    /* Installs 'timer_handler' to IRQ0 */
-    irq_install_handler(0, timer_handler);
-    timer_phase(1000);
+	log_debug("Initializing timer to 1000Hz");
+	/* Installs 'timer_handler' to IRQ0 */
+	install_isr_handler(IRQ0, timer_handler);
+	timer_phase(1000);
 }

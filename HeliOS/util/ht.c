@@ -27,9 +27,9 @@
  */
 
 #include <kernel/liballoc.h>
-#include <stdio.h>
 #include <string.h>
 #include <util/ht.h>
+#include <util/log.h>
 
 // TODO: Implement some sort of LRU deletion
 // TODO: Implement any sort of removal using custom destructors
@@ -37,14 +37,14 @@
 
 // Default operations to use, caller can overload these if desired
 struct ht_ops default_ops = {
-    .hash = hash_key,
-    .compare = compare_key,
-    .destructor = NULL,
+	.hash = hash_key,
+	.compare = compare_key,
+	.destructor = NULL,
 };
 
 static const char* ht_set_entry(struct ht_entry* entries, size_t capacity,
-                                const void* key, void* value, size_t* plength,
-                                struct ht_ops* ops);
+				const void* key, void* value, size_t* plength,
+				struct ht_ops* ops);
 static bool ht_expand(struct ht* table);
 
 #define INITIAL_CAPACITY 16 // Initial capacity of any hash tables created
@@ -65,19 +65,19 @@ static bool ht_expand(struct ht* table);
 
 struct ht* ht_create(size_t hash_size)
 {
-    struct ht* table = kmalloc(sizeof(struct ht));
-    if (table == NULL) return NULL;
+	struct ht* table = kmalloc(sizeof(struct ht));
+	if (table == NULL) return NULL;
 
-    table->length = 0;
-    table->capacity = hash_size;
-    table->entries = kcalloc(table->capacity, sizeof(struct ht_entry));
-    table->ops = &default_ops;
-    if (table->entries == NULL) {
-        kfree(table);
-        return NULL;
-    }
+	table->length = 0;
+	table->capacity = hash_size;
+	table->entries = kcalloc(table->capacity, sizeof(struct ht_entry));
+	table->ops = &default_ops;
+	if (table->entries == NULL) {
+		kfree(table);
+		return NULL;
+	}
 
-    return table;
+	return table;
 }
 
 /**
@@ -92,15 +92,15 @@ struct ht* ht_create(size_t hash_size)
  */
 void ht_destroy(struct ht* table)
 {
-    // Free allocated keys and values if they have a custom destructor
-    for (size_t i = 0; i < table->capacity; i++) {
-        if (table->ops->destructor)
-            table->ops->destructor(table->entries[i].value);
-        kfree((void*)table->entries[i].key);
-    }
+	// Free allocated keys and values if they have a custom destructor
+	for (size_t i = 0; i < table->capacity; i++) {
+		if (table->ops->destructor)
+			table->ops->destructor(table->entries[i].value);
+		kfree((void*)table->entries[i].key);
+	}
 
-    kfree(table->entries);
-    kfree(table);
+	kfree(table->entries);
+	kfree(table);
 }
 
 /**
@@ -117,22 +117,22 @@ void ht_destroy(struct ht* table)
  */
 void* ht_get(struct ht* table, const void* key)
 {
-    // AND hash with capacity-1 to ensure it's within entries array.
-    // Equivalent to hash % capacity (maybe faster???)
-    uint32_t hash = table->ops->hash(key);
-    size_t index = (size_t)(hash & (uint32_t)(table->capacity - 1));
+	// AND hash with capacity-1 to ensure it's within entries array.
+	// Equivalent to hash % capacity (maybe faster???)
+	uint32_t hash = table->ops->hash(key);
+	size_t index = (size_t)(hash & (uint32_t)(table->capacity - 1));
 
-    while (table->entries[index].key != NULL) {
-        if (table->ops->compare(key, table->entries[index].key)) {
-            // Found key
-            return table->entries[index].value;
-        }
-        // Key wasn't in this slot so we increment (linear probing)
-        index++;
-        // At end of entries, wrap around
-        if (index >= table->capacity) index = 0;
-    }
-    return NULL;
+	while (table->entries[index].key != NULL) {
+		if (table->ops->compare(key, table->entries[index].key)) {
+			// Found key
+			return table->entries[index].value;
+		}
+		// Key wasn't in this slot so we increment (linear probing)
+		index++;
+		// At end of entries, wrap around
+		if (index >= table->capacity) index = 0;
+	}
+	return NULL;
 }
 
 /**
@@ -154,18 +154,18 @@ void* ht_get(struct ht* table, const void* key)
  */
 const char* ht_set(struct ht* table, const void* key, void* value)
 {
-    if (value == NULL) {
-        puts("WOAH YOU SHOULD SPECIFY A HT VALUE BIG MAN");
-        return NULL;
-    }
+	if (value == NULL) {
+		log_error("WOAH YOU SHOULD SPECIFY A HT VALUE BIG MAN");
+		return NULL;
+	}
 
-    // If length will exceed half of current capacity, expand it
-    if (table->length >= table->capacity / 2) {
-        if (!ht_expand(table)) return NULL;
-    }
+	// If length will exceed half of current capacity, expand it
+	if (table->length >= table->capacity / 2) {
+		if (!ht_expand(table)) return NULL;
+	}
 
-    return ht_set_entry(table->entries, table->capacity, key, value,
-                        &table->length, table->ops);
+	return ht_set_entry(table->entries, table->capacity, key, value,
+			    &table->length, table->ops);
 }
 
 /**
@@ -177,7 +177,10 @@ const char* ht_set(struct ht* table, const void* key, void* value)
  * @param table Pointer to the hash table.
  * @return The number of items in the hash table.
  */
-size_t ht_length(struct ht* table) { return table->length; }
+size_t ht_length(struct ht* table)
+{
+	return table->length;
+}
 
 /**
  * @brief Creates a new iterator for the hash table.
@@ -192,10 +195,10 @@ size_t ht_length(struct ht* table) { return table->length; }
  */
 struct ht_iter ht_iterator(struct ht* table)
 {
-    struct ht_iter it;
-    it._table = table;
-    it._index = 0;
-    return it;
+	struct ht_iter it;
+	it._table = table;
+	it._index = 0;
+	return it;
 }
 
 /**
@@ -214,20 +217,20 @@ struct ht_iter ht_iterator(struct ht* table)
  */
 bool ht_next(struct ht_iter* it)
 {
-    // Loop till we've hit end of entries array
-    struct ht* table = it->_table;
-    while (it->_index < table->capacity) {
-        size_t i = it->_index;
-        it->_index++;
-        if (table->entries[i].key != NULL) {
-            // FOUND next non-empty item. update iterator key and value
-            struct ht_entry entry = table->entries[i];
-            it->key = entry.key;
-            it->value = entry.value;
-            return true;
-        }
-    }
-    return false;
+	// Loop till we've hit end of entries array
+	struct ht* table = it->_table;
+	while (it->_index < table->capacity) {
+		size_t i = it->_index;
+		it->_index++;
+		if (table->entries[i].key != NULL) {
+			// FOUND next non-empty item. update iterator key and value
+			struct ht_entry entry = table->entries[i];
+			it->key = entry.key;
+			it->value = entry.value;
+			return true;
+		}
+	}
+	return false;
 }
 
 #define FNV_PRIME  0x01000193 ///< The FNV prime constant.
@@ -246,17 +249,17 @@ bool ht_next(struct ht_iter* it)
  */
 uint32_t hash_key(const void* key)
 {
-    uint32_t hash = FNV_OFFSET;
-    for (const char* p = (const char*)key; *p; p++) {
-        hash ^= (uint32_t)(unsigned char)(*p);
-        hash *= FNV_PRIME;
-    }
-    return hash;
+	uint32_t hash = FNV_OFFSET;
+	for (const char* p = (const char*)key; *p; p++) {
+		hash ^= (uint32_t)(unsigned char)(*p);
+		hash *= FNV_PRIME;
+	}
+	return hash;
 }
 
 bool compare_key(const void* key1, const void* key2)
 {
-    return strcmp(key1, key2) == 0;
+	return strcmp(key1, key2) == 0;
 }
 
 /***********************************
@@ -284,32 +287,32 @@ bool compare_key(const void* key1, const void* key2)
  *         or NULL if memory allocation fails.
  */
 static const char* ht_set_entry(struct ht_entry* entries, size_t capacity,
-                                const void* key, void* value, size_t* plength,
-                                struct ht_ops* ops)
+				const void* key, void* value, size_t* plength,
+				struct ht_ops* ops)
 {
-    uint32_t hash = ops->hash(key);
-    size_t index = (size_t)(hash & (uint32_t)(capacity - 1));
+	uint32_t hash = ops->hash(key);
+	size_t index = (size_t)(hash & (uint32_t)(capacity - 1));
 
-    // Looping until empty entry
-    while (entries[index].key != NULL) {
-        // Check if key exists and updates value if so
-        if (ops->compare(key, entries[index].key)) {
-            entries[index].value = value;
-            return entries[index].key;
-        }
-        // Key was not in this spot and it was full
-        index++;
-        // Wrapping around end of entries
-        if (index >= capacity) index = 0;
-    }
+	// Looping until empty entry
+	while (entries[index].key != NULL) {
+		// Check if key exists and updates value if so
+		if (ops->compare(key, entries[index].key)) {
+			entries[index].value = value;
+			return entries[index].key;
+		}
+		// Key was not in this spot and it was full
+		index++;
+		// Wrapping around end of entries
+		if (index >= capacity) index = 0;
+	}
 
-    if (plength != NULL) {
-        if (key == NULL) return NULL;
-        (*plength)++;
-    }
-    entries[index].key = key;
-    entries[index].value = value;
-    return key;
+	if (plength != NULL) {
+		if (key == NULL) return NULL;
+		(*plength)++;
+	}
+	entries[index].key = key;
+	entries[index].value = value;
+	return key;
 }
 
 /**
@@ -327,25 +330,25 @@ static const char* ht_set_entry(struct ht_entry* entries, size_t capacity,
  */
 static bool ht_expand(struct ht* table)
 {
-    size_t new_capacity = table->capacity * 2;
-    if (new_capacity < table->capacity) return false; // overflow
-    struct ht_entry* new_entries
-        = kcalloc(new_capacity, sizeof(struct ht_entry));
-    if (new_entries == NULL) return false;
+	size_t new_capacity = table->capacity * 2;
+	if (new_capacity < table->capacity) return false; // overflow
+	struct ht_entry* new_entries =
+		kcalloc(new_capacity, sizeof(struct ht_entry));
+	if (new_entries == NULL) return false;
 
-    // Iterate entries, move non-empty to new table
-    for (size_t i = 0; i < table->capacity; i++) {
-        struct ht_entry entry = table->entries[i];
-        if (entry.key != NULL) {
-            ht_set_entry(new_entries, new_capacity, entry.key, entry.value,
-                         NULL, table->ops);
-        }
-    }
+	// Iterate entries, move non-empty to new table
+	for (size_t i = 0; i < table->capacity; i++) {
+		struct ht_entry entry = table->entries[i];
+		if (entry.key != NULL) {
+			ht_set_entry(new_entries, new_capacity, entry.key,
+				     entry.value, NULL, table->ops);
+		}
+	}
 
-    // Free old entries and update table details
-    // Don't need destructor here because we keep a reference in new table
-    kfree(table->entries);
-    table->entries = new_entries;
-    table->capacity = new_capacity;
-    return true;
+	// Free old entries and update table details
+	// Don't need destructor here because we keep a reference in new table
+	kfree(table->entries);
+	table->entries = new_entries;
+	table->capacity = new_capacity;
+	return true;
 }
