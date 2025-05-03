@@ -1,6 +1,7 @@
 #pragma once
 #include "../arch/x86_64/ports.h"
 #include <drivers/ata/partition.h>
+#include <drivers/pci/pci.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -35,7 +36,9 @@ enum {
 	BMR_CMD_READ = 0x8,
 };
 
-#define PRDT_EOT (1 << 15)
+#define IO_PORTBASE_PRIMARY   ((uint16_t)0x3F6)
+#define IO_PORTBASE_SECONDARY ((uint16_t)0x376)
+#define PRDT_EOT	      (1 << 15)
 
 static const int CTRL_IRQ_BASE = 14;
 
@@ -70,12 +73,14 @@ struct sATAController {
 	uint8_t use_dma;
 	/* I/O-ports for the controllers */
 	uint16_t port_base;
+	uint16_t IO_port_base;
 	/* I/O-ports for bus-mastering */
 	uint16_t bmr_base;
 	int irq;
 	int irqsem;
 	sATADevice devices[2];
 	struct PRDT* prdt;
+	const pci_device_t* ide_ctrl;
 };
 
 struct PRDT {

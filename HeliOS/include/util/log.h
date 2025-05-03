@@ -12,65 +12,84 @@
 #define LOG_LEVEL LOG_LEVEL_DEBUG
 #endif
 
+// Optional force-redefinition toggle
+#if defined(FORCE_LOG_REDEF)
+#undef log_debug
+#undef log_info
+#undef log_warn
+#undef log_error
+#undef log_debug_long
+#endif
+
+// Define or redefine log_debug
+#if !defined(log_debug) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_DEBUG
-#define log_debug(fmt, ...)                                                   \
-	do {                                                                  \
-		char __log_buf[LOG_BUFFER_SIZE];                              \
-		snprintf(__log_buf, sizeof(__log_buf),                        \
-			 "[DEBUG] %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, \
-			 __func__, ##__VA_ARGS__);                            \
-		log_output(__log_buf);                                        \
+#define log_debug(fmt, ...)                                                                                           \
+	do {                                                                                                          \
+		char __log_buf[LOG_BUFFER_SIZE];                                                                      \
+		snprintf(__log_buf, sizeof(__log_buf), "[DEBUG] %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, __func__, \
+			 ##__VA_ARGS__);                                                                              \
+		log_output(__log_buf);                                                                                \
 	} while (0)
 #else
 #define log_debug(fmt, ...) ((void)0)
 #endif
+#endif
 
+// Define or redefine log_info
+#if !defined(log_info) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_INFO
-#define log_info(fmt, ...)                                                    \
-	do {                                                                  \
-		char __log_buf[LOG_BUFFER_SIZE];                              \
-		snprintf(__log_buf, sizeof(__log_buf),                        \
-			 "[INFO]  %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, \
-			 __func__, ##__VA_ARGS__);                            \
-		log_output(__log_buf);                                        \
+#define log_info(fmt, ...)                                                                                            \
+	do {                                                                                                          \
+		char __log_buf[LOG_BUFFER_SIZE];                                                                      \
+		snprintf(__log_buf, sizeof(__log_buf), "[INFO]  %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, __func__, \
+			 ##__VA_ARGS__);                                                                              \
+		log_output(__log_buf);                                                                                \
 	} while (0)
 #else
 #define log_info(fmt, ...) ((void)0)
 #endif
+#endif
 
+// Define or redefine log_warn
+#if !defined(log_warn) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_WARN
-#define log_warn(fmt, ...)                                                    \
-	do {                                                                  \
-		char __log_buf[LOG_BUFFER_SIZE];                              \
-		snprintf(__log_buf, sizeof(__log_buf),                        \
-			 "[WARN]  %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, \
-			 __func__, ##__VA_ARGS__);                            \
-		log_output(__log_buf);                                        \
+#define log_warn(fmt, ...)                                                                                            \
+	do {                                                                                                          \
+		char __log_buf[LOG_BUFFER_SIZE];                                                                      \
+		snprintf(__log_buf, sizeof(__log_buf), "[WARN]  %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, __func__, \
+			 ##__VA_ARGS__);                                                                              \
+		log_output(__log_buf);                                                                                \
 	} while (0)
 #else
 #define log_warn(fmt, ...) ((void)0)
 #endif
+#endif
 
+// Define or redefine log_error
+#if !defined(log_error) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_ERROR
-#define log_error(fmt, ...)                                                   \
-	do {                                                                  \
-		char __log_buf[LOG_BUFFER_SIZE];                              \
-		snprintf(__log_buf, sizeof(__log_buf),                        \
-			 "[ERROR] %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, \
-			 __func__, ##__VA_ARGS__);                            \
-		log_output(__log_buf);                                        \
+#define log_error(fmt, ...)                                                                                           \
+	do {                                                                                                          \
+		char __log_buf[LOG_BUFFER_SIZE];                                                                      \
+		snprintf(__log_buf, sizeof(__log_buf), "[ERROR] %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, __func__, \
+			 ##__VA_ARGS__);                                                                              \
+		log_output(__log_buf);                                                                                \
 	} while (0)
 #else
 #define log_error(fmt, ...) ((void)0)
 #endif
+#endif
 
+// Define or redefine log_debug_long
+#if !defined(log_debug_long) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_DEBUG
-#define log_debug_long(msg) \
-	log_long_message("DEBUG", __FILE__, __LINE__, __func__, msg)
+#define log_debug_long(msg) log_long_message("DEBUG", __FILE__, __LINE__, __func__, msg)
 #else
 #define log_debug_long(msg) ((void)0)
 #endif
+#endif
 
+// Function declarations
 void log_output(const char* msg);
-void log_long_message(const char* tag, const char* file, int line,
-		      const char* func, const char* msg);
+void log_long_message(const char* tag, const char* file, int line, const char* func, const char* msg);

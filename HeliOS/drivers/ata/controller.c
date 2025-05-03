@@ -27,7 +27,7 @@ void ctrl_init()
 	}
 
 	// maybe needed to check if I/O space is enabled?
-	uint32_t status = pci_config_read_word(ide_ctrl->bus, ide_ctrl->dev, ide_ctrl->func, 0x04);
+	uint32_t status = pci_config_read_dword(ide_ctrl->bus, ide_ctrl->dev, ide_ctrl->func, 0x04);
 	if ((uint8_t)status == 0xFF) {
 		log_error("Floating IDE bus");
 		return;
@@ -36,22 +36,34 @@ void ctrl_init()
 	ctrls[0].id = DEVICE_PRIMARY;
 	ctrls[0].irq = CTRL_IRQ_BASE;
 	ctrls[0].port_base = PORTBASE_PRIMARY;
+	ctrls[0].IO_port_base = IO_PORTBASE_PRIMARY;
 
 	ctrls[1].id = DEVICE_SECONDARY;
 	ctrls[1].irq = CTRL_IRQ_BASE + 1;
 	ctrls[1].port_base = PORTBASE_SECONDARY;
+	ctrls[1].IO_port_base = IO_PORTBASE_SECONDARY;
 
-	uint32_t bar4 = pci_config_read_word(ide_ctrl->bus, ide_ctrl->dev, ide_ctrl->func, BAR4);
+	uint32_t bar4 = pci_config_read_dword(ide_ctrl->bus, ide_ctrl->dev, ide_ctrl->func, BAR4);
 	if ((bar4 & 1) == 1) {
 		log_debug("BAR4: %x, actual base: %x", bar4, bar4 & 0xFFFFFFFC);
 		ctrls[0].bmr_base = bar4 & 0xFFFFFFFC;
 		ctrls[1].bmr_base = (bar4 & 0xFFFFFFFC) + 0x8;
 	}
+	log_debug("Setting Bus Master Enable for PCI: bus: %x, dev: %x, func: %x", ide_ctrl->bus, ide_ctrl->dev,
+		  ide_ctrl->func);
+	uint32_t cfg = pci_config_read_dword(ide_ctrl->bus, ide_ctrl->dev, ide_ctrl->func, 0x04);
+	log_debug("PCI Configuration: %x", cfg);
+	// Set Bus Master enable
+	pci_config_write_dword(ide_ctrl->bus, ide_ctrl->dev, ide_ctrl->func, 0x04, cfg | 0x4);
+	log_debug("PCI Configuration: %x", cfg);
+	cfg = pci_config_read_dword(ide_ctrl->bus, ide_ctrl->dev, ide_ctrl->func, 0x3C);
+	log_debug("PCI Interrupt stuff, %x", cfg);
 	for (size_t i = 0; i < 2; i++) {
 		log_info("Initializing controller: %d", ctrls[i].id);
 
 		ctrls[i].use_irq = false;
 		ctrls[i].use_dma = true;
+		ctrls[i].ide_ctrl = ide_ctrl;
 
 		if (ctrls[i].use_dma) {
 			ctrls[i].prdt = vmm_alloc_pages(1, false);

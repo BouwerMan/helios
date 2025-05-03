@@ -40,47 +40,35 @@
 // base revision described by the Limine boot protocol specification.
 // See specification for further info.
 
-__attribute__((
-	used,
-	section(".limine_requests"))) static volatile LIMINE_BASE_REVISION(3);
+__attribute__((used, section(".limine_requests"))) static volatile LIMINE_BASE_REVISION(3);
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
 // be made volatile or equivalent, _and_ they should be accessed at least
 // once or marked as used with the "used" attribute as done here.
 
-__attribute__((
-	used,
-	section(".limine_requests"))) static volatile struct limine_framebuffer_request
-	framebuffer_request = { .id = LIMINE_FRAMEBUFFER_REQUEST,
-				.revision = 0 };
+__attribute__((used, section(".limine_requests"))) static volatile struct limine_framebuffer_request
+	framebuffer_request = { .id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0 };
 
-__attribute__((
-	used,
-	section(".limine_requests"))) static volatile struct limine_memmap_request
-	memmap_request = { .id = LIMINE_MEMMAP_REQUEST, .revision = 0 };
+__attribute__((used, section(".limine_requests"))) static volatile struct limine_memmap_request memmap_request = {
+	.id = LIMINE_MEMMAP_REQUEST,
+	.revision = 0
+};
 
-__attribute__((
-	used,
-	section(".limine_requests"))) static volatile struct limine_hhdm_request
-	hhdm_request = { .id = LIMINE_HHDM_REQUEST, .revision = 0 };
+__attribute__((used, section(".limine_requests"))) static volatile struct limine_hhdm_request hhdm_request = {
+	.id = LIMINE_HHDM_REQUEST,
+	.revision = 0
+};
 
-__attribute__((
-	used,
-	section(".limine_requests"))) static volatile struct limine_executable_address_request
-	exe_addr_req = { .id = LIMINE_EXECUTABLE_ADDRESS_REQUEST,
-			 .revision = 0 };
+__attribute__((used, section(".limine_requests"))) static volatile struct limine_executable_address_request
+	exe_addr_req = { .id = LIMINE_EXECUTABLE_ADDRESS_REQUEST, .revision = 0 };
 
 // Finally, define the start and end markers for the Limine requests.
 // These can also be moved anywhere, to any .c file, as seen fit.
 
-__attribute__((
-	used,
-	section(".limine_requests_start"))) static volatile LIMINE_REQUESTS_START_MARKER;
+__attribute__((used, section(".limine_requests_start"))) static volatile LIMINE_REQUESTS_START_MARKER;
 
-__attribute__((
-	used,
-	section(".limine_requests_end"))) static volatile LIMINE_REQUESTS_END_MARKER;
+__attribute__((used, section(".limine_requests_end"))) static volatile LIMINE_REQUESTS_END_MARKER;
 
 // Halt and catch fire function.
 static void hcf(void)
@@ -108,14 +96,12 @@ void kernel_main(void)
 	}
 
 	// Ensure we got a framebuffer.
-	if (framebuffer_request.response == NULL ||
-	    framebuffer_request.response->framebuffer_count < 1) {
+	if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) {
 		hcf();
 	}
 
 	// Ensure we got a memory map
-	if (memmap_request.response == NULL ||
-	    memmap_request.response->entry_count < 1) {
+	if (memmap_request.response == NULL || memmap_request.response->entry_count < 1) {
 		hcf();
 	}
 
@@ -133,8 +119,7 @@ void kernel_main(void)
 	framebuffer = framebuffer_request.response->framebuffers[0];
 
 	init_serial();
-	write_serial_string(
-		"\n\nInitialized serial output, expect a lot of debug messages :)\n\n");
+	write_serial_string("\n\nInitialized serial output, expect a lot of debug messages :)\n\n");
 	screen_init(framebuffer, COLOR_WHITE, COLOR_BLACK);
 	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
 
@@ -150,8 +135,7 @@ void kernel_main(void)
 
 	// TODO: VMM initialization
 	log_info("Initializing VMM");
-	vmm_init(memmap_request.response, exe_addr_req.response,
-		 hhdm_request.response->offset);
+	vmm_init(memmap_request.response, exe_addr_req.response, hhdm_request.response->offset);
 
 	list_devices();
 	ctrl_init();
@@ -167,14 +151,13 @@ void kernel_main(void)
 	} else {
 		// log_info("%s", f.read_ptr);
 	}
-	log_debug("open 2");
+	log_info("open 2");
 	struct vfs_file f2 = { 0 };
 	res2 = vfs_open("/test2.txt", &f2);
 	if (res2 < 0) {
 		log_error("oh no");
 	} else {
-		log_debug("f_size: %zu, at %lx", f2.file_size,
-			  (uint64_t)f2.read_ptr);
+		log_info("f_size: %zu, at %lx", f2.file_size, (uint64_t)f2.read_ptr);
 		// log_debug_long(f2.read_ptr);
 	}
 	vfs_close(&f);

@@ -4,7 +4,15 @@
 #include <limine.h>
 #include <stdint.h>
 #include <string.h>
+
+#ifndef __VMM_DEBUG__
+#define LOG_LEVEL 1
+#define FORCE_LOG_REDEF
 #include <util/log.h>
+#undef FORCE_LOG_REDEF
+#else
+#include <util/log.h>
+#endif
 
 // stores size of exe mappings (usually just kernel)
 static size_t exe_size = 0;

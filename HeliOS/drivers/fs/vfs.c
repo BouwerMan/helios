@@ -135,8 +135,7 @@ struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
 		return dget(found);
 	}
 
-	if (!parent->inode || !parent->inode->ops ||
-	    !parent->inode->ops->lookup) {
+	if (!parent->inode || !parent->inode->ops || !parent->inode->ops->lookup) {
 		log_error("Invalid inode operations");
 		kfree(child->name);
 		kfree(child);
@@ -195,8 +194,7 @@ bool dentry_compare(const void* key1, const void* key2)
 {
 	struct vfs_dentry* dkey1 = (struct vfs_dentry*)key1;
 	struct vfs_dentry* dkey2 = (struct vfs_dentry*)key2;
-	return (strcmp(dkey1->name, dkey2->name) == 0) &&
-	       (dkey1->parent->inode->id == dkey2->parent->inode->id);
+	return (strcmp(dkey1->name, dkey2->name) == 0) && (dkey1->parent->inode->id == dkey2->parent->inode->id);
 }
 
 /**
@@ -269,8 +267,7 @@ void vfs_close(struct vfs_file* file)
  *  - 1 if the partition is not present.
  *  - -1 on failure (e.g., memory allocation failure or missing mount function).
  */
-int mount(const char* mount_point, sATADevice* device, sPartition* partition,
-	  uint8_t fs_type)
+int mount(const char* mount_point, sATADevice* device, sPartition* partition, uint8_t fs_type)
 {
 	// building mount struct
 	struct vfs_mount* mount = kmalloc(sizeof(struct vfs_mount));
@@ -293,8 +290,7 @@ int mount(const char* mount_point, sATADevice* device, sPartition* partition,
 		log_info("Initializing filesystem");
 		struct vfs_fs_type* fs = find_filesystem(fs_type);
 		if (fs->mount == NULL) panic("uh oh mount function dont exist");
-		struct vfs_superblock* sb =
-			fs->mount(device, partition->start, 0);
+		struct vfs_superblock* sb = fs->mount(device, partition->start, 0);
 		if (!mount) {
 			kfree(mount->mount_point);
 			kfree(mount);
@@ -302,8 +298,7 @@ int mount(const char* mount_point, sATADevice* device, sPartition* partition,
 		}
 		mount->sb = sb;
 		add_superblock(sb);
-		if (mount->mount_point[0] == '/' &&
-		    (strlen(mount->mount_point) == 1)) {
+		if (mount->mount_point[0] == '/' && (strlen(mount->mount_point) == 1)) {
 			rootfs = mount->sb;
 		}
 		return 0;
@@ -387,8 +382,7 @@ struct vfs_dentry* vfs_resolve_path(const char* path)
 	// Traverse mount_list
 	for (struct vfs_mount* m = mount_list; m; m = m->next) {
 		size_t len = strlen(m->mount_point);
-		if (strncmp(path, m->mount_point, len) == 0 &&
-		    (path[len] == '/' || path[len] == '\0')) {
+		if (strncmp(path, m->mount_point, len) == 0 && (path[len] == '/' || path[len] == '\0')) {
 			if (len > match_len) {
 				match = m;
 				match_len = len;
@@ -397,6 +391,7 @@ struct vfs_dentry* vfs_resolve_path(const char* path)
 	}
 
 	if (!match) {
+		// FIXME: Doesn't varify rootfs->root_dentry exists
 		return vfs_walk_path(rootfs->root_dentry, path + 1);
 	}
 

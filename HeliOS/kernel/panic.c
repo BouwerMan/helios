@@ -1,4 +1,5 @@
 #include <kernel/screen.h>
+#include <kernel/sys.h>
 #include <util/log.h>
 
 // Very rudimentary panic, still relies on libc and stuff.

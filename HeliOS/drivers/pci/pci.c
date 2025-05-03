@@ -5,28 +5,9 @@
 #include <kernel/liballoc.h>
 #include <util/log.h>
 
-#define VENDOR_INVALID 0xFFFF
-
 // TODO: Dynamiclly allocate
 pci_device_t* devices[32];
 uint8_t device_idx = 0;
-
-enum {
-	BUS_COUNT = 8,
-	DEV_COUNT = 32,
-	FUNC_COUNT = 8,
-};
-
-enum {
-	IOPORT_PCI_CFG_DATA = 0xCFC,
-	IOPORT_PCI_CFG_ADDR = 0xCF8,
-};
-
-enum dev_type {
-	GENERIC = 0x0,
-	PCI_PCI_BRIDGE = 0x1,
-	CARD_BUS_BRIDGE = 0x2,
-};
 
 const pci_device_t* get_device_by_index(uint8_t index)
 {
@@ -52,23 +33,33 @@ const pci_device_t* get_device_by_class(uint8_t base_class, uint8_t sub_class)
 	return NULL;
 }
 
-uint32_t pci_config_read_word(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
+uint32_t pci_config_read_dword(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
 {
 	uint32_t address;
 	uint32_t lbus = (uint32_t)bus;
 	uint32_t lslot = (uint32_t)slot;
 	uint32_t lfunc = (uint32_t)func;
-	uint16_t tmp = 0;
+
+	// Create configuration
+	address = (uint32_t)((lbus << 16) | (lslot << 11) | (lfunc << 8) | (offset & 0xFC) | ((uint32_t)(0x80000000)));
+
+	// Write out address
+	outdword(IOPORT_PCI_CFG_ADDR, address);
+	return indword(IOPORT_PCI_CFG_DATA);
+}
+
+void pci_config_write_dword(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, uint32_t value)
+{
+	uint32_t address;
+	uint32_t lbus = (uint32_t)bus;
+	uint32_t lslot = (uint32_t)slot;
+	uint32_t lfunc = (uint32_t)func;
 
 	// Create configuration
 	address = (uint32_t)((lbus << 16) | (lslot << 11) | (lfunc << 8) | (offset & 0xFC) | ((uint32_t)(0x80000000)));
 
 	outdword(IOPORT_PCI_CFG_ADDR, address);
-	return indword(IOPORT_PCI_CFG_DATA);
-}
-
-uint32_t pci_config_write_word()
-{
+	outdword(IOPORT_PCI_CFG_DATA, value);
 }
 
 void list_devices()
@@ -77,7 +68,7 @@ void list_devices()
 	for (uint8_t i = 0; i < BUS_COUNT; i++) {
 		for (uint8_t j = 0; j < DEV_COUNT; j++) {
 			for (uint8_t k = 0; k < FUNC_COUNT; k++) {
-				uint32_t val = pci_config_read_word(i, j, k, 0);
+				uint32_t val = pci_config_read_dword(i, j, k, 0);
 				if ((val & 0xFFFF) == VENDOR_INVALID) continue;
 
 				log_info("\t(%d, %d, %d) 0x%X", i, j, k, val);
@@ -87,14 +78,14 @@ void list_devices()
 				dev->func = k;
 				dev->device_id = val >> 16;
 				dev->vendor_id = val & 0xFFFF;
-				val = pci_config_read_word(i, j, k, 0x8);
+				val = pci_config_read_dword(i, j, k, 0x8);
 				dev->base_class = val >> 24;
 				dev->sub_class = (val >> 16) & 0xFF;
 				dev->prog_interface = (val >> 8) & 0xFF;
-				val = pci_config_read_word(i, j, k, 0xC);
+				val = pci_config_read_dword(i, j, k, 0xC);
 				dev->type = (val >> 16) & 0xFF;
 				devices[device_idx++] = dev;
-				val = pci_config_read_word(i, j, k, 0x4);
+				val = pci_config_read_dword(i, j, k, 0x4);
 				log_info("status and command: %x", val);
 			}
 		}

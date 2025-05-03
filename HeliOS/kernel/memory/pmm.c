@@ -35,17 +35,19 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <util/log.h>
 
 #ifndef __PMM_DEBUG__
-#undef LOG_LEVEL
-#define LOG_LEVEL LOG_LEVEL_INFO
+#define LOG_LEVEL 1
+#define FORCE_LOG_REDEF
+#include <util/log.h>
+#undef FORCE_LOG_REDEF
+#else
+#include <util/log.h>
 #endif
 
 uint64_t bitmap_phys = 0; ///< Physical address of the bitmap.
-uint64_t* bitmap =
-	NULL; ///< Pointer to the virtual memory mapped to bitmap_phys. free is 0, allocated is 1
-size_t bitmap_size = 0; ///< Size of the bitmap in terms of uint64_t entries.
+uint64_t* bitmap = NULL;  ///< Pointer to the virtual memory mapped to bitmap_phys. free is 0, allocated is 1
+size_t bitmap_size = 0;	  ///< Size of the bitmap in terms of uint64_t entries.
 
 static size_t free_page_count = 0;
 static size_t total_page_count = 0; // Never changes after pmm_init()
@@ -69,8 +71,7 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 	// First pass: Calculate the highest address and total usable memory length.
 	for (size_t i = 0; i < mmap->entry_count; i++) {
 		struct limine_memmap_entry* entry = mmap->entries[i];
-		log_debug("%zu. Start Addr: %lx | Length: %lx | Type: %lu", i,
-			  entry->base, entry->length, entry->type);
+		log_debug("%zu. Start Addr: %lx | Length: %lx | Type: %lu", i, entry->base, entry->length, entry->type);
 		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
 		high_addr = entry->base + entry->length;
 		total_len += entry->length;
@@ -80,9 +81,8 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 	size_t bitmap_size_bytes = high_addr / PAGE_SIZE / UINT8_WIDTH;
 	bitmap_size = bitmap_size_bytes / sizeof(uint64_t);
 	total_page_count = bitmap_size * BITSET_WIDTH;
-	log_debug(
-		"Highest address: 0x%lx, Total memory length: %zx, requires a %zu byte bitmap",
-		high_addr, total_len, bitmap_size_bytes);
+	log_debug("Highest address: 0x%lx, Total memory length: %zx, requires a %zu byte bitmap", high_addr, total_len,
+		  bitmap_size_bytes);
 
 	// Second pass: Find a suitable location for the bitmap.
 	for (size_t i = 0; i < mmap->entry_count; i++) {
@@ -92,9 +92,8 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 
 		// Check if the memory region is large enough to hold the bitmap.
 		if (!(entry->length > bitmap_size_bytes)) continue;
-		log_debug(
-			"Found valid location for bitmap at mmap entry: %zu, base: 0x%lx, length: %lu",
-			i, entry->base, entry->length);
+		log_debug("Found valid location for bitmap at mmap entry: %zu, base: 0x%lx, length: %lu", i,
+			  entry->base, entry->length);
 
 		// Align the base address.
 		bitmap_phys = align_up(entry->base);
@@ -109,8 +108,7 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 	}
 
 	log_debug("Located valid PMM bitmap location");
-	log_debug("Putting bitmap at location: 0x%lx, HHDM_OFFSET: 0x%lx",
-		  (uint64_t)bitmap, hhdm_offset);
+	log_debug("Putting bitmap at location: 0x%lx, HHDM_OFFSET: 0x%lx", (uint64_t)bitmap, hhdm_offset);
 
 	// Initialize the bitmap: Mark all pages as allocated.
 	memset(bitmap, UINT8_MAX, bitmap_size_bytes);
@@ -121,16 +119,12 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 
 		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
 
-		uint64_t start =
-			align_up(entry->base); // Align the start address.
-		uint64_t end = align_down(
-			entry->base + entry->length); // Align the end address.
+		uint64_t start = align_up(entry->base);			// Align the start address.
+		uint64_t end = align_down(entry->base + entry->length); // Align the end address.
 
 		for (uint64_t addr = start; addr < end; addr += PAGE_SIZE) {
 			// Skip pages that overlap with the bitmap itself.
-			if (addr >= bitmap_phys &&
-			    addr < (bitmap_phys + bitmap_size_bytes))
-				continue;
+			if (addr >= bitmap_phys && addr < (bitmap_phys + bitmap_size_bytes)) continue;
 			uint64_t page_index = addr / PAGE_SIZE;
 			uint64_t word_index = page_index / BITSET_WIDTH;
 			uint64_t bit_offset = page_index % BITSET_WIDTH;
@@ -141,8 +135,7 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 		}
 	}
 
-	log_info("PMM Initialized: %zu free pages out of %zu total pages",
-		 free_page_count, total_page_count);
+	log_info("PMM Initialized: %zu free pages out of %zu total pages", free_page_count, total_page_count);
 #ifdef __PMM_TEST__
 	pmm_test();
 #endif
@@ -257,8 +250,7 @@ void pmm_free_contiguous(void* addr, size_t count)
 {
 	uint64_t page_index = (uint64_t)addr / PAGE_SIZE;
 	if (page_index >= total_page_count) {
-		log_error("Attempted to free page out of bounds: %lu",
-			  page_index);
+		log_error("Attempted to free page out of bounds: %lu", page_index);
 		return;
 	}
 	uint64_t end_index = page_index + count;
@@ -318,21 +310,17 @@ void pmm_test(void)
 	// --- Test 1: Allocate individual pages ---
 	for (size_t i = 0; i < MAX_TEST_PAGES; i++) {
 		pages[i] = pmm_alloc_page();
-		EXPECT(pages[i] != NULL,
-		       "pmm_alloc_page() should not return NULL");
-		EXPECT(((uint64_t)pages[i] % PAGE_SIZE) == 0,
-		       "Allocated page should be page-aligned");
+		EXPECT(pages[i] != NULL, "pmm_alloc_page() should not return NULL");
+		EXPECT(((uint64_t)pages[i] % PAGE_SIZE) == 0, "Allocated page should be page-aligned");
 
 		// Optional uniqueness check
 		for (size_t j = 0; j < i; j++) {
-			EXPECT(pages[i] != pages[j],
-			       "Allocated page should be unique");
+			EXPECT(pages[i] != pages[j], "Allocated page should be unique");
 		}
 	}
 
 	size_t after_alloc = pmm_get_free_page_count();
-	EXPECT(after_alloc == initial_free - MAX_TEST_PAGES,
-	       "free_page_count should decrease by MAX_TEST_PAGES");
+	EXPECT(after_alloc == initial_free - MAX_TEST_PAGES, "free_page_count should decrease by MAX_TEST_PAGES");
 
 	// --- Test 2: Free the pages ---
 	for (size_t i = 0; i < MAX_TEST_PAGES; i++) {
@@ -340,22 +328,19 @@ void pmm_test(void)
 	}
 
 	size_t after_free = pmm_get_free_page_count();
-	EXPECT(after_free == initial_free,
-	       "free_page_count should return to initial after freeing");
+	EXPECT(after_free == initial_free, "free_page_count should return to initial after freeing");
 
 	// --- Test 3: Allocate contiguous ---
 	void* block = pmm_alloc_contiguous(16);
 	EXPECT(block != NULL, "pmm_alloc_contiguous(16) should succeed");
-	EXPECT(((uint64_t)block % PAGE_SIZE) == 0,
-	       "Contiguous block should be page-aligned");
+	EXPECT(((uint64_t)block % PAGE_SIZE) == 0, "Contiguous block should be page-aligned");
 
 	if (block != NULL) {
 		for (int i = 1; i < 16; i++) {
 			uint64_t expected = (uint64_t)block + i * PAGE_SIZE;
 			void* check = (void*)expected;
 			// Optionally add a used check here
-			EXPECT((uint64_t)check == expected,
-			       "Contiguous pages should be adjacent");
+			EXPECT((uint64_t)check == expected, "Contiguous pages should be adjacent");
 		}
 
 		pmm_free_contiguous(block, 16);
