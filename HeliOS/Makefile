@@ -48,6 +48,8 @@ $(BUILDDIR)/$(KERNELDIR)/memory/vmm.o \
 $(BUILDDIR)/$(KERNELDIR)/panic.o \
 $(BUILDDIR)/$(KERNELDIR)/liballoc.o \
 $(BUILDDIR)/$(KERNELDIR)/liballoc_hooks.o \
+$(BUILDDIR)/$(KERNELDIR)/tasks/scheduler.o \
+$(BUILDDIR)/$(KERNELDIR)/tasks/switch.o \
 # $(BUILDDIR)/$(KERNELDIR)/idt.o \
 # $(BUILDDIR)/$(KERNELDIR)/isr.o \
 # $(BUILDDIR)/$(KERNELDIR)/irq.o \

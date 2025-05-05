@@ -31,6 +31,7 @@
 #include <kernel/memory/vmm.h>
 #include <kernel/screen.h>
 #include <kernel/sys.h>
+#include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
 #include <limine.h>
 #include <string.h>
@@ -163,7 +164,27 @@ void kernel_main(void)
 	vfs_close(&f);
 	vfs_close(&f2);
 
+	log_debug("Testing weird scheduler lists");
+	init_scheduler();
+	// struct task* next;
+	// next = scheduler_pick_next();
+	// log_debug("Found task with PID: %d", next->PID);
+	// next = scheduler_pick_next();
+	// log_debug("Found task with PID: %d", next->PID);
+	// log_debug("Adding another task");
+	// task_add();
+	// next = scheduler_pick_next();
+	// log_debug("Found task with PID: %d", next->PID);
+	// next = scheduler_pick_next();
+	// log_debug("Found task with PID: %d", next->PID);
+	// next = scheduler_pick_next();
+	// log_debug("Found task with PID: %d", next->PID);
+	// next = scheduler_pick_next();
+	// log_debug("Found task with PID: %d", next->PID);
+
 	// We're done, just hang...
+	log_debug("Sleeping for 1 second");
+	sleep(1000);
 	log_warn("entering infinite loop");
 	hcf();
 }

@@ -4,6 +4,7 @@
 
 extern isr_handler
 extern irq_handler
+extern check_reschedule
 
 global __set_idt
 
@@ -13,6 +14,7 @@ __set_idt:
     ret
 
 %macro PUSHALL 0
+    pushfq
     push    r15
     push    r14
     push    r13
@@ -103,6 +105,7 @@ __set_idt:
     pop     r13
     pop     r14
     pop     r15
+    popfq
 
 	; Cleanup irq & error code from stack
     add     rsp, 0x10
@@ -115,28 +118,34 @@ isr_common_stub:
     sub     rsp, 0x28
 
     cld
-	call    isr_handler
+    call    isr_handler
     add     rsp, 0x28
 
     POPALL
 
     sti
-	iretq
+    iretq
 
 irq_common_stub:
     PUSHALL
 
     mov     rdi, rsp
+    mov     r15, rsp ; save rsp in r15 so we can use scratch space
     sub     rsp, 0x28
 
     cld
     call    irq_handler
-    add     rsp, 0x28
+    ; do NOT clean up scratch space yet
 
-	POPALL
+    ; Pass struct registers* (still in r15) to check_reschedule()
+    mov     rdi, r15
+    call    check_reschedule
+
+    add     rsp, 0x28      ; now clean up scratch space
+    POPALL
 
     sti
-	iretq
+    iretq
 
 ; We don't get information about which interrupt was caller
 ; when the handler is run, so we will need to have a different handler

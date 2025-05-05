@@ -1,4 +1,5 @@
-#include <kernel/asm.h>
+#include "../arch/x86_64/ports.h"
+#include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
 #include <util/log.h>
 
@@ -11,6 +12,8 @@ unsigned int ticks = 0;
 unsigned long ticker = 0;
 uint64_t countdown = 0;
 static uint32_t phase = 18;
+
+extern volatile bool need_reschedule;
 
 /**
  * Sets the timer phase by configuring the Programmable Interval Timer (PIT).
@@ -47,8 +50,12 @@ void timer_handler(struct registers* r)
 	ticks++;
 	// Decrement sleep countdown, should be every 1ms
 	if (countdown > 0) countdown--;
-	/* Every 18 clocks (approximately 1 second), we will
-     *  display a message on the screen */
+
+	// Think this means this is true every 20 ms
+	if (ticks % SCHEDULER_TIME == 0) {
+		need_reschedule = true;
+	}
+
 	if (ticks % phase == 0) {
 		ticker++;
 	}

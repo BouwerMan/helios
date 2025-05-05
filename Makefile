@@ -72,9 +72,10 @@ qemu: iso
 	qemu-system-$(HOSTARCH) -cdrom $(OSNAME).iso \
 		-m 4096M \
 		-hdd ./fat.img -boot d -s \
-		-serial stdio \
 		-d cpu_reset \
 		-D log.txt \
+		-serial stdio \
+		# -nographic \
 
 bochs: iso
 	bochs -f bochs

@@ -56,27 +56,25 @@ const char* exception_messages[] = {
  * The function outputs:
  * - The interrupt number and error code.
  * - A description of the exception.
- * - The values of various CPU registers (RIP, RSP, RBP, general-purpose registers, etc.).
+ * - The values of various CPU registers (RIP, RSP, RBP, general-purpose
+ * registers, etc.).
  *
  * After logging the information, the function halts the CPU.
  */
 static void default_exception_handler(struct registers* registers)
 {
-	log_error(
-		"Recieved interrupt #%lx with error code %lx on the default handler!",
-		registers->int_no, registers->err_code);
+	log_error("Recieved interrupt #%lx with error code %lx on the default handler!", registers->int_no,
+		  registers->err_code);
 	log_error("Exception: %s", exception_messages[registers->int_no]);
-	log_error("RIP: %lx, RSP: %lx, RBP: %lx", registers->rip,
-		  registers->rsp, registers->rbp);
-	log_error("RAX: %lx, RBX: %lx, RCX: %lx, RDX: %lx", registers->rax,
-		  registers->rbx, registers->rcx, registers->rdx);
-	log_error("RDI: %lx, RSI: %lx, RFLAGS: %lx, DS: %lx", registers->rdi,
-		  registers->rsi, registers->rflags, registers->ds);
+	log_error("RIP: %lx, RSP: %lx, RBP: %lx", registers->rip, registers->rsp, registers->rbp);
+	log_error("RAX: %lx, RBX: %lx, RCX: %lx, RDX: %lx", registers->rax, registers->rbx, registers->rcx,
+		  registers->rdx);
+	log_error("RDI: %lx, RSI: %lx, RFLAGS: %lx, DS: %lx", registers->rdi, registers->rsi, registers->rflags,
+		  registers->ds);
 	log_error("CS: %lx, SS: %lx", registers->cs, registers->ss);
-	log_error("R8: %lx, R9: %lx, R10: %lx, R11: %lx", registers->r8,
-		  registers->r9, registers->r10, registers->r11);
-	log_error("R12: %lx, R13: %lx, R14: %lx, R15: %lx", registers->r12,
-		  registers->r13, registers->r14, registers->r15);
+	log_error("R8: %lx, R9: %lx, R10: %lx, R11: %lx", registers->r8, registers->r9, registers->r10, registers->r11);
+	log_error("R12: %lx, R13: %lx, R14: %lx, R15: %lx", registers->r12, registers->r13, registers->r14,
+		  registers->r15);
 	uint64_t fault_addr;
 	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
 	log_error("Fault addr: %lx", fault_addr);
@@ -84,8 +82,7 @@ static void default_exception_handler(struct registers* registers)
 	__asm__ volatile("cli; hlt");
 }
 
-__attribute__((aligned(0x10))) static idt_entry_t
-	idt[256]; // Create an array of IDT entries; aligned for performance
+__attribute__((aligned(0x10))) static idt_entry_t idt[256]; // Create an array of IDT entries; aligned for performance
 static idtr_t idtr;
 
 /**
@@ -116,10 +113,11 @@ void idt_set_descriptor(uint8_t vector, uint64_t isr, uint8_t flags)
 }
 
 /**
- * @brief Initializes the Interrupt Descriptor Table (IDT) and Programmable Interrupt Controller (PIC).
+ * @brief Initializes the Interrupt Descriptor Table (IDT) and Programmable
+ * Interrupt Controller (PIC).
  *
- * This function sets up the IDT, initializes the interrupt service routines (ISRs),
- * configures the PIC, and enables interrupts on the CPU.
+ * This function sets up the IDT, initializes the interrupt service routines
+ * (ISRs), configures the PIC, and enables interrupts on the CPU.
  *
  * Steps performed:
  * 1. Sets the IDT base and limit in the IDTR register.
@@ -176,15 +174,18 @@ void idt_init()
 static void* interrupt_handlers[256] = { NULL };
 
 /**
- * @brief Installs an interrupt service routine (ISR) handler for a specific interrupt.
+ * @brief Installs an interrupt service routine (ISR) handler for a specific
+ * interrupt.
  *
  * This function associates a custom handler function with a specific interrupt
  * service routine (ISR). The handler will be invoked when the corresponding
  * interrupt occurs.
  *
- * @param isr The interrupt service routine number to associate the handler with.
- * @param handler A pointer to the handler function to be executed when the ISR is triggered.
- *                The handler function must accept a pointer to a `struct registers` as its argument.
+ * @param isr The interrupt service routine number to associate the handler
+ * with.
+ * @param handler A pointer to the handler function to be executed when the ISR
+ * is triggered. The handler function must accept a pointer to a `struct
+ * registers` as its argument.
  */
 void install_isr_handler(int isr, void (*handler)(struct registers* r))
 {
@@ -192,12 +193,15 @@ void install_isr_handler(int isr, void (*handler)(struct registers* r))
 }
 
 /**
- * @brief Uninstalls an interrupt service routine (ISR) handler for a specific interrupt.
+ * @brief Uninstalls an interrupt service routine (ISR) handler for a specific
+ * interrupt.
  *
  * This function removes the custom handler associated with a specific interrupt
- * service routine (ISR) by setting its entry in the `interrupt_handlers` array to NULL.
+ * service routine (ISR) by setting its entry in the `interrupt_handlers` array
+ * to NULL.
  *
- * @param isr The interrupt service routine number whose handler is to be uninstalled.
+ * @param isr The interrupt service routine number whose handler is to be
+ * uninstalled.
  */
 void uninstall_isr_handler(int isr)
 {
@@ -265,12 +269,13 @@ void isr_init()
 }
 
 /**
- * @brief Handles exceptions and invokes the appropriate interrupt service routine (ISR).
+ * @brief Handles exceptions and invokes the appropriate interrupt service
+ * routine (ISR).
  *
- * This function is called whenever an exception occurs. It checks if the exception
- * number is within the range of 0 to 31. If a custom handler is registered for the
- * exception, it invokes the handler. Otherwise, it displays an error message and halts
- * the system in an infinite loop.
+ * This function is called whenever an exception occurs. It checks if the
+ * exception number is within the range of 0 to 31. If a custom handler is
+ * registered for the exception, it invokes the handler. Otherwise, it displays
+ * an error message and halts the system in an infinite loop.
  *
  * @param r A pointer to the `struct registers` containing the state of the CPU
  *          at the time of the exception.
@@ -282,15 +287,13 @@ void isr_handler(struct registers* r)
 		void (*handler)(struct registers* r);
 		handler = interrupt_handlers[r->int_no];
 		/* Display the description for the Exception that occurred.
-         *  In this tutorial, we will simply halt the system using an
-         *  infinite loop */
+     *  In this tutorial, we will simply halt the system using an
+     *  infinite loop */
 		if (handler) {
 			screen_clear();
 			handler(r);
 		} else {
-			log_error("%s\n%s",
-				  (char*)exception_messages[r->int_no],
-				  "Exception. System Halted!");
+			log_error("%s\n%s", (char*)exception_messages[r->int_no], "Exception. System Halted!");
 			for (;;)
 				;
 		}
@@ -309,7 +312,8 @@ void isr_handler(struct registers* r)
  * and attributes.
  *
  * @note The IRQs are mapped to interrupt numbers 32 through 47 in the IDT.
- *       This is because the first 32 entries (0-31) are reserved for CPU exceptions.
+ *       This is because the first 32 entries (0-31) are reserved for CPU
+ * exceptions.
  */
 void irq_init(void)
 {
@@ -351,7 +355,8 @@ void irq_handler(struct registers* r)
 	/* This is a blank function pointer */
 	void (*handler)(struct registers* r);
 
-	/* Find out if we have a custom handler to run for this IRQ, and then finally, run it */
+	/* Find out if we have a custom handler to run for this IRQ, and then finally,
+   * run it */
 	handler = interrupt_handlers[r->int_no];
 
 	if (handler) {
@@ -359,14 +364,14 @@ void irq_handler(struct registers* r)
 	}
 
 	/* If the IDT entry that was invoked was greater than 40
-     *  (meaning IRQ8 - 15), then we need to send an EOI to
-     *  the slave controller */
+   *  (meaning IRQ8 - 15), then we need to send an EOI to
+   *  the slave controller */
 	if (r->int_no >= 40) {
 		outb(PIC2_COMMAND, PIC_EOI);
 	}
 
 	/* In either case, we need to send an EOI to the master
-     *  interrupt controller too */
+   *  interrupt controller too */
 	outb(PIC1_COMMAND, PIC_EOI);
 }
 
