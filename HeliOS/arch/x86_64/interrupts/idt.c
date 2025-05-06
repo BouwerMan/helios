@@ -261,6 +261,7 @@ void isr_init()
 	idt_set_descriptor(29, (uint64_t)isr29, 0x8E);
 	idt_set_descriptor(30, (uint64_t)isr30, 0x8E);
 	idt_set_descriptor(31, (uint64_t)isr31, 0x8E);
+	idt_set_descriptor(48, (uint64_t)isr48, 0x8E);
 
 	// Install default exception handler for all ISRs
 	for (uint8_t i = 0; i < 32; i++) {

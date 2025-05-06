@@ -50,6 +50,7 @@ $(BUILDDIR)/$(KERNELDIR)/liballoc.o \
 $(BUILDDIR)/$(KERNELDIR)/liballoc_hooks.o \
 $(BUILDDIR)/$(KERNELDIR)/tasks/scheduler.o \
 $(BUILDDIR)/$(KERNELDIR)/tasks/switch.o \
+$(BUILDDIR)/$(KERNELDIR)/dmesg.o \
 # $(BUILDDIR)/$(KERNELDIR)/idt.o \
 # $(BUILDDIR)/$(KERNELDIR)/isr.o \
 # $(BUILDDIR)/$(KERNELDIR)/irq.o \

@@ -11,6 +11,7 @@ volatile bool need_reschedule = false;
 static volatile int preempt_count = 1;
 
 struct scheduler_queue queue = { 0 };
+struct task* kernel_task;
 
 extern void __switch_to(struct registers* new);
 
@@ -32,8 +33,9 @@ void check_reschedule(struct registers* regs)
 		need_reschedule = false;
 
 		// TODO: I'm doing some weird shit here, make this cleaner
+		// TODO: Load new cr3
 		queue.current_task->regs = regs;
-		queue.current_task->state = READY;
+		if (queue.current_task->state != BLOCKED) queue.current_task->state = READY;
 
 		struct task* new = scheduler_pick_next();
 		if (new == NULL) return;
@@ -49,6 +51,7 @@ void check_reschedule(struct registers* regs)
 
 #define STACK_SIZE_PAGES 1
 
+// TODO: Can probably replace this with a handful of memsets and clever pointer math
 int create_stack(struct task* task)
 {
 	void* stack = vmm_alloc_pages(1, false);
@@ -108,6 +111,7 @@ struct task* task_add(void)
 
 	task->PID = queue.pid_i++;
 	task->state = UNREADY;
+	task->parent = kernel_task;
 	create_stack(task);
 	if (queue.list == 0) {
 		log_debug("Initializing new list");
@@ -124,7 +128,7 @@ struct task* task_add(void)
 
 void init_scheduler(void)
 {
-	struct task* kernel_task = task_add();
+	kernel_task = task_add();
 	kernel_task->cr3 = vmm_read_cr3();
 	kernel_task->parent = kernel_task;
 	queue.current_task = kernel_task;
@@ -146,4 +150,16 @@ struct task* scheduler_pick_next()
 	}
 	queue.current_task = next;
 	return queue.current_task;
+}
+
+void yield()
+{
+	need_reschedule = true;
+	__asm__ volatile("int $0x30"); // use an unused vector
+}
+
+void yield_blocked()
+{
+	queue.current_task->state = BLOCKED;
+	yield();
 }

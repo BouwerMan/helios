@@ -2,8 +2,7 @@
 #include <stdio.h>
 
 #if defined(__is_libk)
-#include <drivers/serial.h>
-#include <kernel/screen.h>
+#include <kernel/dmesg.h>
 #endif
 
 int putchar(int ic)

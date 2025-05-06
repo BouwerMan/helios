@@ -115,12 +115,18 @@ isr_common_stub:
 	PUSHALL
 
     mov     rdi, rsp
+    mov     r15, rsp ; save rsp in r15 so we can use scratch space
     sub     rsp, 0x28
 
     cld
     call    isr_handler
-    add     rsp, 0x28
+    ; do NOT clean up scratch space yet
 
+    ; Pass struct registers* (still in r15) to check_reschedule()
+    mov     rdi, r15
+    call    check_reschedule
+
+    add     rsp, 0x28      ; now clean up scratch space
     POPALL
 
     sti
@@ -206,6 +212,7 @@ global irq13
 global irq14
 global irq15
 
+global isr48 ; yield syscall
 global isr128
 
 %macro ISR_NOERR 1
@@ -345,5 +352,12 @@ IRQ 13
 IRQ 14
 IRQ 15
 
+; isr48:
+;         cli
+; 	push    0
+; 	push    (48 + 32)
+; 	jmp     isr_common_stub
+
+ISR_NOERR 48
 ; 128: aka. int 0x80, the syscall handler
 ISR_NOERR 128

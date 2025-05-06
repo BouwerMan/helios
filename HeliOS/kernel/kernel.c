@@ -26,6 +26,7 @@
 #include <drivers/fs/vfs.h>
 #include <drivers/pci/pci.h>
 #include <drivers/serial.h>
+#include <kernel/dmesg.h>
 #include <kernel/liballoc.h>
 #include <kernel/memory/pmm.h>
 #include <kernel/memory/vmm.h>
@@ -93,7 +94,7 @@ void task_test()
 {
 	while (1) {
 		log_debug("Task test");
-		sleep(1000);
+		yield();
 	}
 }
 
@@ -177,6 +178,7 @@ void kernel_main(void)
 
 	log_debug("Testing weird scheduler lists");
 	init_scheduler();
+	dmesg_init();
 	// struct task* next;
 	// next = scheduler_pick_next();
 	// log_debug("Found task with PID: %d", next->PID);

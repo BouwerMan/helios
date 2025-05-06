@@ -1,15 +1,40 @@
 #include <drivers/serial.h>
+#include <kernel/dmesg.h>
+#include <kernel/screen.h>
 #include <kernel/spinlock.h>
 #include <printf.h>
 #include <string.h>
 #include <util/log.h>
 
+static enum LOG_MODE current_mode = LOG_DIRECT;
+void set_log_mode(enum LOG_MODE mode)
+{
+	current_mode = mode;
+}
+
+void log_putchar(const char c)
+{
+	if (current_mode == LOG_DIRECT) {
+#if ENABLE_SERIAL_LOGGING
+		write_serial(c);
+#endif
+		screen_putchar(c);
+	} else if (LOG_BUFFERED) {
+		dmesg_enqueue(&c, 1);
+	}
+}
+
+// TODO: Pass through len?
 void log_output(const char* msg)
 {
+	if (current_mode == LOG_DIRECT) {
 #if ENABLE_SERIAL_LOGGING
-	write_serial_string(msg); // Custom serial output
+		write_serial_string(msg); // Custom serial output
 #endif
-	printf("%s", msg); // Console / screen output
+		screen_putstring(msg);
+	} else if (LOG_BUFFERED) {
+		dmesg_enqueue(msg, strlen(msg));
+	}
 }
 
 void log_long_message(const char* tag, const char* file, int line, const char* func, const char* msg)

@@ -1,6 +1,11 @@
 #pragma once
 #include <printf.h>
 
+enum LOG_MODE {
+	LOG_DIRECT,
+	LOG_BUFFERED,
+};
+
 #define LOG_LEVEL_DEBUG 0
 #define LOG_LEVEL_INFO	1
 #define LOG_LEVEL_WARN	2
@@ -92,6 +97,7 @@
 
 // Function declarations
 
-void log_init(void);
+void log_putchar(const char c);
+void set_log_mode(enum LOG_MODE mode);
 void log_output(const char* msg);
 void log_long_message(const char* tag, const char* file, int line, const char* func, const char* msg);

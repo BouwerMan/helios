@@ -43,3 +43,5 @@ void init_scheduler(void);
 struct task* scheduler_pick_next();
 void enable_preemption();
 void disable_preemption();
+void yield();
+void yield_blocked();
