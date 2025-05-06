@@ -1,18 +1,28 @@
 #include <kernel/memory/vmm.h>
+#include <kernel/spinlock.h>
 #include <stddef.h>
 #include <util/log.h>
+
+spinlock_t lock;
+
+void liballoc_init()
+{
+	spinlock_init(&lock);
+}
 
 // Locks memory structures by disabling interrupts (really basic way)
 int liballoc_lock()
 {
-	__asm__ volatile("cli");
+	// __asm__ volatile("cli");
+	spinlock_acquire(&lock);
 	return 0;
 }
 
 // Unlocks memory structures by enabling interrupts again (really basic way)
 int liballoc_unlock()
 {
-	__asm__ volatile("sti");
+	// __asm__ volatile("sti");
+	spinlock_release(&lock);
 	return 0;
 }
 

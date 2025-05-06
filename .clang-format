@@ -1,5 +1,4 @@
 ---
-Language: C
 BasedOnStyle: WebKit
 AccessModifierOffset: -4
 AllowShortIfStatementsOnASingleLine: WithoutElse

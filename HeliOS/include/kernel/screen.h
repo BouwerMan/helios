@@ -1,4 +1,5 @@
 #pragma once
+#include <kernel/spinlock.h>
 #include <limine.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -43,10 +44,10 @@ struct screen_info {
 	struct limine_framebuffer* fb;
 	char* fb_buffer;
 	PSF_font* font; // Font info
+	spinlock_t lock;
 };
 
-void screen_init(struct limine_framebuffer* fb, uint32_t fg_color,
-		 uint32_t bg_color);
+void screen_init(struct limine_framebuffer* fb, uint32_t fg_color, uint32_t bg_color);
 void screen_clear();
 void set_color(uint32_t fg, uint32_t bg);
 void screen_putstring(const char* s);

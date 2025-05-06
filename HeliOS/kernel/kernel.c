@@ -87,6 +87,16 @@ static void hcf(void)
 
 struct limine_framebuffer* framebuffer;
 
+extern void liballoc_init();
+
+void task_test()
+{
+	while (1) {
+		log_debug("Task test");
+		sleep(1000);
+	}
+}
+
 void kernel_main(void)
 {
 	// TODO: Setup tty
@@ -131,6 +141,7 @@ void kernel_main(void)
 	log_info("Initializing Timer");
 	timer_init();
 
+	liballoc_init(); // Just initializes the liballoc spinlock
 	log_info("Initializing PMM");
 	pmm_init(memmap_request.response, hhdm_request.response->offset);
 
@@ -172,7 +183,25 @@ void kernel_main(void)
 	// next = scheduler_pick_next();
 	// log_debug("Found task with PID: %d", next->PID);
 	// log_debug("Adding another task");
-	// task_add();
+	struct task* task = task_add();
+	task->entry = (void*)task_test;
+	task->regs->rip = (uintptr_t)task_test;
+	struct registers* registers = task->regs;
+	log_error("Recieved interrupt #%lx with error code %lx on the default handler!", registers->int_no,
+		  registers->err_code);
+	log_error("RIP: %lx, RSP: %lx, RBP: %lx", registers->rip, registers->rsp, registers->rbp);
+	log_error("RAX: %lx, RBX: %lx, RCX: %lx, RDX: %lx", registers->rax, registers->rbx, registers->rcx,
+		  registers->rdx);
+	log_error("RDI: %lx, RSI: %lx, RFLAGS: %lx, DS: %lx", registers->rdi, registers->rsi, registers->rflags,
+		  registers->ds);
+	log_error("CS: %lx, SS: %lx", registers->cs, registers->ss);
+	log_error("R8: %lx, R9: %lx, R10: %lx, R11: %lx", registers->r8, registers->r9, registers->r10, registers->r11);
+	log_error("R12: %lx, R13: %lx, R14: %lx, R15: %lx", registers->r12, registers->r13, registers->r14,
+		  registers->r15);
+	log_error("Saved_rflags: %lx", registers->saved_rflags);
+	// log_debug("$d", 10 / 0);
+	task->state = READY;
+
 	// next = scheduler_pick_next();
 	// log_debug("Found task with PID: %d", next->PID);
 	// next = scheduler_pick_next();

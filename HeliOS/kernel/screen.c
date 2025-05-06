@@ -1,5 +1,7 @@
 #include <drivers/serial.h>
 #include <kernel/screen.h>
+#include <kernel/spinlock.h>
+#include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
 #include <string.h>
 #include <util/log.h>
@@ -20,13 +22,11 @@ static struct screen_info sc = {
 /* import our font that's in the object file we've created above */
 extern char _binary_font_start[];
 
-static void screen_putchar_at(unsigned short int c, int cx, int cy, uint32_t fg,
-			      uint32_t bg);
+static void screen_putchar_at(unsigned short int c, int cx, int cy, uint32_t fg, uint32_t bg);
 static void scroll();
 
 // TODO: pass through framebuffer and such
-void screen_init(struct limine_framebuffer* fb, uint32_t fg_color,
-		 uint32_t bg_color)
+void screen_init(struct limine_framebuffer* fb, uint32_t fg_color, uint32_t bg_color)
 {
 	// TODO: properly init psf, though the one im using currently isnt unicode
 
@@ -38,21 +38,21 @@ void screen_init(struct limine_framebuffer* fb, uint32_t fg_color,
 	sc.fb_buffer = (char*)fb->address;
 	sc.scanline = fb->pitch;
 	sc.font = (PSF_font*)&_binary_fonts_font_psf_start;
+	spinlock_init(&sc.lock);
 	log_debug("Framebuffer at %p, scanline: %x", fb->address, sc.scanline);
-	log_debug(
-		"Framebuffer stats: height = %lx, width = %lx, size in bytes = %lx",
-		fb->height, fb->width, fb->height * fb->width);
-	log_debug("Font height: %x, font width: %x", sc.font->height,
-		  sc.font->width);
-	log_debug("wrap option 1: %lx, option 2: %lx",
-		  fb->width / sc.font->width, fb->pitch / sc.font->width);
+	log_debug("Framebuffer stats: height = %lx, width = %lx, size in bytes = %lx", fb->height, fb->width,
+		  fb->height * fb->width);
+	log_debug("Font height: %x, font width: %x", sc.font->height, sc.font->width);
+	log_debug("wrap option 1: %lx, option 2: %lx", fb->width / sc.font->width, fb->pitch / sc.font->width);
 }
 
 void screen_clear()
 {
+	spinlock_acquire(&sc.lock);
 	memset(sc.fb_buffer, 0, sc.fb->pitch * sc.fb->height);
 	sc.cx = 0;
 	sc.cy = 0;
+	spinlock_release(&sc.lock);
 }
 
 /**
@@ -92,6 +92,8 @@ void screen_putstring(const char* s)
  */
 void screen_putchar(char c)
 {
+	spinlock_acquire(&sc.lock);
+	disable_preemption();
 	switch (c) {
 	case '\n':
 		sc.cy++;
@@ -116,6 +118,8 @@ void screen_putchar(char c)
 		sc.cy = sc.cy - 1;
 		sc.cx = 0;
 	}
+	enable_preemption();
+	spinlock_release(&sc.lock);
 }
 
 /**
@@ -140,8 +144,7 @@ static void scroll()
 	void* addr = sc.fb->address;
 
 	// Move everything up
-	memcpy(addr, (void*)((uint64_t)addr + copy_size),
-	       copy_size * scroll_height);
+	memcpy(addr, (void*)((uint64_t)addr + copy_size), copy_size * scroll_height);
 
 	// Clear the last row
 	uint64_t offset = copy_size * scroll_height;
@@ -162,8 +165,7 @@ static void scroll()
  * @param fg The foreground color (e.g., 0xFFFFFF for white).
  * @param bg The background color (e.g., 0x000000 for black).
  */
-static void screen_putchar_at(unsigned short int c, int cx, int cy, uint32_t fg,
-			      uint32_t bg)
+static void screen_putchar_at(unsigned short int c, int cx, int cy, uint32_t fg, uint32_t bg)
 {
 	/* cast the address to PSF header struct */
 	PSF_font* font = (PSF_font*)&_binary_fonts_font_psf_start;
@@ -175,14 +177,11 @@ static void screen_putchar_at(unsigned short int c, int cx, int cy, uint32_t fg,
 	}
 	/* get the glyph for the character. If there's no
        glyph for a given character, we'll display the first glyph. */
-	unsigned char* glyph =
-		(unsigned char*)&_binary_fonts_font_psf_start +
-		font->headersize +
-		(c > 0 && c < font->numglyph ? c : 0) * font->bytesperglyph;
+	unsigned char* glyph = (unsigned char*)&_binary_fonts_font_psf_start + font->headersize +
+			       (c > 0 && c < font->numglyph ? c : 0) * font->bytesperglyph;
 	/* calculate the upper left corner on screen where we want to display.
        we only do this once, and adjust the offset later. This is faster. */
-	int offs = (cy * font->height * sc.scanline) +
-		   (cx * (font->width + 1) * sizeof(PIXEL));
+	int offs = (cy * font->height * sc.scanline) + (cx * (font->width + 1) * sizeof(PIXEL));
 	/* finally display pixels according to the bitmap */
 	int x, y, line, mask;
 	for (y = 0; (uint32_t)y < font->height; y++) {
@@ -191,8 +190,7 @@ static void screen_putchar_at(unsigned short int c, int cx, int cy, uint32_t fg,
 		mask = 1 << (font->width - 1);
 		/* display a row */
 		for (x = 0; (uint32_t)x < font->width; x++) {
-			*((PIXEL*)(sc.fb_buffer + line)) =
-				*((unsigned int*)glyph) & mask ? fg : bg;
+			*((PIXEL*)(sc.fb_buffer + line)) = *((unsigned int*)glyph) & mask ? fg : bg;
 			/* adjust to the next pixel */
 			mask >>= 1;
 			line += sizeof(PIXEL);

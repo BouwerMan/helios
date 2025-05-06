@@ -11,6 +11,8 @@
 #define MAX_RESOURCES  20
 
 enum TASK_STATE {
+	UNREADY,
+	INITIALIZED,
 	BLOCKED,
 	READY,
 	RUNNING,
@@ -18,11 +20,12 @@ enum TASK_STATE {
 
 struct task {
 	struct registers* regs;
-	uintptr_t cr3;			// pml4
+	uintptr_t cr3;		// pml4
 	uintptr_t kernel_stack; // Not super sure abt this one
 	enum TASK_STATE state;
 	uint8_t priority;
 	uint8_t PID;
+	void* entry;
 	struct vfs_file* resources[MAX_RESOURCES];
 	struct task* parent; // Should this just be parent PID?
 	struct list list;
@@ -38,3 +41,5 @@ struct task* task_add(void);
 void check_reschedule(struct registers* regs);
 void init_scheduler(void);
 struct task* scheduler_pick_next();
+void enable_preemption();
+void disable_preemption();

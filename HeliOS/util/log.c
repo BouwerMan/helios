@@ -1,4 +1,5 @@
 #include <drivers/serial.h>
+#include <kernel/spinlock.h>
 #include <printf.h>
 #include <string.h>
 #include <util/log.h>
@@ -11,12 +12,10 @@ void log_output(const char* msg)
 	printf("%s", msg); // Console / screen output
 }
 
-void log_long_message(const char* tag, const char* file, int line,
-		      const char* func, const char* msg)
+void log_long_message(const char* tag, const char* file, int line, const char* func, const char* msg)
 {
 	char buf[LOG_BUFFER_SIZE];
-	size_t tag_len = snprintf(buf, sizeof(buf), "[%s] %s:%d:%s(): ", tag,
-				  file, line, func);
+	size_t tag_len = snprintf(buf, sizeof(buf), "[%s] %s:%d:%s(): ", tag, file, line, func);
 
 	const char* p = msg;
 	while (*p) {

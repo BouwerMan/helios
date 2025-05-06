@@ -48,4 +48,7 @@ __switch_to:
 	pop     r15
 	popfq
 
+	; Cleanup irq & error code from stack
+        add     rsp, 0x10
+
 	iretq
