@@ -146,13 +146,12 @@ void kernel_main(void)
 	log_info("Initializing VMM");
 	vmm_init(memmap_request.response, exe_addr_req.response, hhdm_request.response->offset);
 
-	init_scheduler();
-	// log_info("Initializing dmesg");
-	// dmesg_init();
-
 	log_info("Initializing Timer");
 	timer_init();
-	sleep(1000);
+
+	init_scheduler();
+	log_info("Initializing dmesg");
+	dmesg_init();
 
 	list_devices();
 	ctrl_init();
@@ -202,6 +201,7 @@ void kernel_main(void)
 
 	// We're done, just hang...
 	log_debug("Sleeping for 1 second");
+	// TODO: sleep kinda borked again
 	sleep(1000);
 	log_warn("entering infinite loop");
 	hcf();

@@ -172,6 +172,7 @@ struct task* scheduler_pick_next()
 
 void scheduler_tick()
 {
+	if (!preempt_enabled()) return;
 	struct task* task = queue.current_task;
 	for (size_t i = 0; i < queue.task_count; i++) {
 		task = list_next_entry(task, list);

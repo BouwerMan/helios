@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define CHAR_SPACING 0
+
 enum COLORS {
 	COLOR_WHITE = 0x00FFFFFF,
 	COLOR_BLACK = 0x00000000,
@@ -41,6 +43,9 @@ struct screen_info {
 	uint32_t fgc; // foregound color
 	uint32_t bgc; // background color
 	int scanline; // Number of bytes in each line
+	int char_width;
+	int char_height;
+	int bytesperline;
 	struct limine_framebuffer* fb;
 	char* fb_buffer;
 	PSF_font* font; // Font info

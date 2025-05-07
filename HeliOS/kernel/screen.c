@@ -10,6 +10,9 @@
 extern char _binary_fonts_font_psf_start;
 extern char _binary_fonts_font_psf_end;
 
+/* import our font that's in the object file we've created above */
+extern char _binary_font_start[];
+
 uint16_t* unicode = NULL;
 
 static struct screen_info sc = {
@@ -19,11 +22,10 @@ static struct screen_info sc = {
 	.bgc = 0x000000,
 };
 
-/* import our font that's in the object file we've created above */
-extern char _binary_font_start[];
-
 static void screen_putchar_at(unsigned short int c, int cx, int cy, uint32_t fg, uint32_t bg);
 static void scroll();
+static void draw_glyph_scanline(const uint8_t* glyph_row, PIXEL* dst, uint32_t fg, uint32_t bg);
+static void draw_glyph(uint8_t* glyph, int offset, uint32_t fg, uint32_t bg);
 
 // TODO: pass through framebuffer and such
 void screen_init(struct limine_framebuffer* fb, uint32_t fg_color, uint32_t bg_color)
@@ -38,20 +40,37 @@ void screen_init(struct limine_framebuffer* fb, uint32_t fg_color, uint32_t bg_c
 	sc.fb_buffer = (char*)fb->address;
 	sc.scanline = fb->pitch;
 	sc.font = (PSF_font*)&_binary_fonts_font_psf_start;
+	sc.char_width = sc.font->width + CHAR_SPACING; // +1 for spacing
+	sc.char_height = sc.font->height;
+	sc.bytesperline = (sc.font->width + 7) / 8;
 	spinlock_init(&sc.lock);
+
 	log_debug("Framebuffer at %p, scanline: %x", fb->address, sc.scanline);
 	log_debug("Framebuffer stats: height = %lx, width = %lx, size in bytes = %lx", fb->height, fb->width,
 		  fb->height * fb->width);
 	log_debug("Font height: %x, font width: %x", sc.font->height, sc.font->width);
-	log_debug("wrap option 1: %lx, option 2: %lx", fb->width / sc.font->width, fb->pitch / sc.font->width);
 }
 
 void screen_clear()
 {
 	spinlock_acquire(&sc.lock);
-	memset(sc.fb_buffer, 0, sc.fb->pitch * sc.fb->height);
+
+	uintptr_t addr = (uintptr_t)sc.fb->address;
+	uint64_t char_height = sc.char_height;
+	uint64_t pitch = sc.fb->pitch;
+	uint64_t height = sc.fb->height;
+	uint64_t width = sc.fb->width;
+	size_t total_chars_y = height / char_height;
+	size_t total_rows = (total_chars_y - 1) * char_height;
+	// Clear scanline row by scanline row
+	for (size_t row = 0; row < total_rows; row++) {
+		void* dst = (void*)(addr + (row * pitch));
+		memset32(dst, 0, width);
+	}
+
 	sc.cx = 0;
 	sc.cy = 0;
+
 	spinlock_release(&sc.lock);
 }
 
@@ -62,8 +81,10 @@ void screen_clear()
  */
 void set_color(uint32_t fg, uint32_t bg)
 {
+	spinlock_acquire(&sc.lock);
 	sc.fgc = fg;
 	sc.bgc = bg;
+	spinlock_release(&sc.lock);
 }
 
 /**
@@ -87,13 +108,11 @@ void screen_putstring(const char* s)
  * it wraps to the next line or scrolls the screen, respectively.
  *
  * @param c The character to write to the screen.
- *
- * @TODO: Need to implement a couple more special chars like \t
  */
 void screen_putchar(char c)
 {
 	spinlock_acquire(&sc.lock);
-	disable_preemption();
+
 	switch (c) {
 	case '\n':
 		sc.cy++;
@@ -103,12 +122,14 @@ void screen_putchar(char c)
 		if (sc.cx == 0) break;
 		screen_putchar_at(' ', --sc.cx, sc.cy, sc.fgc, sc.bgc);
 		break;
+	case '\t':
+		sc.cx = (sc.cx + 4) & ~3;
+		break;
 	default:
-		// write_serial(c);
-		// if (c == 'p') sleep(5000);
 		screen_putchar_at(c, sc.cx++, sc.cy, sc.fgc, sc.bgc);
 		break;
 	}
+
 	if (sc.cx >= sc.fb->width / (sc.font->width + 1)) {
 		sc.cx = 0;
 		sc.cy++;
@@ -118,7 +139,7 @@ void screen_putchar(char c)
 		sc.cy = sc.cy - 1;
 		sc.cx = 0;
 	}
-	enable_preemption();
+
 	spinlock_release(&sc.lock);
 }
 
@@ -128,15 +149,11 @@ void screen_putchar(char c)
  * This function shifts the visible content of the framebuffer upward by one
  * row, effectively removing the topmost row and making space for new content
  * at the bottom. The last row is cleared and filled with the background color.
- *
- * Assumptions:
- * - The framebuffer (`sc.fb`) and font (`sc.font`) are properly initialized.
- * - The framebuffer uses a linear memory layout.
  */
 static void scroll()
 {
 	uintptr_t addr = (uintptr_t)sc.fb->address;
-	uint64_t char_height = sc.font->height;
+	uint64_t char_height = sc.char_height;
 	uint64_t pitch = sc.fb->pitch;
 	uint64_t height = sc.fb->height;
 	uint64_t width = sc.fb->width;
@@ -176,36 +193,70 @@ static void scroll()
  */
 static void screen_putchar_at(unsigned short int c, int cx, int cy, uint32_t fg, uint32_t bg)
 {
-	/* cast the address to PSF header struct */
-	PSF_font* font = (PSF_font*)&_binary_fonts_font_psf_start;
-	/* we need to know how many bytes encode one row */
-	int bytesperline = (font->width + 7) / 8;
 	/* unicode translation */
 	if (unicode != NULL) {
 		c = unicode[c];
 	}
-	/* get the glyph for the character. If there's no
-       glyph for a given character, we'll display the first glyph. */
-	unsigned char* glyph = (unsigned char*)&_binary_fonts_font_psf_start + font->headersize +
-			       (c > 0 && c < font->numglyph ? c : 0) * font->bytesperglyph;
-	/* calculate the upper left corner on screen where we want to display.
-       we only do this once, and adjust the offset later. This is faster. */
-	int offs = (cy * font->height * sc.scanline) + (cx * (font->width + 1) * sizeof(PIXEL));
-	/* finally display pixels according to the bitmap */
-	int x, y, line, mask;
-	for (y = 0; (uint32_t)y < font->height; y++) {
-		/* save the starting position of the line */
-		line = offs;
-		mask = 1 << (font->width - 1);
-		/* display a row */
-		for (x = 0; (uint32_t)x < font->width; x++) {
-			*((PIXEL*)(sc.fb_buffer + line)) = *((unsigned int*)glyph) & mask ? fg : bg;
-			/* adjust to the next pixel */
-			mask >>= 1;
-			line += sizeof(PIXEL);
+
+	int numglyphs = sc.font->numglyph;
+	int glyph_index = (c > 0 && c < numglyphs) ? c : 0;
+
+	unsigned char* glyph = (unsigned char*)sc.font + sc.font->headersize + glyph_index * sc.font->bytesperglyph;
+	int pixel_x = cx * sc.char_width;
+	int pixel_y = cy * sc.char_height;
+	int fb_offset = (pixel_y * sc.scanline) + (pixel_x * sizeof(PIXEL));
+	draw_glyph(glyph, fb_offset, fg, bg);
+}
+
+/**
+ * @brief Draws a single scanline of a glyph onto a framebuffer row.
+ *
+ * @param glyph_row     Pointer to the packed glyph row data (usually one row of the bitmap).
+ * @param dst           Pointer to the framebuffer scanline to write to (one PIXEL per pixel).
+ * @param width         Actual number of pixels to draw (may be < bytesperline * 8).
+ * @param bytesperline  Number of bytes per glyph row in memory (usually (width + 7) / 8).
+ * @param fg            Foreground color.
+ * @param bg            Background color.
+ */
+static inline void draw_glyph_scanline(const uint8_t* glyph_row, PIXEL* dst, uint32_t fg, uint32_t bg)
+{
+	int pixel_index = 0; // Horizontal pixel index across the row
+
+	for (int byte_i = 0; byte_i < sc.bytesperline; byte_i++) {
+		uint8_t bits = glyph_row[byte_i];
+
+		// Process bits from most significant (bit 7) to least significant (bit 0)
+		for (int bit_i = 7; bit_i >= 0; bit_i--) {
+			// Stop once we've drawn all requested pixels (for widths not divisible by 8)
+			if (pixel_index >= sc.char_width) return;
+
+			// Extract bit and assign appropriate color
+			bool bit_set = (bits >> bit_i) & 1;
+			dst[pixel_index++] = bit_set ? fg : bg;
 		}
-		/* adjust to the next line */
-		glyph += bytesperline;
-		offs += sc.scanline;
+	}
+}
+
+/**
+ * @brief Renders a full glyph bitmap to the framebuffer at a specified byte offset.
+ *
+ * This function iterates over each scanline of the provided glyph bitmap and renders
+ * it into the framebuffer using the specified foreground and background colors.
+ * It assumes the framebuffer is linear and that the glyph is encoded as a series
+ * of packed bitmaps (one per row).
+ *
+ * @param glyph         Pointer to the glyph bitmap data (packed 1bpp format).
+ * @param offset        Byte offset into the framebuffer where the top-left pixel of the glyph should be drawn.
+ * @param width         Width of the glyph in pixels.
+ * @param height        Height of the glyph in pixels.
+ * @param fg            Foreground color (used for set bits).
+ * @param bg            Background color (used for cleared bits).
+ */
+static inline void draw_glyph(uint8_t* glyph, int offset, uint32_t fg, uint32_t bg)
+{
+	for (int y = 0; y < sc.char_height; y++) {
+		const uint8_t* glyph_row = glyph + (y * sc.bytesperline);
+		PIXEL* dst_line = (PIXEL*)(sc.fb_buffer + offset + (y * sc.scanline));
+		draw_glyph_scanline(glyph_row, dst_line, fg, bg);
 	}
 }
