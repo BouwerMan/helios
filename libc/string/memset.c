@@ -18,11 +18,18 @@
  */
 void* memset(void* s, int c, size_t n)
 {
-    uint8_t* p = (uint8_t*)s;
+	uint8_t* p = (uint8_t*)s;
 
-    for (size_t i = 0; i < n; i++) {
-        p[i] = (uint8_t)c;
-    }
+	for (size_t i = 0; i < n; i++) {
+		p[i] = (uint8_t)c;
+	}
 
-    return s;
+	return s;
+}
+
+void memset32(uint32_t* dst, uint32_t value, size_t count)
+{
+	for (size_t i = 0; i < count; i++) {
+		dst[i] = value;
+	}
 }

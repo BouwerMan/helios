@@ -135,21 +135,30 @@ void screen_putchar(char c)
  */
 static void scroll()
 {
-	uint32_t s_width = sc.fb->width;
-	uint32_t char_height = sc.font->height;
+	uintptr_t addr = (uintptr_t)sc.fb->address;
+	uint64_t char_height = sc.font->height;
+	uint64_t pitch = sc.fb->pitch;
+	uint64_t height = sc.fb->height;
+	uint64_t width = sc.fb->width;
 
-	uint32_t scroll_height = (sc.fb->height / sc.font->height) - 1;
-	uint64_t copy_size = char_height * s_width * (sc.fb->bpp / 8);
+	size_t total_chars_y = height / char_height;
+	size_t total_rows = (total_chars_y - 1) * char_height;
 
-	void* addr = sc.fb->address;
+	// Move everything up, I'm doing it one scanline at a time
+	for (size_t row = 0; row < total_rows; row++) {
+		void* dst = (void*)(addr + (row * pitch));
+		void* src = (void*)(addr + ((row + char_height) * pitch));
+		// This one line literally blasted the speed holy
+		memmove32(dst, src, width);
+	}
 
-	// Move everything up
-	memcpy(addr, (void*)((uint64_t)addr + copy_size), copy_size * scroll_height);
-
-	// Clear the last row
-	uint64_t offset = copy_size * scroll_height;
-	void* last_row = (void*)((uint64_t)addr + offset);
-	memset(last_row, sc.bgc, copy_size);
+	// Clear the last row. Once again, one scanline at a time
+	int start_y = (height / char_height - 1) * char_height;
+	void* row_base = (void*)(addr + start_y * pitch);
+	for (size_t y = 0; y < char_height; y++) {
+		uint32_t* dst = (uint32_t*)((uintptr_t)row_base + (y * pitch));
+		memset32(dst, sc.bgc, width);
+	}
 }
 
 /**
