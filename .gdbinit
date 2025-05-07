@@ -3,8 +3,8 @@ target remote localhost:1234
 
 set print pretty on
 
-break switch.asm:7
-break scheduler.c:18
+# break scheduler.c:134
+# break timer.c:55
 c
 
 # Inspect page tables

@@ -1,10 +1,12 @@
 #include <drivers/serial.h>
 #include <kernel/dmesg.h>
+#include <kernel/memory/pmm.h>
+#include <kernel/memory/vmm.h>
 #include <kernel/screen.h>
 #include <kernel/spinlock.h>
 #include <kernel/tasks/scheduler.h>
 #include <util/log.h>
-#define DMESG_BUFFER_SIZE 4096
+#define DMESG_BUFFER_SIZE 0x10000
 
 char log_buffer[DMESG_BUFFER_SIZE];
 size_t log_head = 0; // Where new messages are added
@@ -15,14 +17,10 @@ struct task* dmesg_task = NULL;
 
 void dmesg_init()
 {
-	log_debug("Initializing dmesg");
 	spinlock_init(&log_lock);
-	dmesg_task = task_add();
-	dmesg_task->entry = (void*)dmesg_task_entry;
-	dmesg_task->regs->rip = (uintptr_t)dmesg_task_entry;
-	dmesg_task->state = READY;
+	dmesg_task = new_task((void*)dmesg_task_entry);
 
-	log_debug("Setting log mode to use dmesg");
+	log_debug("Setting log mode to use dmesg (LOG_BUFFERED)");
 	set_log_mode(LOG_BUFFERED);
 }
 

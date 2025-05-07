@@ -93,15 +93,13 @@ extern void liballoc_init();
 void task_test()
 {
 	while (1) {
-		log_debug("Task test");
+		// log_debug("Task test");
 		yield();
 	}
 }
 
 void kernel_main(void)
 {
-	// TODO: Setup tty
-
 	// Ensure the bootloader actually understands our base revision (see spec).
 	if (LIMINE_BASE_REVISION_SUPPORTED == false) {
 		hcf();
@@ -139,8 +137,6 @@ void kernel_main(void)
 	gdt_init();
 	log_info("Initializing IDT");
 	idt_init();
-	log_info("Initializing Timer");
-	timer_init();
 
 	liballoc_init(); // Just initializes the liballoc spinlock
 	log_info("Initializing PMM");
@@ -149,6 +145,14 @@ void kernel_main(void)
 	// TODO: VMM initialization
 	log_info("Initializing VMM");
 	vmm_init(memmap_request.response, exe_addr_req.response, hhdm_request.response->offset);
+
+	init_scheduler();
+	// log_info("Initializing dmesg");
+	// dmesg_init();
+
+	log_info("Initializing Timer");
+	timer_init();
+	sleep(1000);
 
 	list_devices();
 	ctrl_init();
@@ -173,22 +177,15 @@ void kernel_main(void)
 		log_info("f_size: %zu, at %lx", f2.file_size, (uint64_t)f2.read_ptr);
 		// log_debug_long(f2.read_ptr);
 	}
+	log_debug("Closing");
 	vfs_close(&f);
 	vfs_close(&f2);
 
-	log_debug("Testing weird scheduler lists");
-	init_scheduler();
-	dmesg_init();
-	// struct task* next;
-	// next = scheduler_pick_next();
-	// log_debug("Found task with PID: %d", next->PID);
-	// next = scheduler_pick_next();
-	// log_debug("Found task with PID: %d", next->PID);
-	// log_debug("Adding another task");
-	struct task* task = task_add();
-	task->entry = (void*)task_test;
-	task->regs->rip = (uintptr_t)task_test;
-	struct registers* registers = task->regs;
+	struct task* task = new_task((void*)task_test);
+	task->state = UNREADY;
+
+	/*
+        struct registers* registers = task->regs;
 	log_error("Recieved interrupt #%lx with error code %lx on the default handler!", registers->int_no,
 		  registers->err_code);
 	log_error("RIP: %lx, RSP: %lx, RBP: %lx", registers->rip, registers->rsp, registers->rbp);
@@ -201,17 +198,7 @@ void kernel_main(void)
 	log_error("R12: %lx, R13: %lx, R14: %lx, R15: %lx", registers->r12, registers->r13, registers->r14,
 		  registers->r15);
 	log_error("Saved_rflags: %lx", registers->saved_rflags);
-	// log_debug("$d", 10 / 0);
-	task->state = READY;
-
-	// next = scheduler_pick_next();
-	// log_debug("Found task with PID: %d", next->PID);
-	// next = scheduler_pick_next();
-	// log_debug("Found task with PID: %d", next->PID);
-	// next = scheduler_pick_next();
-	// log_debug("Found task with PID: %d", next->PID);
-	// next = scheduler_pick_next();
-	// log_debug("Found task with PID: %d", next->PID);
+        */
 
 	// We're done, just hang...
 	log_debug("Sleeping for 1 second");

@@ -25,6 +25,7 @@ struct task {
 	enum TASK_STATE state;
 	uint8_t priority;
 	uint8_t PID;
+	volatile uint64_t sleep_ticks;
 	void* entry;
 	struct vfs_file* resources[MAX_RESOURCES];
 	struct task* parent; // Should this just be parent PID?
@@ -34,14 +35,20 @@ struct task {
 struct scheduler_queue {
 	struct list* list; // list head of the queue
 	struct task* current_task;
+	size_t task_count;
 	uint64_t pid_i;
 };
 
-struct task* task_add(void);
+void task_add(struct task* task);
+struct task* new_task(void* entry);
 void check_reschedule(struct registers* regs);
 void init_scheduler(void);
 struct task* scheduler_pick_next();
+void scheduler_tick();
 void enable_preemption();
 void disable_preemption();
 void yield();
 void yield_blocked();
+
+struct task* get_current_task();
+struct scheduler_queue* get_scheduler_queue();

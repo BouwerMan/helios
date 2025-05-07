@@ -4,6 +4,7 @@
 #include <kernel/sys.h>
 #include <kernel/tasks/scheduler.h>
 #include <string.h>
+#include <util/list.h>
 #include <util/log.h>
 
 volatile bool need_reschedule = false;
@@ -12,6 +13,7 @@ static volatile int preempt_count = 1;
 
 struct scheduler_queue queue = { 0 };
 struct task* kernel_task;
+struct task* idle_task;
 
 extern void __switch_to(struct registers* new);
 
@@ -27,6 +29,16 @@ void disable_preemption(void)
 	if (++preempt_count < 0) panic("preempt count underflow");
 }
 
+struct task* get_current_task()
+{
+	return queue.current_task;
+}
+
+struct scheduler_queue* get_scheduler_queue()
+{
+	return &queue;
+}
+
 void check_reschedule(struct registers* regs)
 {
 	if (need_reschedule && preempt_enabled()) {
@@ -38,20 +50,20 @@ void check_reschedule(struct registers* regs)
 		if (queue.current_task->state != BLOCKED) queue.current_task->state = READY;
 
 		struct task* new = scheduler_pick_next();
-		if (new == NULL) return;
-		if (new->state == INITIALIZED) {
-			new->regs->rip = (uintptr_t)new->entry;
+		if (new == NULL) {
+			queue.current_task->state = RUNNING;
+			return;
 		}
 
 		new->state = RUNNING;
 
+		// Does not return
 		__switch_to(new->regs);
 	}
 }
 
 #define STACK_SIZE_PAGES 1
 
-// TODO: Can probably replace this with a handful of memsets and clever pointer math
 int create_stack(struct task* task)
 {
 	void* stack = vmm_alloc_pages(1, false);
@@ -59,43 +71,18 @@ int create_stack(struct task* task)
 	memset(stack, 0, STACK_SIZE_PAGES * PAGE_SIZE);
 
 	uintptr_t stack_top = (uintptr_t)stack;
-	uintptr_t* sp = stack;
-	// All of this simulates a PUSHALL and interrupt
-	// Top of stack grows downwards
-	*--sp = 0x10;		// SS  ← optional for ring 0
-	*--sp = stack_top;	// RSP
-	*--sp = 0x202;		// RFLAGS (interrupts enabled)
-	*--sp = 0x08;		// CS (kernel code segment)
-	*--sp = (uintptr_t)0x0; // RIP, initially 0, gets added by another function
 
-	sp -= 2; // Space for irq and error code
+	task->kernel_stack = stack_top;
+	task->regs = (struct registers*)(uintptr_t)(stack_top - sizeof(struct registers));
+	// Simulate interrupt frame
+	task->regs->ss = 0x10; // optional for ring 0
+	task->regs->rsp = stack_top;
+	task->regs->rflags = 0x202;
+	task->regs->cs = 0x08; // kernel code segment
 
-	// PUSHALL
-	*--sp = 0x202; // pushfq (optional, if you do popfq)
-
-	// TODO: Make this better
-	*--sp = 0x0; // r15
-	*--sp = 0x0; // r14
-	*--sp = 0x0; // r13
-	*--sp = 0x0; // r12
-	*--sp = 0x0; // r11
-	*--sp = 0x0; // r10
-	*--sp = 0x0; // r9
-	*--sp = 0x0; // r8
-
-	*--sp = 0x0; // rax
-	*--sp = 0x0; // rcx
-	*--sp = 0x0; // rdx
-	*--sp = 0x0; // rbx
-	*--sp = 0x0; // rsp
-	*--sp = 0x0; // rbp
-	*--sp = 0x0; // rsi
-	*--sp = 0x0; // rdi
-
-	*--sp = 0x10; // ds (?)
-
-	task->kernel_stack = (uintptr_t)stack;
-	task->regs = (struct registers*)sp;
+	// Other important registers, all other registers set to 0
+	task->regs->ds = 0x10;
+	task->regs->saved_rflags = 0x202;
 
 	log_debug("Created stack for task %d, kernel_stack: %lx, regs addr: %p", task->PID, task->kernel_stack,
 		  (void*)task->regs);
@@ -103,16 +90,9 @@ int create_stack(struct task* task)
 	return 0;
 }
 
-struct task* task_add(void)
+/// Simply adds task to queue
+void task_add(struct task* task)
 {
-	struct task* task = kmalloc(sizeof(struct task));
-	if (task == NULL) return NULL;
-	memset(task, 0, sizeof(struct task));
-
-	task->PID = queue.pid_i++;
-	task->state = UNREADY;
-	task->parent = kernel_task;
-	create_stack(task);
 	if (queue.list == 0) {
 		log_debug("Initializing new list");
 		list_init(&task->list);
@@ -121,14 +101,25 @@ struct task* task_add(void)
 		log_debug("Appending new task to list");
 		list_append(queue.list, &task->list);
 	}
+	queue.task_count++;
 
 	log_debug("Added task %d", task->PID);
-	return task;
+	log_debug("Currently have %lu tasks", queue.task_count);
+}
+
+void idle_task_entry()
+{
+	while (1)
+		halt();
 }
 
 void init_scheduler(void)
 {
-	kernel_task = task_add();
+	idle_task = new_task((void*)idle_task_entry);
+	idle_task->cr3 = vmm_read_cr3();
+	idle_task->parent = kernel_task;
+
+	kernel_task = new_task(NULL);
 	kernel_task->cr3 = vmm_read_cr3();
 	kernel_task->parent = kernel_task;
 	queue.current_task = kernel_task;
@@ -136,20 +127,59 @@ void init_scheduler(void)
 	enable_preemption();
 }
 
+struct task* new_task(void* entry)
+{
+	struct task* task = kmalloc(sizeof(struct task));
+	if (task == NULL) return NULL;
+	memset(task, 0, sizeof(struct task));
+
+	task->state = UNREADY;
+	create_stack(task);
+	task->PID = queue.pid_i++;
+	task->cr3 = vmm_read_cr3();
+	task->parent = kernel_task;
+	if (entry) {
+		task->entry = entry;
+		task->regs->rip = (uintptr_t)entry;
+	}
+	task_add(task);
+
+	task->state = READY;
+
+	return task;
+}
+
 /// Returns NULL if invalid next task
 /// Sets the current task
 struct task* scheduler_pick_next()
 {
-	if (queue.list == NULL) return NULL;
-	struct task* next = list_entry(queue.current_task->list.next, struct task, list);
-	// If the next is not ready, we stay with the current task
-	while (next->state != READY) {
-		next = list_entry(next->list.next, struct task, list);
-		// If we looped the list we resume same task
-		if (next == queue.current_task) break;
+	if (!queue.list || list_empty(queue.list)) return NULL;
+	// If we only have 1 task then might as well make sure we continue it
+	if (queue.task_count == 1) return queue.current_task;
+
+	struct task* t = queue.current_task;
+	for (size_t i = 0; i < queue.task_count; i++) {
+		t = list_next_entry(t, list);
+		if (t->state == READY) {
+			queue.current_task = t;
+			return t;
+		}
 	}
-	queue.current_task = next;
+	// No ready task found
+	queue.current_task = idle_task;
 	return queue.current_task;
+}
+
+void scheduler_tick()
+{
+	struct task* task = queue.current_task;
+	for (size_t i = 0; i < queue.task_count; i++) {
+		task = list_next_entry(task, list);
+		if (task->state == BLOCKED && task->sleep_ticks > 0) {
+			task->sleep_ticks--;
+			if (task->sleep_ticks == 0) task->state = READY;
+		}
+	}
 }
 
 void yield()

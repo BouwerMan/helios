@@ -14,7 +14,10 @@ static inline void list_init(struct list* list)
 	list->prev = list;
 }
 
-static inline int list_empty(struct list* list) { return list->next == list; }
+static inline int list_empty(struct list* list)
+{
+	return list->next == list;
+}
 
 static inline void list_insert(struct list* link, struct list* new_link)
 {
@@ -24,9 +27,15 @@ static inline void list_insert(struct list* link, struct list* new_link)
 	new_link->next->prev = new_link;
 }
 
-static inline void list_append(struct list* list, struct list* new_link) { list_insert((struct list*)list, new_link); }
+static inline void list_append(struct list* list, struct list* new_link)
+{
+	list_insert((struct list*)list, new_link);
+}
 
-static inline void list_prepend(struct list* list, struct list* new_link) { list_insert(list->next, new_link); }
+static inline void list_prepend(struct list* list, struct list* new_link)
+{
+	list_insert(list->next, new_link);
+}
 
 static inline void list_remove(struct list* link)
 {
@@ -42,5 +51,7 @@ static inline void list_remove(struct list* link)
 
 #define list_next(element) (element->next)
 
-#define list_for_each_entry(pos, list, member)                                                                         \
-	for (pos = list_head(list, typeof(*pos), member); &pos->member != (list); pos = list_next(pos, member))
+#define list_next_entry(pos, member) list_entry((pos)->member.next, typeof(*(pos)), member)
+
+#define list_for_each_entry(pos, list, member) \
+	for (pos = list_head(list, typeof(*pos), member); &pos->member != (list); pos = list_next_entry(pos, member))

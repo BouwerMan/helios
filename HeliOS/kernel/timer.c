@@ -8,9 +8,9 @@ const int PIT_CLK = 1193180;
 
 /* This will keep track of how many ticks that the system
  *  has been running for */
-unsigned int ticks = 0;
-unsigned long ticker = 0;
-uint64_t countdown = 0;
+volatile uint64_t ticks = 0;
+volatile uint64_t seconds_since_start = 0;
+volatile uint64_t countdown = 0;
 static uint32_t phase = 18;
 
 extern volatile bool need_reschedule;
@@ -48,17 +48,13 @@ void timer_handler(struct registers* r)
 	(void)r;
 	/* Increment our 'tick count' */
 	ticks++;
+	if (ticks % phase == 0) seconds_since_start++;
+
 	// Decrement sleep countdown, should be every 1ms
-	if (countdown > 0) countdown--;
+	// if (countdown > 0) countdown--;
+	scheduler_tick();
 
-	// Think this means this is true every 20 ms
-	if (ticks % SCHEDULER_TIME == 0) {
-		need_reschedule = true;
-	}
-
-	if (ticks % phase == 0) {
-		ticker++;
-	}
+	if (ticks % SCHEDULER_TIME == 0) need_reschedule = true;
 }
 
 /* Waits until the timer at least one time.
@@ -73,18 +69,16 @@ void __attribute__((optimize("O0"))) timer_poll(void)
 /**
  * @brief Suspends execution of the current thread for a specified duration.
  *
- * This function blocks the thread by setting a countdown timer and halting
- * execution in a loop until the countdown reaches zero. The countdown is
- * decremented externally by the timer interrupt handler.
- *
  * @param millis The duration to sleep, in milliseconds.
  */
 void sleep(uint64_t millis)
 {
-	countdown = millis;
-	while (countdown > 0) {
-		halt();
-	}
+	struct task* t = get_current_task();
+	log_debug("Sleeping task %d for %lu millis", t->PID, millis);
+	// Don't need to convert to ticks since we have 1ms ticks
+	t->sleep_ticks = millis;
+	t->state = BLOCKED;
+	yield();
 }
 
 /**
