@@ -11,11 +11,11 @@
 #define MAX_RESOURCES  20
 
 enum TASK_STATE {
-	UNREADY,
 	INITIALIZED,
 	BLOCKED,
 	READY,
 	RUNNING,
+	IDLE,
 };
 
 struct task {
@@ -39,6 +39,10 @@ struct scheduler_queue {
 	uint64_t pid_i;
 };
 
+struct waitqueue {
+	struct list* list;
+};
+
 void task_add(struct task* task);
 struct task* new_task(void* entry);
 void check_reschedule(struct registers* regs);
@@ -52,3 +56,9 @@ void yield_blocked();
 
 struct task* get_current_task();
 struct scheduler_queue* get_scheduler_queue();
+
+/// Waitqueue
+
+void waitqueue_sleep(struct waitqueue* queue);
+void waitqueue_wake_one(struct waitqueue* queue);
+void waitqueue_wake_all(struct waitqueue* queue);

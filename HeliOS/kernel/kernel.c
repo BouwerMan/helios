@@ -182,7 +182,7 @@ void kernel_main(void)
 	vfs_close(&f2);
 
 	struct task* task = new_task((void*)task_test);
-	task->state = UNREADY;
+	task->state = BLOCKED;
 
 	/*
         struct registers* registers = task->regs;

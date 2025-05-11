@@ -69,7 +69,7 @@ static volatile bool data_ready = false;
 void dmesg_wait()
 {
 	while (!data_ready) {
-		yield();
+		yield_blocked();
 	}
 	data_ready = false;
 }
