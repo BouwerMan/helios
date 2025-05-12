@@ -1,3 +1,4 @@
+#include <kernel/helios.h>
 #include <kernel/memory/pmm.h>
 #include <kernel/memory/vmm.h>
 #include <kernel/sys.h>

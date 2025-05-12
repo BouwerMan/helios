@@ -74,9 +74,9 @@ void __attribute__((optimize("O0"))) timer_poll(void)
 void sleep(uint64_t millis)
 {
 	struct task* t = get_current_task();
-	log_debug("Sleeping task %d for %lu millis", t->PID, millis);
-	// Don't need to convert to ticks since we have 1ms ticks
-	t->sleep_ticks = millis;
+	log_debug("Sleeping task %d for %lu millis or %lu ticks", t->PID, millis, millis_to_ticks(millis));
+	// Don't need to convert to ticks since we have 1ms ticks but just incase
+	t->sleep_ticks = millis_to_ticks(millis);
 	t->state = BLOCKED;
 	yield();
 }
@@ -93,5 +93,5 @@ void timer_init(void)
 	log_debug("Initializing timer to 1000Hz");
 	/* Installs 'timer_handler' to IRQ0 */
 	install_isr_handler(IRQ0, timer_handler);
-	timer_phase(1000);
+	timer_phase(TIMER_HERTZ);
 }

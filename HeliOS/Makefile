@@ -119,7 +119,7 @@ $(BUILDDIR)/%.o: %.s
 
 $(BUILDDIR)/%.o: %.asm
 	@mkdir -p $(@D)
-	nasm -felf64 -g -F dwarf $< -o $@
+	nasm -Wall -felf64 -g -F dwarf $< -o $@
 
 $(BUILDDIR)/%.o: %.psf
 	@mkdir -p $(@D)

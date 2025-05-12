@@ -27,6 +27,7 @@
 #include <drivers/pci/pci.h>
 #include <drivers/serial.h>
 #include <kernel/dmesg.h>
+#include <kernel/helios.h>
 #include <kernel/liballoc.h>
 #include <kernel/memory/pmm.h>
 #include <kernel/memory/vmm.h>
@@ -97,6 +98,9 @@ void task_test()
 		yield();
 	}
 }
+
+// TODO: Use this
+struct kernel_context kernel = { 0 };
 
 void kernel_main(void)
 {
@@ -181,7 +185,7 @@ void kernel_main(void)
 	vfs_close(&f2);
 
 	struct task* task = new_task((void*)task_test);
-	task->state = UNREADY;
+	task->state = BLOCKED;
 
 	/*
         struct registers* registers = task->regs;

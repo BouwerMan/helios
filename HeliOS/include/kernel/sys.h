@@ -15,11 +15,6 @@
 #define KERNEL_NAME    "HELIOS"
 #define KERNEL_VERSION "0.0.0"
 
-/// Macros
-#define CEIL_DIV(a, b) (((a + b) - 1) / b)
-
-#define BOCHS_BREAKPOINT (asm volatile("xchgw %bx, %bx"))
-
 void panic(char* message);
 
 #endif /* SYS_H */

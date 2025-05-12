@@ -45,7 +45,7 @@ typedef struct {
 	uint32_t reserved;  // Set to zero
 } __attribute__((packed)) idt_entry_t;
 
-typedef struct {
+typedef struct idtr {
 	uint16_t limit;
 	uint64_t base;
 } __attribute__((packed)) idtr_t;
