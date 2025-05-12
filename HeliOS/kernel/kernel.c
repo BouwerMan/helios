@@ -150,12 +150,12 @@ void kernel_main(void)
 	log_info("Initializing VMM");
 	vmm_init(memmap_request.response, exe_addr_req.response, hhdm_request.response->offset);
 
-	log_info("Initializing Timer");
-	timer_init();
-
 	init_scheduler();
 	log_info("Initializing dmesg");
 	dmesg_init();
+
+	log_info("Initializing Timer");
+	timer_init();
 
 	list_devices();
 	ctrl_init();
