@@ -1,5 +1,6 @@
 ; https://github.com/Andrispowq/HackOS/blob/master/kernel/src/arch/x86_64/interrupts/interrupts.asm
 ; Thank you :)
+; asmsyntax=nasm
 [bits 64]
 
 extern isr_handler
@@ -111,7 +112,16 @@ __set_idt:
     add     rsp, 0x10
 %endmacro
 
+; Info on page 282 of AMD64 volume 2
+%macro swapgs_if_necessary 0
+	cmp qword [rsp + 8], 0x08 ; Check CS value that was pushed to stack
+	je %%skip ; If we are already in ring 0, don't need to swap
+	swapgs
+%%skip:
+%endmacro
+
 isr_common_stub:
+	swapgs_if_necessary
 	PUSHALL
 
     mov     rdi, rsp
@@ -129,10 +139,12 @@ isr_common_stub:
     add     rsp, 0x28      ; now clean up scratch space
     POPALL
 
+    swapgs_if_necessary
     sti
     iretq
 
 irq_common_stub:
+    swapgs_if_necessary
     PUSHALL
 
     mov     rdi, rsp
@@ -150,6 +162,7 @@ irq_common_stub:
     add     rsp, 0x28      ; now clean up scratch space
     POPALL
 
+    swapgs_if_necessary
     sti
     iretq
 
