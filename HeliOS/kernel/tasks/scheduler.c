@@ -1,5 +1,6 @@
 #include <kernel/liballoc.h>
 #include <kernel/memory/pmm.h>
+#include <kernel/memory/slab.h>
 #include <kernel/memory/vmm.h>
 #include <kernel/sys.h>
 #include <kernel/tasks/scheduler.h>
@@ -95,7 +96,7 @@ void check_reschedule(struct registers* regs)
 int create_stack(struct task* task)
 {
 	void* stack = vmm_alloc_pages(1, false);
-	if (!stack) return 1;
+	if (!stack) return -EOOM;
 	memset(stack, 0, STACK_SIZE_PAGES * PAGE_SIZE);
 
 	uintptr_t stack_top = (uintptr_t)stack;
@@ -153,6 +154,17 @@ void idle_task_entry()
  */
 void init_scheduler(void)
 {
+	squeue.cache = kmalloc(sizeof(struct slab_cache));
+	if (!squeue.cache) {
+		panic("OOM error from kmalloc");
+	}
+
+	int res = slab_cache_init(squeue.cache, "Scheduler Tasks", sizeof(struct task), 0, NULL, NULL);
+	if (res < 0) {
+		log_error("Could not init scheduler tasks cache, slab_cache_init() returned %d", res);
+		panic("Scheduler tasks cache init failure");
+	}
+
 	idle_task = new_task((void*)idle_task_entry);
 	idle_task->cr3 = vmm_read_cr3();
 	idle_task->parent = kernel_task;

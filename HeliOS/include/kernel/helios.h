@@ -52,6 +52,9 @@ typedef int64_t i64;
 enum ERROR_CODES {
 	ENONE = 0,
 	EOOM,
+	EALIGN,
+	ENULLPTR,
+
 };
 
 struct kernel_context {

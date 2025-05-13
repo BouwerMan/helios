@@ -1,16 +1,21 @@
 #include <drivers/fs/fat.h>
 #include <drivers/fs/vfs.h>
 #include <kernel/liballoc.h>
+#include <kernel/memory/slab.h>
 #include <kernel/sys.h>
 #include <string.h>
 #include <util/ht.h>
 #include <util/log.h>
+
+// TODO: Find a better way to handle some of these icky globals, also def need some locks
 
 struct vfs_fs_type* fs_list = NULL;
 struct vfs_mount* mount_list = NULL;
 struct vfs_superblock* rootfs = NULL;
 struct vfs_superblock** sb_list;
 static uint8_t sb_idx = 0;
+
+struct slab_cache dentry_cache = { 0 };
 
 struct ht* dentry_ht;
 
@@ -41,6 +46,12 @@ static void add_superblock(struct vfs_superblock* sb)
 void vfs_init(size_t dhash_size)
 {
 	sb_list = kmalloc(sizeof(uintptr_t) * 8);
+
+	int res = slab_cache_init(&dentry_cache, "VFS Dentry", sizeof(struct vfs_dentry), 8, NULL, NULL);
+	if (res < 0) {
+		log_error("Could not init dentry cache, slab_cache_init() returned %d", res);
+		panic("Dentry cache init failure");
+	}
 
 	// TODO: Implement dentry destructors
 	dentry_ht = ht_create(dhash_size);
@@ -116,13 +127,12 @@ struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
 	// FIXME: I'm doing some funky stuff between inodes and dentrys that
 	// probably is bad
 	struct vfs_dentry* found;
-	// Have to allocate some stuff beforehand for the filesystem and hash table
-	// checks
-	struct vfs_dentry* child = kmalloc(sizeof(struct vfs_dentry));
+	// Have to allocate some stuff beforehand for the filesystem and hash table checks
+	struct vfs_dentry* child = slab_alloc(&dentry_cache);
 	if (!child) return NULL;
 	child->name = strdup(name);
 	if (!child->name) {
-		kfree(child);
+		slab_free(&dentry_cache, child);
 		return NULL;
 	}
 	child->parent = parent;
@@ -131,14 +141,14 @@ struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
 	if ((found = ht_get(dentry_ht, child)) != NULL) {
 		// Since we found it, we free all the child init stuff then return found
 		kfree(child->name);
-		kfree(child);
+		slab_free(&dentry_cache, child);
 		return dget(found);
 	}
 
 	if (!parent->inode || !parent->inode->ops || !parent->inode->ops->lookup) {
 		log_error("Invalid inode operations");
 		kfree(child->name);
-		kfree(child);
+		slab_free(&dentry_cache, child);
 		return NULL; // Handle invalid inode or missing lookup operation
 	}
 

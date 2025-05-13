@@ -186,7 +186,7 @@ void kernel_main(void)
 	vfs_close(&f2);
 
 	struct slab_cache test_cache = { 0 };
-	slab_cache_init(&test_cache, "Test cache", sizeof(uint64_t), 8, NULL, NULL);
+	(void)slab_cache_init(&test_cache, "Test cache", sizeof(uint64_t), 0, NULL, NULL);
 	log_debug("Test cache slab size: %lu pages", test_cache.slab_size_pages);
 	uint64_t* data = slab_alloc(&test_cache);
 	*data = 12345;

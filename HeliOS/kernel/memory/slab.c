@@ -1,48 +1,57 @@
+#include <kernel/helios.h>
 #include <kernel/liballoc.h>
 #include <kernel/memory/pmm.h>
 #include <kernel/memory/slab.h>
 #include <kernel/memory/vmm.h>
+#include <stdalign.h>
 #include <string.h>
 #include <util/log.h>
 
-static int slab_grow(struct slab_cache* cache);
+[[nodiscard]] static int slab_grow(struct slab_cache* cache);
 static void destroy_slab(struct slab* slab);
 
 /**
  * @brief Initialize a slab cache for fixed‐size object allocations.
  *
  * Sets up the metadata and free‐list structures needed to carve pages into
- * fixed-size objects.  Verifies that the requested alignment is a power of two,
+ * fixed-size objects. Verifies that the requested alignment is a power of two,
  * rounds the object size up to meet that alignment, computes how many objects
  * fit per slab, initializes the empty/partial/full slab lists, stores the
  * cache’s name, and registers optional constructor/destructor callbacks for
  * new or recycled objects.
  *
- * @param cache		Pointer to an uninitialized slab_cache structure to set up.
- * @param name		Human-readable identifier for this cache (max length MAX_CACHE_NAME_LEN).
- * @param object_size	Desired size of each object; will be rounded up to object_align.
- * @param object_align	Alignment boundary for each object; must be power of two.
- * @param constructor	Optional callback invoked on each object when a new slab is populated.
- * @param destructor	Optional callback invoked on each object before it’s recycled or cache is destroyed.
+ * @param cache         Pointer to an uninitialized slab_cache structure to set up.
+ * @param name          Human-readable identifier for this cache (max length MAX_CACHE_NAME_LEN).
+ * @param object_size   Desired size of each object; will be rounded up to object_align.
+ * @param object_align  Alignment boundary for each object; must be power of two. Defaults to 16 if 0 is passed through.
+ * @param constructor   Optional callback invoked on each object when a new slab is populated.
+ * @param destructor    Optional callback invoked on each object before it’s recycled or cache is destroyed.
+ * @return              0 on success, or a negative error code on failure.
  */
-void slab_cache_init(struct slab_cache* cache, const char* name, size_t object_size, size_t object_align,
-		     void (*constructor)(void*), void (*destructor)(void*))
+int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_size, size_t object_align,
+		    void (*constructor)(void*), void (*destructor)(void*))
 {
 	if (!cache) {
 		log_error("Must supply valid cache structure pointer");
-		return;
+		return -ENULLPTR;
 	}
-	if (object_size >= PAGE_SIZE) {
-		log_error("Object size of %lu is basically the same size as a page.", object_size);
-		return;
-	}
+
+	// Ensure object alignment is a power of two, defaulting to max_align_t if zero
+	if (object_align == 0) object_align = alignof(max_align_t); // usually 16 on x86-64
 	if (!IS_POWER_OF_TWO(object_align)) {
 		log_error("Object alignment is not a power of 2: %lu", object_align);
-		return;
+		return -EALIGN;
 	}
 
-	memset(cache, 0, sizeof *cache);
+	if (object_size >= PAGE_SIZE) {
+		log_error("Object size of %lu is basically the same size as a page.", object_size);
+		return -EOOM; // Technically not OOM but idk what it should actually be
+	}
 
+	// Zero out cache just to make sure there is no garbage data there
+	memset(cache, 0, sizeof(struct slab_cache));
+
+	// Compute rounded object size and initialize cache metadata
 	const size_t rounded_size = ALIGN_UP(object_size, object_align);
 	cache->object_size = rounded_size;
 	cache->object_align = object_align;
@@ -59,10 +68,17 @@ void slab_cache_init(struct slab_cache* cache, const char* name, size_t object_s
 	cache->constructor = constructor;
 	cache->destructor = destructor;
 
+	// Copy the cache name and ensure null termination
 	strncpy(cache->name, name, MAX_CACHE_NAME_LEN);
 	cache->name[MAX_CACHE_NAME_LEN - 1] = '\0';
 
 	cache->flags = CACHE_INITIALIZED;
+
+	log_debug("Slab cache initialized: name=%s, object_size=%lu, object_align=%lu, "
+		  "slab_size_pages=%lu, header_size=%lu, objects_per_slab=%lu",
+		  name, rounded_size, object_align, cache->slab_size_pages, cache->header_size,
+		  cache->objects_per_slab);
+	return 0;
 }
 
 /**
@@ -78,43 +94,43 @@ void slab_cache_init(struct slab_cache* cache, const char* name, size_t object_s
  */
 void* slab_alloc(struct slab_cache* cache)
 {
-	if (!cache) {
-		log_error("You must give a cache that isn't at 0x0 or I'll be sad");
-		return NULL;
-	}
-	if (cache->flags == CACHE_UNINITIALIZED) {
-		log_error("Supplied uninitialized cache");
+	if (!cache || cache->flags == CACHE_UNINITIALIZED) {
+		log_error("Invalid or uninitialized cache");
 		return NULL;
 	}
 
-	struct slab* slab;
+	struct slab* slab = NULL;
+	int res = 0;
+
+	// Attempt to allocate from a partially filled slab
 	if (!list_empty(&cache->partial)) {
 		slab = list_entry(cache->partial.next, struct slab, link);
+	} else if (!list_empty(&cache->empty) || (res = slab_grow(cache)) >= 0) {
+		// Move the first empty slab to the partial list
+		slab = list_entry(cache->empty.next, struct slab, link);
+		list_move(&slab->link, &cache->partial);
+		log_debug("Cache %s: slab %p moved from empty to partial (free_top=%zu/%zu)", cache->name, (void*)slab,
+			  slab->free_top, cache->objects_per_slab);
+		// slab = first;
 	} else {
-		if (list_empty(&cache->empty)) {
-			int res = slab_grow(cache);
-			if (res < 0) return NULL;
-		}
-
-		// move first empty slab into partial
-		struct slab* first = list_entry(cache->empty.next, struct slab, link);
-		log_debug("Cache %s: slab %p moved from empty to partial (free_top=%zu/%zu)", cache->name, (void*)first,
-			  first->free_top, cache->objects_per_slab);
-		list_move(&first->link, &cache->partial);
-		slab = first;
+		log_error("Could not create more slabs, slab_grow returned: %d", res);
+		return NULL;
 	}
 
 	void* addr = slab->free_stack[--slab->free_top];
+
+	// Move the slab to the full list if it becomes exhausted
 	if (slab->free_top == 0) {
+		list_move(&slab->link, &cache->full);
 		log_debug("Cache %s: slab %p is now full (free_top=%zu/%zu)", cache->name, (void*)slab, slab->free_top,
 			  cache->objects_per_slab);
-		list_move(&slab->link, &cache->full);
 	}
 
 	if (cache->constructor) cache->constructor(addr);
 
 	log_debug("Cache %s: allocated object %p from slab %p (free_top=%zu/%zu)", cache->name, addr, (void*)slab,
 		  slab->free_top, cache->objects_per_slab);
+
 	return addr;
 }
 
@@ -141,6 +157,10 @@ void slab_free(struct slab_cache* cache, void* object)
 			"I mean you gave me a cache but you should also give me a object to free otherwise I might just delete everything in a blind rage");
 		return;
 	}
+	if (cache->flags == CACHE_UNINITIALIZED) {
+		log_error("Supplied uninitialized cache");
+		return;
+	}
 
 	// I am currently doing address masking, this works because I am only using 1 page slabs.
 	// If I use larger page sizes then I should set mask to ~(slab_bytes - 1) where
@@ -165,6 +185,7 @@ void slab_free(struct slab_cache* cache, void* object)
 		log_debug("Cache %s: slab %p is now empty (free_top=%zu/%zu)", cache->name, (void*)slab, slab->free_top,
 			  cache->objects_per_slab);
 		list_move(&slab->link, &cache->empty);
+		// TODO: If number of empty slabs is too high, destroy some of them
 	} else if (slab->free_top == 1) {
 		log_debug("Cache %s: slab %p moved from full to partial (free_top=%zu/%zu)", cache->name, (void*)slab,
 			  slab->free_top, cache->objects_per_slab);
@@ -191,6 +212,11 @@ void slab_cache_destroy(struct slab_cache* cache)
 		log_error("I can't destroy a cache if you don't give me a valid cache");
 		return;
 	}
+	if (cache->flags == CACHE_UNINITIALIZED) {
+		log_error("Supplied uninitialized cache");
+		return;
+	}
+
 	log_debug("Destroying cache %s", cache->name);
 
 	struct slab* slab;
@@ -217,10 +243,19 @@ void slab_cache_destroy(struct slab_cache* cache)
 	memset(cache, 0, sizeof(struct slab_cache));
 }
 
+/**
+ * @brief Destroy a single slab and release its memory.
+ *
+ * Frees all objects in the slab, invoking the destructor for each live object.
+ * Releases the memory allocated for the slab and its metadata.
+ *
+ * @param slab Pointer to the slab to destroy.
+ */
 static void destroy_slab(struct slab* slab)
 {
 	struct slab_cache* cache = slab->parent;
 	log_debug("Cache %s: Destroying slab %p", cache->name, (void*)slab);
+
 	void* base = (void*)slab;
 	size_t N = cache->objects_per_slab;
 
@@ -259,6 +294,15 @@ static void destroy_slab(struct slab* slab)
 	vmm_free_pages(base, cache->slab_size_pages);
 }
 
+/**
+ * @brief Grow the slab cache by allocating a new slab.
+ *
+ * Allocates memory for a new slab, initializes its metadata, and adds it to
+ * the empty slab list of the cache.
+ *
+ * @param cache Pointer to the slab_cache to grow.
+ * @return 0 on success, -EOOM if out of memory.
+ */
 static int slab_grow(struct slab_cache* cache)
 {
 	log_debug("Creating new slab for cache: %s", cache->name);
@@ -271,7 +315,7 @@ static int slab_grow(struct slab_cache* cache)
 	struct slab* new_slab = (struct slab*)base;
 	new_slab->parent = cache;
 	new_slab->free_stack = kmalloc(cache->objects_per_slab * sizeof(void*));
-	if (!base) {
+	if (!new_slab->free_stack) {
 		log_error("OOM growing slab for cache %s", cache->name);
 		vmm_free_pages(base, cache->slab_size_pages);
 		return -EOOM;

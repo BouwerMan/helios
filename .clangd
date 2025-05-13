@@ -11,6 +11,7 @@ CompileFlags:
     - "-pedantic"
     - "-Wno-empty-translation-unit"
     - "-Wno-unused-function"
+    - "-Wunused-result"
     - "--target=x86_64"
     - "-std=gnu23"
     - "-xc"

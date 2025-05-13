@@ -42,6 +42,7 @@ void dmesg_enqueue(const char* str, size_t len)
 	dmesg_wake();
 }
 
+// TODO: Some sort of flush mechanism at the very lest flush to serial
 void dmesg_task_entry(void)
 {
 	while (1) {

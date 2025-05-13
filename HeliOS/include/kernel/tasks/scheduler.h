@@ -4,6 +4,7 @@
 #include "../../../arch/x86_64/interrupts/idt.h"
 
 #include <drivers/fs/vfs.h>
+#include <kernel/memory/slab.h>
 #include <stdint.h>
 #include <util/list.h>
 
@@ -35,6 +36,7 @@ struct task {
 struct scheduler_queue {
 	struct list* list; // list head of the queue
 	struct task* current_task;
+	struct slab_cache* cache;
 	size_t task_count;
 	uint64_t pid_i;
 };

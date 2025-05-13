@@ -43,8 +43,8 @@ struct slab {
 };
 
 // TODO: Return int? A lot of these should actually return error codes
-void slab_cache_init(struct slab_cache* cache, const char* name, size_t object_size, size_t object_align,
-		     void (*constructor)(void*), void (*destructor)(void*));
+[[nodiscard]] int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_size, size_t object_align,
+				  void (*constructor)(void*), void (*destructor)(void*));
 void* slab_alloc(struct slab_cache* cache);
 void slab_free(struct slab_cache* cache, void* object);
 void slab_cache_destroy(struct slab_cache* cache);
