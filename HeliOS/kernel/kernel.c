@@ -30,6 +30,7 @@
 #include <kernel/helios.h>
 #include <kernel/liballoc.h>
 #include <kernel/memory/pmm.h>
+#include <kernel/memory/slab.h>
 #include <kernel/memory/vmm.h>
 #include <kernel/screen.h>
 #include <kernel/sys.h>
@@ -184,24 +185,22 @@ void kernel_main(void)
 	vfs_close(&f);
 	vfs_close(&f2);
 
-	struct task* task = new_task((void*)task_test);
-	task->state = BLOCKED;
+	struct slab_cache test_cache = { 0 };
+	slab_cache_init(&test_cache, "Test cache", sizeof(uint64_t), 8, NULL, NULL);
+	log_debug("Test cache slab size: %lu pages", test_cache.slab_size_pages);
+	uint64_t* data = slab_alloc(&test_cache);
+	*data = 12345;
+	log_info("Got data at %p, set value to %lu", (void*)data, *data);
+	uint64_t* data2 = slab_alloc(&test_cache);
+	*data2 = 54321;
+	log_info("Got data2 at %p, set value to %lu", (void*)data2, *data2);
+	size_t slab_bytes = test_cache.slab_size_pages * PAGE_SIZE;
+	size_t mask = ~(slab_bytes - 1);
+	log_debug("Slab base for data: %lx", (uintptr_t)data & mask);
+	slab_free(&test_cache, data2);
 
-	/*
-        struct registers* registers = task->regs;
-	log_error("Recieved interrupt #%lx with error code %lx on the default handler!", registers->int_no,
-		  registers->err_code);
-	log_error("RIP: %lx, RSP: %lx, RBP: %lx", registers->rip, registers->rsp, registers->rbp);
-	log_error("RAX: %lx, RBX: %lx, RCX: %lx, RDX: %lx", registers->rax, registers->rbx, registers->rcx,
-		  registers->rdx);
-	log_error("RDI: %lx, RSI: %lx, RFLAGS: %lx, DS: %lx", registers->rdi, registers->rsi, registers->rflags,
-		  registers->ds);
-	log_error("CS: %lx, SS: %lx", registers->cs, registers->ss);
-	log_error("R8: %lx, R9: %lx, R10: %lx, R11: %lx", registers->r8, registers->r9, registers->r10, registers->r11);
-	log_error("R12: %lx, R13: %lx, R14: %lx, R15: %lx", registers->r12, registers->r13, registers->r14,
-		  registers->r15);
-	log_error("Saved_rflags: %lx", registers->saved_rflags);
-        */
+	slab_cache_destroy(&test_cache);
+	slab_alloc(&test_cache);
 
 	// We're done, just hang...
 	log_debug("Sleeping for 1 second");

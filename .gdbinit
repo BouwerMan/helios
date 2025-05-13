@@ -4,7 +4,7 @@ target remote localhost:1234
 set print pretty on
 
 # break scheduler.c:134
-# break timer.c:55
+break slab.c:243
 c
 
 # Inspect page tables

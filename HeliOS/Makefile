@@ -45,6 +45,7 @@ $(BUILDDIR)/$(KERNELDIR)/screen.o \
 $(BUILDDIR)/$(KERNELDIR)/timer.o \
 $(BUILDDIR)/$(KERNELDIR)/memory/pmm.o \
 $(BUILDDIR)/$(KERNELDIR)/memory/vmm.o \
+$(BUILDDIR)/$(KERNELDIR)/memory/slab.o \
 $(BUILDDIR)/$(KERNELDIR)/panic.o \
 $(BUILDDIR)/$(KERNELDIR)/liballoc.o \
 $(BUILDDIR)/$(KERNELDIR)/liballoc_hooks.o \

@@ -1,11 +1,10 @@
 #pragma once
+#include <kernel/helios.h>
 #include <limine.h>
 #include <stddef.h>
 
-#define IS_POWER_OF_TWO(x) (((x) != 0) && (((x) & ((x) - 1)) == 0))
-#define PAGE_SIZE	   0x1000
-_Static_assert(IS_POWER_OF_TWO(PAGE_SIZE) == true,
-	       "PAGE_SIZE must be power of 2");
+#define PAGE_SIZE 0x1000
+_Static_assert(IS_POWER_OF_TWO(PAGE_SIZE) == true, "PAGE_SIZE must be power of 2");
 #define BITSET_WIDTH 64
 
 // is this really needed? dumbass

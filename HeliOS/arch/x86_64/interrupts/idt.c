@@ -63,6 +63,7 @@ const char* exception_messages[] = {
  */
 static void default_exception_handler(struct registers* registers)
 {
+	set_log_mode(LOG_DIRECT);
 	log_error("Recieved interrupt #%lx with error code %lx on the default handler!", registers->int_no,
 		  registers->err_code);
 	log_error("Exception: %s", exception_messages[registers->int_no]);

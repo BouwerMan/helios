@@ -43,6 +43,12 @@ static inline void list_remove(struct list* link)
 	link->next->prev = link->prev;
 }
 
+static inline void list_move(struct list* link, struct list* new_link)
+{
+	list_remove(link);
+	list_append(new_link, link);
+}
+
 #define list_entry(link, type, member) ((type*)((char*)(link) - (unsigned long)(&((type*)0)->member)))
 
 #define list_head(list, type, member) list_entry((list)->next, type, member)
