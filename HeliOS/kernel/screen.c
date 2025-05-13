@@ -31,6 +31,7 @@ static void draw_glyph(uint8_t* glyph, int offset, uint32_t fg, uint32_t bg);
 void screen_init(struct limine_framebuffer* fb, uint32_t fg_color, uint32_t bg_color)
 {
 	// TODO: properly init psf, though the one im using currently isnt unicode
+	// TODO: When clearing and scrolling, should I clear by pitch or width * sizeof(PIXEL)?
 
 	sc.cx = 0;
 	sc.cy = 0;
@@ -59,13 +60,13 @@ void screen_clear()
 	uint64_t char_height = sc.char_height;
 	uint64_t pitch = sc.fb->pitch;
 	uint64_t height = sc.fb->height;
-	uint64_t width = sc.fb->width;
 	size_t total_chars_y = height / char_height;
 	size_t total_rows = (total_chars_y - 1) * char_height;
+
 	// Clear scanline row by scanline row
 	for (size_t row = 0; row < total_rows; row++) {
 		void* dst = (void*)(addr + (row * pitch));
-		memset32(dst, 0, width);
+		memset(dst, 0, pitch);
 	}
 
 	sc.cx = 0;
@@ -156,7 +157,6 @@ static void scroll()
 	uint64_t char_height = sc.char_height;
 	uint64_t pitch = sc.fb->pitch;
 	uint64_t height = sc.fb->height;
-	uint64_t width = sc.fb->width;
 
 	size_t total_chars_y = height / char_height;
 	size_t total_rows = (total_chars_y - 1) * char_height;
@@ -165,8 +165,7 @@ static void scroll()
 	for (size_t row = 0; row < total_rows; row++) {
 		void* dst = (void*)(addr + (row * pitch));
 		void* src = (void*)(addr + ((row + char_height) * pitch));
-		// This one line literally blasted the speed holy
-		memmove32(dst, src, width);
+		memmove(dst, src, pitch);
 	}
 
 	// Clear the last row. Once again, one scanline at a time
@@ -174,7 +173,7 @@ static void scroll()
 	void* row_base = (void*)(addr + start_y * pitch);
 	for (size_t y = 0; y < char_height; y++) {
 		uint32_t* dst = (uint32_t*)((uintptr_t)row_base + (y * pitch));
-		memset32(dst, sc.bgc, width);
+		memset(dst, sc.bgc, pitch);
 	}
 }
 
