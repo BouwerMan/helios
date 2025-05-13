@@ -103,6 +103,12 @@ void task_test()
 // TODO: Use this
 struct kernel_context kernel = { 0 };
 
+/// Initializes the lists in the kernel_context struct
+static void init_kernel_structure()
+{
+	list_init(&kernel.slab_caches);
+}
+
 void kernel_main(void)
 {
 	// Ensure the bootloader actually understands our base revision (see spec).
@@ -132,6 +138,8 @@ void kernel_main(void)
 
 	// Fetch the first framebuffer.
 	framebuffer = framebuffer_request.response->framebuffers[0];
+
+	init_kernel_structure();
 
 	init_serial();
 	write_serial_string("\n\nInitialized serial output, expect a lot of debug messages :)\n\n");

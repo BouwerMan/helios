@@ -95,7 +95,7 @@ void check_reschedule(struct registers* regs)
  */
 int create_stack(struct task* task)
 {
-	void* stack = vmm_alloc_pages(1, false);
+	void* stack = vmm_alloc_pages(STACK_SIZE_PAGES, false);
 	if (!stack) return -EOOM;
 	memset(stack, 0, STACK_SIZE_PAGES * PAGE_SIZE);
 
@@ -126,14 +126,8 @@ int create_stack(struct task* task)
  */
 void task_add(struct task* task)
 {
-	if (squeue.list == 0) {
-		log_debug("Initializing new list");
-		list_init(&task->list);
-		squeue.list = &task->list;
-	} else {
-		log_debug("Appending new task to list");
-		list_append(squeue.list, &task->list);
-	}
+	log_debug("Appending new task to list");
+	list_append(&squeue.task_list, &task->list);
 	squeue.task_count++;
 
 	log_debug("Added task %d", task->PID);
@@ -156,8 +150,10 @@ void init_scheduler(void)
 {
 	squeue.cache = kmalloc(sizeof(struct slab_cache));
 	if (!squeue.cache) {
+		log_error("OOM error from kmalloc");
 		panic("OOM error from kmalloc");
 	}
+	list_init(&squeue.task_list);
 
 	int res = slab_cache_init(squeue.cache, "Scheduler Tasks", sizeof(struct task), 0, NULL, NULL);
 	if (res < 0) {
@@ -211,7 +207,7 @@ struct task* new_task(void* entry)
  */
 struct task* scheduler_pick_next()
 {
-	if (!squeue.list || list_empty(squeue.list)) return NULL;
+	if (list_empty(&squeue.task_list)) return NULL;
 	// If we only have 1 task then might as well make sure we continue it
 	if (squeue.task_count == 1) return squeue.current_task;
 

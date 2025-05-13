@@ -34,7 +34,7 @@ struct task {
 };
 
 struct scheduler_queue {
-	struct list* list; // list head of the queue
+	struct list task_list; // list head of the queue
 	struct task* current_task;
 	struct slab_cache* cache;
 	size_t task_count;

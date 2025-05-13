@@ -62,8 +62,7 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
 	list_init(&cache->empty);
 	list_init(&cache->partial);
 	list_init(&cache->full);
-	// TODO: Use master cache list or smthn
-	list_init(&cache->cache_node);
+	list_append(&kernel.slab_caches, &cache->cache_node);
 
 	cache->constructor = constructor;
 	cache->destructor = destructor;
@@ -236,7 +235,6 @@ void slab_cache_destroy(struct slab_cache* cache)
 		destroy_slab(slab);
 	}
 
-	// TODO: Make a proper cache master list setup
 	list_remove(&cache->cache_node);
 
 	// This also sets the flags to CACHE_UNINITIALIZED

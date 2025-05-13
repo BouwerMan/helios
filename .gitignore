@@ -10,3 +10,8 @@ mnt/
 limine/
 *.o
 *.txt
+
+*.o
+*.d
+*.kernel
+build/

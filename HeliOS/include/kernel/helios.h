@@ -7,6 +7,7 @@
 #include <kernel/screen.h>
 #include <kernel/tasks/scheduler.h>
 #include <stdint.h>
+#include <util/list.h>
 
 typedef uint8_t u8;
 typedef int8_t i8;
@@ -62,6 +63,8 @@ struct kernel_context {
 	struct idtr* idtr;
 	struct scheduler_queue* squeue;
 	struct screen_info* screen;
+
+	struct list slab_caches;
 };
 
 extern struct kernel_context kernel;
