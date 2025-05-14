@@ -160,8 +160,8 @@ void kernel_main(void)
 	vmm_init(memmap_request.response, exe_addr_req.response, hhdm_request.response->offset);
 
 	init_scheduler();
-	// log_info("Initializing dmesg");
-	// dmesg_init();
+	log_info("Initializing dmesg");
+	dmesg_init();
 
 	log_info("Initializing Timer");
 	timer_init();
