@@ -1,10 +1,30 @@
-#include <kernel/helios.h>
+/**
+ * @file kernel/memory/slab.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include <string.h>
+
 #include <kernel/liballoc.h>
 #include <kernel/memory/pmm.h>
 #include <kernel/memory/slab.h>
 #include <kernel/memory/vmm.h>
-#include <stdalign.h>
-#include <string.h>
 #include <util/log.h>
 
 [[nodiscard]] static int slab_grow(struct slab_cache* cache);

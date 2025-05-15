@@ -1,11 +1,6 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 #include <stdint.h>
-
-// Inline assembly utilities
-static inline void halt()
-{
-	__asm__ volatile("hlt");
-}
 
 static inline void outb(uint16_t port, uint8_t val)
 {

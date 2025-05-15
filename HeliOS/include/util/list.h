@@ -1,9 +1,10 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+#pragma once
 /* This is the list.h taken direcly from Linux source:
  * https://github.com/torvalds/linux/blob/master/tools/firewire/list.h
  * This is under a different license to the rest of the project, as described below. */
-#pragma once
+// NOTE: I have in fact made some modifications and extensions
 
-/* SPDX-License-Identifier: GPL-2.0 */
 struct list {
 	struct list *next, *prev;
 };

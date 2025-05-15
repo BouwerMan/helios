@@ -1,11 +1,9 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-// TODO: Gotta be a better way for me to do this lmao
-#include "../../../arch/x86_64/interrupts/idt.h"
-
-#include <drivers/fs/vfs.h>
-#include <kernel/memory/slab.h>
+#include <stddef.h>
 #include <stdint.h>
+
 #include <util/list.h>
 
 #define SCHEDULER_TIME 20 // ms per preemptive tick
@@ -42,7 +40,7 @@ struct scheduler_queue {
 };
 
 struct waitqueue {
-	struct list* list;
+	struct list list;
 };
 
 void task_add(struct task* task);
@@ -61,6 +59,6 @@ struct scheduler_queue* get_scheduler_queue();
 
 /// Waitqueue
 
-void waitqueue_sleep(struct waitqueue* queue);
-void waitqueue_wake_one(struct waitqueue* queue);
-void waitqueue_wake_all(struct waitqueue* queue);
+void waitqueue_sleep(struct waitqueue* wqueue);
+void waitqueue_wake_one(struct waitqueue* wqueue);
+void waitqueue_wake_all(struct waitqueue* wqueue);

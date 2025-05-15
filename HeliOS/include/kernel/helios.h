@@ -1,12 +1,8 @@
-// Holds helper macros and typedefs
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include "../../arch/x86_64/gdt.h"
-#include "../../arch/x86_64/interrupts/idt.h"
-
-#include <kernel/screen.h>
-#include <kernel/tasks/scheduler.h>
 #include <stdint.h>
+
 #include <util/list.h>
 
 typedef uint8_t u8;
@@ -49,6 +45,11 @@ typedef int64_t i64;
 #define BOCHS_BREAKPOINT (asm volatile("xchgw %bx, %bx"))
 
 #define __PACKED __attribute__((packed))
+
+static inline void halt()
+{
+	__asm__ volatile("hlt");
+}
 
 enum ERROR_CODES {
 	ENONE = 0,

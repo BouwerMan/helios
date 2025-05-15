@@ -1,7 +1,9 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
-#include <limine.h>
+
 #include <stddef.h>
-#include <stdint.h>
+
+#include <limine.h>
 
 // #define PHYS_TO_HHDM(x)   ((void *)((uintptr_t)(x) + hhdm_offset))
 // #define HHDM_TO_PHYS(x)   ((uintptr_t)(x) - hhdm_offset)

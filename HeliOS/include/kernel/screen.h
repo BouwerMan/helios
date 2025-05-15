@@ -1,8 +1,11 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
-#include <kernel/spinlock.h>
-#include <limine.h>
+
 #include <stddef.h>
 #include <stdint.h>
+
+#include <kernel/spinlock.h>
+#include <limine.h>
 
 #define CHAR_SPACING 0
 

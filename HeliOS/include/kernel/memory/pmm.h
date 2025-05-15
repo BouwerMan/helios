@@ -1,7 +1,10 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
+
+#include <stddef.h>
+
 #include <kernel/helios.h>
 #include <limine.h>
-#include <stddef.h>
 
 #define PAGE_SIZE 0x1000
 _Static_assert(IS_POWER_OF_TWO(PAGE_SIZE) == true, "PAGE_SIZE must be power of 2");

@@ -1,6 +1,9 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
-#include "../arch/x86_64/interrupts/idt.h"
+
 #include <stdint.h>
+
+#include "../arch/x86_64/interrupts/idt.h"
 
 #define TIMER_HERTZ	    1000
 #define millis_to_ticks(ms) ((((uint64_t)(ms) * TIMER_HERTZ) + 999) / 1000)

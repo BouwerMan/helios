@@ -1,31 +1,22 @@
 /**
- * @file pmm.c
- * @brief Implementation of the Physical Memory Manager (PMM) for the HeliOS project.
+ * @file kernel/memory/pmm.c
  *
- * This file contains the implementation of the Physical Memory Manager, responsible
- * for managing physical memory in the system. It includes functions for initializing
- * the memory manager, allocating and freeing pages, and tracking memory usage.
+ * Copyright (C) 2025  Dylan Parks
  *
- * The PMM uses a bitmap to track the allocation status of physical memory pages.
- * It interacts with the memory map provided by the bootloader and ensures proper
- * alignment and allocation of memory regions.
+ * This file is part of HeliOS
  *
- * @author Dylan Parks
- * @date 2025-04-10
- * @license GPL-3.0
- *
- * This program is free software: you can redistribute it and/or modify
+ * HeliOS is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <kernel/memory/pmm.h>

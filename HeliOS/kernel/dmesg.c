@@ -1,11 +1,31 @@
+/**
+ * @file kernel/dmesg.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <drivers/serial.h>
 #include <kernel/dmesg.h>
-#include <kernel/memory/pmm.h>
-#include <kernel/memory/vmm.h>
 #include <kernel/screen.h>
 #include <kernel/spinlock.h>
 #include <kernel/tasks/scheduler.h>
 #include <util/log.h>
+
 #define DMESG_BUFFER_SIZE 0x10000
 
 char log_buffer[DMESG_BUFFER_SIZE];

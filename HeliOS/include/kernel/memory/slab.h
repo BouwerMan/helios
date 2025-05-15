@@ -1,5 +1,8 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
+
 #include <kernel/helios.h>
+#include <stddef.h>
 #include <util/list.h>
 
 // TODO: Try using a free list stored in the freed object's slab slice similar to the linux kernel

@@ -1,12 +1,36 @@
+/**
+ * @file kernel/tasks/scheduler.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include <string.h>
+
 #include <kernel/liballoc.h>
 #include <kernel/memory/pmm.h>
 #include <kernel/memory/slab.h>
 #include <kernel/memory/vmm.h>
 #include <kernel/sys.h>
 #include <kernel/tasks/scheduler.h>
-#include <string.h>
 #include <util/list.h>
 #include <util/log.h>
+
+#include "../../arch/x86_64/interrupts/idt.h"
 
 volatile bool need_reschedule = false;
 // If > 0, preempt is disabled
@@ -257,13 +281,31 @@ void yield_blocked()
 	yield();
 }
 
-void waitqueue_sleep(struct waitqueue* queue)
+void waitqueue_sleep(struct waitqueue* wqueue)
 {
 	struct task* t = get_current_task();
 	t->state = BLOCKED;
-	list_append(queue->list, &t->list);
+	list_append(&wqueue->list, &t->list);
 	yield();
 }
 
-void waitqueue_wake_one(struct waitqueue* queue);
-void waitqueue_wake_all(struct waitqueue* queue);
+void waitqueue_wake_one(struct waitqueue* wqueue)
+{
+	if (!wqueue) return;
+	struct task* head = list_head(&wqueue->list, struct task, list);
+	log_debug("Waking task %d", head->PID);
+	head->state = READY;
+	list_remove(&head->list);
+}
+
+void waitqueue_wake_all(struct waitqueue* wqueue)
+{
+	if (!wqueue) return;
+	struct task* pos;
+	list_for_each_entry(pos, &wqueue->list, list)
+	{
+		log_debug("Waking task %d", pos->PID);
+		pos->state = READY;
+		list_remove(&pos->list);
+	}
+}
