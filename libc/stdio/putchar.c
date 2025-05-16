@@ -3,6 +3,7 @@
 
 #if defined(__is_libk)
 #include <kernel/dmesg.h>
+#include <kernel/screen.h>
 #endif
 
 int putchar(int ic)

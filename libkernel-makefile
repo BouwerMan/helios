@@ -1,0 +1,58 @@
+CFLAGS?=-O2 -g -std=gnu23
+CPPFLAGS?=
+LDFLAGS?=
+LIBS?=
+
+BUILDDIR=build
+
+LIBK_CFLAGS:=$(CFLAGS) -I$(PWD)/helios/include -Iinclude -I$(PWD)/libcommon/include -L$(PWD)/libcommon/build -lcommon -lgcc
+LIBK_CPPFLAGS:=$(CPPFLAGS) -D__is_libk
+
+ARCHDIR=arch/$(HOSTARCH)
+
+include $(ARCHDIR)/make.config
+
+LIBK_CFLAGS:=$(LIBK_CFLAGS) $(KERNEL_ARCH_CFLAGS)
+LIBK_CPPFLAGS:=$(LIBK_CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS)
+
+SRC_DIRS:=ctype stdio stdlib string
+
+# # 1) collect & sort
+C_SRCS   = $(shell find $(SRC_DIRS) -type f -name '*.c')
+ASM_SRCS = $(shell find $(SRC_DIRS) -type f -name '*.asm')
+
+# # 2) map to object paths
+C_OBJS   = $(patsubst %.c,$(BUILDDIR)/%.o,$(C_SRCS))
+ASM_OBJS = $(patsubst %.asm,$(BUILDDIR)/%.o,$(ASM_SRCS))
+
+OBJS=\
+$(KERNEL_ARCH_OBJS) \
+$(C_OBJS) \
+$(ASM_OBJS) \
+
+LIBK_OBJS=$(OBJS:.o=.libkernel.o)
+
+BINARIES=libkernel.a
+
+.PHONY: all clean install install-headers install-libs
+.SUFFIXES: .o .libkernel.o .c .S .asm
+
+
+all: $(BINARIES)
+
+libkernel.a: $(LIBK_OBJS)
+	$(AR) rcs $(BUILDDIR)/$@ $(LIBK_OBJS)
+
+$(BUILDDIR)/%.libkernel.o: %.asm
+	@mkdir -p $(@D)
+	nasm -felf32 $< -o $@
+
+$(BUILDDIR)/%.libkernel.o: %.c
+	@mkdir -p $(@D)
+	$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
+
+clean:
+	rm -rvf $(BUILDDIR)
+	
+-include $(OBJS:.o=.d)
+-include $(LIBK_OBJS:.o=.d)

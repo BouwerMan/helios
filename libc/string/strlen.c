@@ -36,7 +36,7 @@ size_t strlen(const char* str)
  * @param maxlen The maximum number of characters to check.
  * @return The length of the string, up to `maxlen`.
  */
-size_t strnlen(const char* str, const size_t maxlen)
+size_t __strnlen_s(const char* str, size_t maxlen)
 {
 	if (!str) {
 		return 0; // Handle NULL pointer gracefully
@@ -48,3 +48,14 @@ size_t strnlen(const char* str, const size_t maxlen)
 	}
 	return len;
 }
+
+/* Alias both public names to the real implementation */
+#ifdef __USE_C23
+[[gnu::alias("__strnlen_s")]]
+extern size_t strnlen(const char*, size_t);
+[[gnu::alias("__strnlen_s")]]
+extern size_t strnlen_s(const char*, size_t);
+#else
+extern size_t strnlen_s(const char* s, size_t n) __attribute__((alias("__strnlen_s")));
+extern size_t strnlen(const char* s, size_t n) __attribute__((alias("__strnlen_s")));
+#endif

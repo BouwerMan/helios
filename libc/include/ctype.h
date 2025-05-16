@@ -1,3 +1,3 @@
 #pragma once
 
-char toupper(char c);
+int toupper(int c);

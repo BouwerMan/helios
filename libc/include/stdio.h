@@ -1,6 +1,5 @@
 #pragma once
 
-#include <kernel/screen.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>

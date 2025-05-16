@@ -25,6 +25,7 @@
 #include <util/log.h>
 
 #include <printf.h>
+#define __STDC_WANT_LIB_EXT1__
 #include <string.h>
 
 static enum LOG_MODE current_mode = LOG_DIRECT;

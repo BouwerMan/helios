@@ -1,0 +1,87 @@
+CFLAGS?=-O0 -g -std=gnu23
+CPPFLAGS?=
+LDFLAGS?=
+LIBS?=
+
+OSNAME?=HeliOS
+
+BUILDDIR=build
+KERNELDIR=kernel
+DRIVERDIR=drivers
+UTILDIR=util
+SRC_DIRS:=$(KERNELDIR) $(DRIVERDIR) $(UTILDIR)
+
+CFLAGS:=$(CFLAGS) -Iinclude -I$(PWD)/libc/include
+LDFLAGS:=$(LDFLAGS)
+LIBS:=$(LIBS) -nostdlib -L$(PWD)/libc/build -lk -lgcc
+
+ARCHDIR=arch/$(HOSTARCH)
+
+include $(ARCHDIR)/make.config
+
+DEFINES:=
+DEFINES+=-DLIMINE_API_REVISION=3
+DEFINES+=-D__KDEBUG__
+DEFINES+=-D__PMM_DEBUG__
+
+CFLAGS:=$(CFLAGS) $(KERNEL_ARCH_CFLAGS)
+CPPFLAGS:=$(CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS)
+LDFLAGS:=$(LDFLAGS) $(KERNEL_ARCH_LDFLAGS)
+LIBS:=$(LIBS) $(KERNEL_ARCH_LIBS)
+
+# 1) collect & sort
+C_SRCS   = $(shell find $(SRC_DIRS) -type f -name '*.c')
+ASM_SRCS = $(shell find $(SRC_DIRS) -type f -name '*.asm')
+
+# 2) map to object paths
+C_OBJS   = $(patsubst %.c,$(BUILDDIR)/%.o,$(C_SRCS))
+ASM_OBJS = $(patsubst %.asm,$(BUILDDIR)/%.o,$(ASM_SRCS))
+
+OBJS=\
+$(KERNEL_ARCH_OBJS) \
+$(C_OBJS) \
+$(ASM_OBJS) \
+$(BUILDDIR)/fonts/font.o \
+
+LINK_LIST=\
+$(LDFLAGS) \
+$(OBJS) \
+$(LIBS) \
+
+.PHONY: all clean install install-kernel
+.SUFFIXES: .o .c .s .asm
+
+all: $(OSNAME).kernel
+
+$(OSNAME).kernel: $(OBJS) $(ARCHDIR)/linker.ld
+	$(CC) -T $(ARCHDIR)/linker.ld -o $(BUILDDIR)/$@ $(CFLAGS) $(LINK_LIST)
+
+$(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
+	OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
+
+$(BUILDDIR)/%.o: %.c
+	mkdir -p $(@D)
+	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS) $(DEFINES) $(GDEFINES) $(TESTS)
+
+$(BUILDDIR)/%.o: %.s
+	@mkdir -p $(@D)
+	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
+
+$(BUILDDIR)/%.o: %.asm
+	@mkdir -p $(@D)
+	nasm -Wall -felf64 -g -F dwarf $< -o $@
+
+$(BUILDDIR)/%.o: %.psf
+	@mkdir -p $(@D)
+	objcopy -O elf64-x86-64 -B i386 -I binary $< $@
+
+clean:
+	rm -rvf $(BUILDDIR)
+
+install: install-kernel
+
+install-kernel: $(OSNAME).kernel
+	mkdir -p $(DESTDIR)$(BOOTDIR)
+	cp $(BUILDDIR)/$(OSNAME).kernel $(DESTDIR)$(BOOTDIR)
+
+-include $(OBJS:.o=.d)

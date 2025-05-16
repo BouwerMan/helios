@@ -29,14 +29,14 @@ export TESTS=#-D__PMM_TEST__
 
 # Configure the cross-compiler to use the desired system root.
 export SYSROOT="$(shell pwd)/sysroot"
-export CC+=--sysroot=$(SYSROOT) -isystem=$(INCLUDEDIR)
+# export CC+=--sysroot=$(SYSROOT) -isystem=$(INCLUDEDIR)
 
 .PHONY: all libc helios clean qemu headers iso bochs
 
 all: headers libc helios
 
 helios:
-	DESTDIR=$(SYSROOT) $(MAKE) -C ./HeliOS install
+	DESTDIR=$(SYSROOT) $(MAKE) -C ./helios install
 
 libc:
 	DESTDIR=$(SYSROOT) $(MAKE)  -C ./libc install
@@ -44,7 +44,6 @@ libc:
 headers:
 	mkdir -p $(SYSROOT)
 	DESTDIR=$(SYSROOT) $(MAKE) -C ./libc install-headers
-	DESTDIR=$(SYSROOT) $(MAKE) -C ./HeliOS install-headers
 
 iso: all
 	mkdir -p isodir
@@ -77,12 +76,9 @@ qemu: iso
 		-serial stdio \
 		# -nographic \
 
-bochs: iso
-	bochs -f bochs
-
 clean:
 	rm -rvf sysroot
 	rm -rvf isodir
 	rm -rvf *.iso
 	$(MAKE) -C ./libc clean
-	$(MAKE) -C ./HeliOS clean
+	$(MAKE) -C ./helios clean

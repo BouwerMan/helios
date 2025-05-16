@@ -1,6 +1,6 @@
 CompileFlags:
   Add:
-    - "-isystem/home/dylan/code/osdev/HeliOS/include"
+    - "-isystem/home/dylan/code/osdev/helios/include"
     - "-isystem/home/dylan/code/osdev/libc/include"
     - "-nostdlibinc"
     - "-D__is_libk"
@@ -11,8 +11,10 @@ CompileFlags:
     - "-pedantic"
     - "-Wno-empty-translation-unit"
     - "-Wno-unused-function"
+    - "-Wno-unknown-attributes"
     - "-Wunused-result"
     - "--target=x86_64"
     - "-std=gnu23"
     - "-xc"
+    - "-nostdlib"
 
