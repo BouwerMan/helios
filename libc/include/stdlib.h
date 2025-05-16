@@ -1,5 +1,23 @@
+#ifndef _STDLIB_H
+#define _STDLIB_H
 #pragma once
 
-#include <sys/cdefs.h>
+#define __need_size_t
+#include <stddef.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 __attribute__((__noreturn__)) void abort(void);
+int atexit(void (*func)(void));
+int atoi(const char* nptr);
+void free(void* ptr);
+char* getenv(const char* name);
+void* malloc(size_t size);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _STDLIB_H */

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #ifndef _SYS_CDEFS_H
 #define _SYS_CDEFS_H 1
 #pragma once

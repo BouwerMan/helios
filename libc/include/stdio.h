@@ -1,25 +1,44 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+#ifndef _STDIO_H
+#define _STDIO_H
 #pragma once
 
-#include <stdarg.h>
-#include <stdbool.h>
+#define __need_size_t
 #include <stddef.h>
-#include <sys/cdefs.h>
 
 #define EOF	  (-1)
 #define EOVERFLOW -75
+#define SEEK_SET  0
+typedef struct {
+	int unused;
+} FILE;
 
-// printf.c
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-// static void print(const char* data);
+extern FILE* stderr;
+#define stderr stderr
 
-// __attribute__((format(__printf__, 1, 2))) int printf(const char* __restrict format, ...);
+int fclose(FILE*);
+int fflush(FILE*);
+FILE* fopen(const char*, const char*);
+int fprintf(FILE*, const char*, ...);
+size_t fread(void*, size_t, size_t, FILE*);
+int fseek(FILE*, long, int);
+long ftell(FILE*);
+size_t fwrite(const void*, size_t, size_t, FILE*);
+void setbuf(FILE*, char*);
 
-// int vprintf(const char* __restrict, va_list);
-// int sprintf(char* str, const char* __restrict format, ...);
-// int snprintf(char* str, size_t buf_size, const char* __restrict format, ...);
+// Pull in vfprintf
+#include <printf.h>
+//int vfprintf(FILE*, const char*, va_list);
 
-// putchar.c
 int putchar(int);
-
-// puts.c
 int puts(const char*);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _STDIO_H */
