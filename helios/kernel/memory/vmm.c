@@ -19,6 +19,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/** 
+ * For this VMM, I will be doing identity mapping like a man.
+ * To do this, I will basically just copy limine's hhdm, that is how I will get the memory for page tables.
+ * Once that is setup, I have a "heap" for general memory allocation.
+ * The slab allocator and any other special purpose allocators should get pages directly.
+ */
+
 #include <string.h>
 
 #include <kernel/memory/pmm.h>
@@ -137,10 +144,6 @@ void vmm_init(struct limine_memmap_response* mmap, struct limine_executable_addr
 	log_debug("pml4 address: %p", pml4);
 	memset(pml4, 0, PAGE_SIZE); // Clear page tables
 
-	// Recursive mapping
-	// TODO: Actually use this once CR3 is set
-	pml4[510] = VIRT_TO_PHYS(pml4) | PAGE_PRESENT | PAGE_WRITE;
-
 	// Identity map first 64 MiB, skip first 1 MiB
 	for (uint64_t vaddr = 0x100000; vaddr < LOW_IDENTITY; vaddr += PAGE_SIZE) {
 		vmm_map((void*)vaddr, (void*)vaddr, PAGE_PRESENT | PAGE_WRITE);
@@ -177,7 +180,7 @@ void vmm_init(struct limine_memmap_response* mmap, struct limine_executable_addr
 	size_t req_pages = CEIL_DIV(bitmap_size_bytes, PAGE_SIZE);
 	log_debug("Allocating %zu pages for vmm bitmap", req_pages);
 	bitmap = PHYS_TO_VIRT(pmm_alloc_contiguous(req_pages));
-	if (!bitmap) panic("Could not alloc vmm bitmap");
+	if (!VIRT_TO_PHYS(bitmap)) panic("Could not alloc vmm bitmap");
 	log_debug("Putting bitmap at location: 0x%lx", (uint64_t)bitmap);
 	// Initialize the bitmap: Mark all pages as free (heap starts empty).
 	memset(bitmap, 0x00, bitmap_size_bytes);

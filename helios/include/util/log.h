@@ -101,4 +101,3 @@ enum LOG_MODE {
 void log_putchar(const char c);
 void set_log_mode(enum LOG_MODE mode);
 void log_output(const char* msg);
-void log_long_message(const char* tag, const char* file, int line, const char* func, const char* msg);

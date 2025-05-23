@@ -5,10 +5,40 @@
 
 #include <kernel/helios.h>
 #include <limine.h>
+#include <stdlib.h>
 
 #define PAGE_SIZE 0x1000
 _Static_assert(IS_POWER_OF_TWO(PAGE_SIZE) == true, "PAGE_SIZE must be power of 2");
 #define BITSET_WIDTH 64
+
+#define ZONE_DMA_BASE  0x0
+#define ZONE_DMA_LIMIT 0xffffffULL
+
+#define ZONE_DMA32_BASE	 0x1000000ULL
+#define ZONE_DMA32_LIMIT 0xffffffffULL
+
+#define ZONE_NORMAL_BASE 0x100000000ULL
+
+enum MEMORY_ZONES {
+	ZONE_DMA,    // Under 16 MiB (unimplemented lmao)
+	ZONE_DMA32,  // Under 4 GiB
+	ZONE_NORMAL, // Over 4 GiB
+};
+
+struct free_stack {
+	uintptr_t* stack;
+	size_t top;
+};
+
+struct pmm {
+	uintptr_t zdma_start;
+	uintptr_t zdma_end;
+	uintptr_t free_dma;
+	uintptr_t free_dma32;
+	// struct free_stack free_dma;    // Free stack for ZONE_DMA
+	// struct free_stack free_dma32;  // Free stack for ZONE_DMA32
+	// struct free_stack free_normal; // Free stack for ZONE_NORMAL
+};
 
 // is this really needed? dumbass
 static inline uint64_t phys_to_hhdm(uint64_t phys, uint64_t hhdm_offset)

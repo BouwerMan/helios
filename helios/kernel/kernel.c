@@ -39,8 +39,10 @@
 #include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
 #include <limine.h>
-#include <string.h>
 #include <util/log.h>
+
+#define __STDC_WANT_LIB_EXT1__
+#include <string.h>
 
 // Set the base revision to 3, this is recommended as this is the latest
 // base revision described by the Limine boot protocol specification.
@@ -94,14 +96,6 @@ struct limine_framebuffer* framebuffer;
 
 extern void liballoc_init();
 
-void task_test()
-{
-	while (1) {
-		// log_debug("Task test");
-		yield();
-	}
-}
-
 // TODO: Use this
 struct kernel_context kernel = { 0 };
 
@@ -111,8 +105,12 @@ static void init_kernel_structure()
 	list_init(&kernel.slab_caches);
 }
 
+// Doing some quirky stuff to get around clang and gcc errors for functions called from asm
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-prototypes"
 void kernel_main(void)
 {
+#pragma GCC diagnostic pop
 	// Ensure the bootloader actually understands our base revision (see spec).
 	if (LIMINE_BASE_REVISION_SUPPORTED == false) {
 		hcf();

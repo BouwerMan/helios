@@ -79,7 +79,7 @@ void* memset(void* restrict dest, int ch, size_t count)
 	// Phase 1: Align to 8-byte boundary
 	size_t head_bytes = ((uintptr_t)b) & 7;
 	if (head_bytes) {
-		uint8_t bytes_to_fill = 8 - head_bytes;
+		size_t bytes_to_fill = 8 - head_bytes;
 		size_t head_fill = (bytes_to_fill < count) ? (bytes_to_fill) : count;
 		for (size_t i = 0; i < head_fill; i++) {
 			b[i] = c;

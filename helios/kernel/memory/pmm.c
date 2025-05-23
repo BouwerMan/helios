@@ -19,6 +19,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/**
+ * TODO: Work on turning this into a free stack, mainly focus on single page allocs
+ * Multi page allocs should be supported but it won't be very popular.
+ */
+
 #include <kernel/memory/pmm.h>
 #include <kernel/sys.h>
 #include <limine.h>
@@ -42,6 +47,8 @@ size_t bitmap_size = 0;	  ///< Size of the bitmap in terms of uint64_t entries.
 
 static size_t free_page_count = 0;
 static size_t total_page_count = 0; // Never changes after pmm_init()
+
+struct pmm pmm = { 0 };
 
 /**
  * @brief Initializes the Physical Memory Manager (PMM).

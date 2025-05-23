@@ -21,9 +21,13 @@ export BOOTDIR=/boot
 export LIBDIR=$(EXEC_PREFIX)/lib
 export INCLUDEDIR=$(PREFIX)/include
 
-export CWARN=-Wall -Wextra -pedantic
-export CFLAGS=-O2 -g -pipe -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse3 -D__KDEBUG__ -std=gnu23
-export CPPFLAGS=
+export CWARN=-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Wcast-align \
+	-Wwrite-strings -Wmissing-prototypes -Wmissing-declarations \
+        -Wredundant-decls -Wnested-externs -Winline -Wno-long-long \
+        -Wconversion -Wstrict-prototypes
+
+export CFLAGS=-O2 -g -pipe -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse3 -std=gnu23 $(CWARN)
+
 export GDEFINES=-D__KDEBUG__ -DLOG_LEVEL=0 -DENABLE_SERIAL_LOGGING
 export TESTS=#-D__PMM_TEST__
 
@@ -46,16 +50,16 @@ headers:
 	DESTDIR=$(SYSROOT) $(MAKE) -C ./libc install-headers
 
 iso: all
-	mkdir -p isodir
-	mkdir -p isodir/boot
-	mkdir -p isodir/boot/limine
-	mkdir -p isodir/EFI/BOOT
+	@mkdir -p isodir
+	@mkdir -p isodir/boot
+	@mkdir -p isodir/boot/limine
+	@mkdir -p isodir/EFI/BOOT
 
-	cp sysroot/boot/$(OSNAME).kernel isodir/boot/$(OSNAME).kernel
-	cp -v limine.conf limine/limine-bios.sys limine/limine-bios-cd.bin \
+	@cp sysroot/boot/$(OSNAME).kernel isodir/boot/$(OSNAME).kernel
+	@cp -v limine.conf limine/limine-bios.sys limine/limine-bios-cd.bin \
 		  limine/limine-uefi-cd.bin isodir/boot/limine/
-	cp -v limine/BOOTX64.EFI isodir/EFI/BOOT/
-	cp -v limine/BOOTIA32.EFI isodir/EFI/BOOT/
+	@cp -v limine/BOOTX64.EFI isodir/EFI/BOOT/
+	@cp -v limine/BOOTIA32.EFI isodir/EFI/BOOT/
 	
 	# Create the bootable ISO.
 	xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \

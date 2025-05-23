@@ -130,7 +130,6 @@ void* slab_alloc(struct slab_cache* cache)
 		list_move(&slab->link, &cache->partial);
 		log_debug("Cache %s: slab %p moved from empty to partial (free_top=%zu/%zu)", cache->name, (void*)slab,
 			  slab->free_top, cache->objects_per_slab);
-		// slab = first;
 	} else {
 		log_error("Could not create more slabs, slab_grow returned: %d", res);
 		return NULL;

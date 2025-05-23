@@ -58,27 +58,27 @@ BINARIES=libk.a
 all: $(BINARIES)
 
 libc.a: $(OBJS)
-	$(AR) rcs $@ $(OBJS)
+	@$(AR) rcs $@ $(OBJS)
 
 libk.a: $(LIBK_OBJS)
-	$(AR) rcs $(BUILDDIR)/$@ $(LIBK_OBJS)
+	@$(AR) rcs $(BUILDDIR)/$@ $(LIBK_OBJS)
 
 $(BUILDDIR)/%.o: %.c
-	$(CC) -MD -c $< -o $(BUILDDIR)/$@ $(CFLAGS) $(CPPFLAGS)
+	@$(CC) -MD -c $< -o $(BUILDDIR)/$@ $(CFLAGS) $(CPPFLAGS)
 
 .c.S:
-	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
+	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
 
 $(BUILDDIR)/%.o: %.asm
 	@mkdir -p $(@D)
-	nasm -felf32 $< -o $@
+	@nasm -felf32 $< -o $@
 
 $(BUILDDIR)/%.libk.o: %.c
 	@mkdir -p $(@D)
-	$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
+	@$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
 
 .S.libk.o:
-	$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
+	@$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
 
 clean:
 	rm -rvf $(BUILDDIR)
@@ -86,13 +86,13 @@ clean:
 install: install-headers install-libs
 
 install-headers:
-	mkdir -p $(DESTDIR)$(INCLUDEDIR)
-	cp -R --preserve=timestamps include/. $(DESTDIR)$(INCLUDEDIR)/.
+	@mkdir -p $(DESTDIR)$(INCLUDEDIR)
+	@cp -R --preserve=timestamps include/. $(DESTDIR)$(INCLUDEDIR)/.
 
 # TODO: Maybe don't install libk
 install-libs: $(BINARIES)
-	mkdir -p $(DESTDIR)$(LIBDIR)
-	cp $(BUILDDIR)/$(BINARIES) $(DESTDIR)$(LIBDIR)
+	@mkdir -p $(DESTDIR)$(LIBDIR)
+	@cp $(BUILDDIR)/$(BINARIES) $(DESTDIR)$(LIBDIR)
 
 -include $(OBJS:.o=.d)
 -include $(LIBK_OBJS:.o=.d)

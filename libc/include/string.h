@@ -41,7 +41,6 @@ char* strchr(const char* s, int c);
 size_t strcspn(const char* s1, const char* s2);
 // FIXME: Unimplemented
 char* strpbrk(const char* s1, const char* s2);
-char* strchr(const char* s, int c);
 // FIXME: Unimplemented
 size_t strspn(const char* s1, const char* s2);
 // FIXME: Unimplemented

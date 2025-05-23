@@ -36,7 +36,7 @@ size_t strlen(const char* str)
  * @param maxlen The maximum number of characters to check.
  * @return The length of the string, up to `maxlen`.
  */
-size_t __strnlen_s(const char* str, size_t maxlen)
+static size_t __strnlen_s(const char* str, size_t maxlen)
 {
 	if (!str) {
 		return 0; // Handle NULL pointer gracefully

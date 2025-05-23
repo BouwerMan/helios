@@ -3,7 +3,7 @@
 #include <util/log.h>
 
 // Very rudimentary panic, still relies on libc and stuff.
-void panic(char* message)
+void panic(const char* message)
 {
 	__asm__ volatile("cli");
 	set_log_mode(LOG_DIRECT);

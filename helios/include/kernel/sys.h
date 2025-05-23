@@ -15,6 +15,6 @@
 #define KERNEL_NAME    "HELIOS"
 #define KERNEL_VERSION "0.0.0"
 
-__attribute__((noreturn)) void panic(char* message);
+__attribute__((noreturn)) void panic(const char* message);
 
 #endif /* SYS_H */

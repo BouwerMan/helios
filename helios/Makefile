@@ -54,34 +54,34 @@ $(LIBS) \
 all: $(OSNAME).kernel
 
 $(OSNAME).kernel: $(OBJS) $(ARCHDIR)/linker.ld
-	$(CC) -T $(ARCHDIR)/linker.ld -o $(BUILDDIR)/$@ $(CFLAGS) $(LINK_LIST)
+	@$(CC) -T $(ARCHDIR)/linker.ld -o $(BUILDDIR)/$@ $(CFLAGS) $(LINK_LIST)
 
 $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
-	OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
+	@OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
 
 $(BUILDDIR)/%.o: %.c
-	mkdir -p $(@D)
-	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS) $(DEFINES) $(GDEFINES) $(TESTS)
+	@mkdir -p $(@D)
+	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS) $(DEFINES) $(GDEFINES) $(TESTS)
 
 $(BUILDDIR)/%.o: %.s
 	@mkdir -p $(@D)
-	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
+	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
 
 $(BUILDDIR)/%.o: %.asm
 	@mkdir -p $(@D)
-	nasm -Wall -felf64 -g -F dwarf $< -o $@
+	@nasm -Wall -felf64 -g -F dwarf $< -o $@
 
 $(BUILDDIR)/%.o: %.psf
 	@mkdir -p $(@D)
-	objcopy -O elf64-x86-64 -B i386 -I binary $< $@
+	@objcopy -O elf64-x86-64 -B i386 -I binary $< $@
 
 clean:
-	rm -rvf $(BUILDDIR)
+	@rm -rvf $(BUILDDIR)
 
 install: install-kernel
 
 install-kernel: $(OSNAME).kernel
-	mkdir -p $(DESTDIR)$(BOOTDIR)
-	cp $(BUILDDIR)/$(OSNAME).kernel $(DESTDIR)$(BOOTDIR)
+	@mkdir -p $(DESTDIR)$(BOOTDIR)
+	@cp $(BUILDDIR)/$(OSNAME).kernel $(DESTDIR)$(BOOTDIR)
 
 -include $(OBJS:.o=.d)
