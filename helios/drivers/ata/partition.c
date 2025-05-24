@@ -1,4 +1,26 @@
+/**
+ * @file drivers/ata/partition.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <drivers/ata/partition.h>
+
 #include <util/log.h>
 
 /* offset of partition-table in MBR */
@@ -36,8 +58,7 @@ void part_fill_partitions(sPartition* table, void* mbr)
 void part_print(sPartition* table)
 {
 	for (size_t i = 0; i < PARTITION_COUNT; i++) {
-		log_info("%zu: present=%d start=%zu size=%zu", i,
-			 table->present, table->start, table->size);
+		log_info("%zu: present=%d start=%zu size=%zu", i, table->present, table->start, table->size);
 		table++;
 	}
 }

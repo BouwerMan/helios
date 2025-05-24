@@ -1,8 +1,7 @@
-// Holds lots of useful functions and such
-#ifndef _SYS_H
-#define _SYS_H
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+#pragma once
 
-// TODO: bring in asm.h
+// TODO: rename to panic.h or smthn
 
 /* Types */
 // #define NULL ((void*)0UL)
@@ -16,5 +15,3 @@
 #define KERNEL_VERSION "0.0.0"
 
 __attribute__((noreturn)) void panic(const char* message);
-
-#endif /* SYS_H */

@@ -41,14 +41,14 @@ typedef struct {
 #define PIXEL uint32_t /* pixel pointer */
 
 struct screen_info {
-	size_t cx;    // Cursor position x
-	size_t cy;    // Cursor position y
-	uint32_t fgc; // foregound color
-	uint32_t bgc; // background color
-	int scanline; // Number of bytes in each line
-	int char_width;
-	int char_height;
-	int bytesperline;
+	size_t cx;	   // Cursor position x
+	size_t cy;	   // Cursor position y
+	uint32_t fgc;	   // foregound color
+	uint32_t bgc;	   // background color
+	uint64_t scanline; // Number of bytes in each line
+	uint32_t char_width;
+	uint32_t char_height;
+	size_t bytesperline;
 	struct limine_framebuffer* fb;
 	char* fb_buffer;
 	PSF_font* font; // Font info

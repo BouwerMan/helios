@@ -10,6 +10,6 @@
 
 void timer_init(void);
 void timer_poll(void);
-void timer_phase(int hz);
+void timer_phase(uint32_t hz);
 void sleep(uint64_t millis);
 void timer_handler(struct registers* r);

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 // Big thanks to:
 // https://github.com/Andrispowq/HackOS/blob/master/kernel/src/arch/x86_64/interrupts/idt.h
 #pragma once

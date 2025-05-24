@@ -1,9 +1,32 @@
+/**
+ * @file drivers/fs/vfs.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include <string.h>
+
 #include <drivers/fs/fat.h>
 #include <drivers/fs/vfs.h>
 #include <kernel/liballoc.h>
 #include <kernel/memory/slab.h>
 #include <kernel/sys.h>
-#include <string.h>
+
 #include <util/ht.h>
 #include <util/log.h>
 
@@ -288,7 +311,7 @@ int mount(const char* mount_point, sATADevice* device, sPartition* partition, ui
 		return -1;
 	}
 	mount->device = device;
-	mount->lba_start = partition->start;
+	mount->lba_start = (uint32_t)partition->start;
 	mount->flags = partition->present ? MOUNT_PRESENT : 0;
 	mount->next = NULL;
 
@@ -300,7 +323,7 @@ int mount(const char* mount_point, sATADevice* device, sPartition* partition, ui
 		log_info("Initializing filesystem");
 		struct vfs_fs_type* fs = find_filesystem(fs_type);
 		if (fs->mount == NULL) panic("uh oh mount function dont exist");
-		struct vfs_superblock* sb = fs->mount(device, partition->start, 0);
+		struct vfs_superblock* sb = fs->mount(device, mount->lba_start, 0);
 		if (!mount) {
 			kfree(mount->mount_point);
 			kfree(mount);

@@ -24,6 +24,7 @@
 #include <kernel/screen.h>
 #include <kernel/spinlock.h>
 #include <kernel/tasks/scheduler.h>
+
 #include <util/log.h>
 
 #define DMESG_BUFFER_SIZE 0x10000
@@ -38,7 +39,7 @@ struct task* dmesg_task = NULL;
 void dmesg_init()
 {
 	spinlock_init(&log_lock);
-	dmesg_task = new_task((void*)dmesg_task_entry);
+	dmesg_task = new_task((entry_func)dmesg_task_entry);
 
 	log_debug("Setting log mode to use dmesg (LOG_BUFFERED)");
 	set_log_mode(LOG_BUFFERED);

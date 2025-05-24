@@ -1,6 +1,10 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+#include <stddef.h>
+
+#include <kernel/liballoc.h>
 #include <kernel/memory/vmm.h>
 #include <kernel/spinlock.h>
-#include <stddef.h>
+
 #include <util/log.h>
 
 spinlock_t lock;
@@ -33,7 +37,6 @@ void* liballoc_alloc(size_t pages)
 }
 
 // Frees [pages] number of contiguous pages, starting at first_page
-// TODO: actually free pages
 int liballoc_free(void* first_page, size_t pages)
 {
 	vmm_free_pages(first_page, pages);

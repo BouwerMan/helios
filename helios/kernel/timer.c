@@ -26,7 +26,7 @@
 #include "../arch/x86_64/ports.h"
 
 // Some IBM employee had a very fun time when designing this fucker.
-const int PIT_CLK = 1193180;
+#define PIT_CLK 1193180ULL
 
 /* This will keep track of how many ticks that the system
  *  has been running for */
@@ -45,10 +45,10 @@ extern volatile bool need_reschedule;
  *
  * @param hz The desired frequency in hertz (Hz).
  */
-void timer_phase(int hz)
+void timer_phase(uint32_t hz)
 {
 	phase = hz;
-	int divisor = PIT_CLK / hz; /* Calculate our divisor */
+	uint32_t divisor = PIT_CLK / hz; /* Calculate our divisor */
 	uint8_t low = (uint8_t)(divisor & 0xFF);
 	uint8_t high = (uint8_t)((divisor >> 8) & 0xFF);
 	outb(0x43, 0x36); /* Set our command byte 0x36 */
@@ -96,7 +96,7 @@ void __attribute__((optimize("O0"))) timer_poll(void)
 void sleep(uint64_t millis)
 {
 	struct task* t = get_current_task();
-	log_debug("Sleeping task %d for %lu millis or %lu ticks", t->PID, millis, millis_to_ticks(millis));
+	log_debug("Sleeping task %lu for %lu millis or %lu ticks", t->PID, millis, millis_to_ticks(millis));
 	// Don't need to convert to ticks since we have 1ms ticks but just incase
 	t->sleep_ticks = millis_to_ticks(millis);
 	t->state = BLOCKED;

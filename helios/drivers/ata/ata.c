@@ -1,4 +1,28 @@
+/**
+ * @file drivers/ata/ata.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 // https://wiki.osdev.org/ATA_PIO_Mode#28_bit_PIO
+#include <limits.h>
+#include <string.h>
+
 #include <drivers/ata/ata.h>
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
@@ -6,11 +30,10 @@
 #include <kernel/memory/pmm.h>
 #include <kernel/memory/vmm.h>
 #include <kernel/sys.h>
-#include <limits.h>
-#include <string.h>
 
 // Disabling debug log messages
 #ifndef __ATA_DEBUG__
+#undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
 #include <util/log.h>
@@ -21,13 +44,11 @@
 
 static bool bmr_poll(sATADevice* device);
 static uint16_t get_command(sATADevice* device, uint16_t op);
-static bool setup_command(sATADevice* device, uint32_t lba, size_t sec_count, uint16_t cmd);
 static bool program_ata_reg(sATADevice* device, uint32_t lba, size_t sec_count, uint16_t command);
 static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_t lba, size_t sec_size,
 		     size_t sec_count);
 
-// TODO: Add DMA support, currently just PIO
-//       Also need support for ATAPI
+// TODO: Support for ATAPI
 bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba, size_t sec_size, size_t sec_count)
 {
 	log_debug("Trying to access lba: %x, sec_count: %zx, sec_size: %zx", lba, sec_count, sec_size);
@@ -38,9 +59,6 @@ bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba,
 	sATAController* ctrl = device->ctrl;
 	uint16_t command = get_command(device, op);
 	if (!command) return false;
-
-	// bool st = setup_command(device, lba, secCount, command);
-	// PIO Transfer:
 
 	switch (command) {
 	case COMMAND_READ_SEC:
@@ -100,7 +118,7 @@ static bool program_ata_reg(sATADevice* device, uint32_t lba, size_t sec_count, 
 	outb(ctrl->IO_port_base + 0, 0x00);
 
 	log_debug("Sending command: %x", command);
-	outb(ctrl->port_base + ATA_REG_COMMAND, command);
+	outb(ctrl->port_base + ATA_REG_COMMAND, (uint8_t)command);
 	ctrl_wait(ctrl);
 
 	return true;
@@ -119,12 +137,6 @@ static uint16_t get_command(sATADevice* device, uint16_t op)
 	}
 	// IDK just gonna return zero if not valid
 	return 0;
-}
-
-static bool setup_command(sATADevice* device, uint32_t lba, size_t sec_count, uint16_t cmd)
-{
-	sATAController* ctrl = device->ctrl;
-	return true;
 }
 
 static bool bmr_poll(sATADevice* device)
@@ -170,8 +182,14 @@ static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_
 	void* dma_buffer = vmm_alloc_pages(pages, true);
 	if (!dma_buffer) goto clean;
 
-	prdt->addr = (uint32_t)vmm_translate(dma_buffer);
-	prdt->size = sec_count * sec_size;
+	uint64_t full_addr = (uintptr_t)vmm_translate(dma_buffer);
+	if (full_addr >= (1ULL << 32)) {
+		// handle error or log warning: address cannot be DMA'd
+		log_error("PRDT buffer is not in valid location: %lx", full_addr);
+	}
+	prdt->addr = (uint32_t)full_addr;
+	// TODO: Put size limits
+	prdt->size = (uint16_t)(sec_count * sec_size);
 	prdt->flags |= PRDT_EOT;
 
 	// 1. Set command register to 0 to halt in-flight DMA
@@ -183,7 +201,12 @@ static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_
 	outb(bmr_base + BMR_REG_STATUS, bmr_st | BMR_STATUS_IRQ | BMR_STATUS_ERROR);
 
 	// 3. Write PRDT pointer
-	uint32_t prdt_phys = (uintptr_t)vmm_translate(prdt);
+	uint64_t full_prdt_addr = (uintptr_t)vmm_translate(prdt);
+	if (full_addr >= (1ULL << 32)) {
+		// handle error or log warning: address cannot be DMA'd
+		log_error("PRDT is not in valid location: %lx", full_prdt_addr);
+	}
+	uint32_t prdt_phys = (uint32_t)full_prdt_addr;
 	log_debug("Writing PRDT addr: %x", prdt_phys);
 	outdword(bmr_base + BMR_REG_PRDT, prdt_phys);
 

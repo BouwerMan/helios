@@ -106,6 +106,7 @@ void check_reschedule(struct registers* regs)
 
 		/* @ref Does not return */
 		__switch_to(new->regs);
+		__builtin_unreachable();
 	}
 }
 
@@ -117,7 +118,7 @@ void check_reschedule(struct registers* regs)
  * @param task Pointer to the task structure.
  * @return 0 on success, 1 on failure.
  */
-int create_stack(struct task* task)
+static int create_stack(struct task* task)
 {
 	void* stack = vmm_alloc_pages(STACK_SIZE_PAGES, false);
 	if (!stack) return -EOOM;
@@ -137,7 +138,7 @@ int create_stack(struct task* task)
 	task->regs->ds = 0x10;
 	task->regs->saved_rflags = 0x202;
 
-	log_debug("Created stack for task %d, kernel_stack: %lx, regs addr: %p", task->PID, task->kernel_stack,
+	log_debug("Created stack for task %lu, kernel_stack: %lx, regs addr: %p", task->PID, task->kernel_stack,
 		  (void*)task->regs);
 
 	return 0;
@@ -154,14 +155,14 @@ void task_add(struct task* task)
 	list_append(&squeue.task_list, &task->list);
 	squeue.task_count++;
 
-	log_debug("Added task %d", task->PID);
+	log_debug("Added task %lu", task->PID);
 	log_debug("Currently have %lu tasks", squeue.task_count);
 }
 
 /**
  * Entry point for the idle task. This task halts the CPU in an infinite loop.
  */
-void idle_task_entry()
+static void idle_task_entry()
 {
 	while (1)
 		halt();
@@ -185,7 +186,7 @@ void init_scheduler(void)
 		panic("Scheduler tasks cache init failure");
 	}
 
-	idle_task = new_task((void*)idle_task_entry);
+	idle_task = new_task((entry_func)idle_task_entry);
 	idle_task->cr3 = vmm_read_cr3();
 	idle_task->parent = kernel_task;
 	idle_task->state = IDLE;
@@ -204,7 +205,7 @@ void init_scheduler(void)
  * @param entry Pointer to the entry function for the task.
  * @return Pointer to the newly created task structure, or NULL on failure.
  */
-struct task* new_task(void* entry)
+struct task* new_task(entry_func entry)
 {
 	struct task* task = kmalloc(sizeof(struct task));
 	if (task == NULL) return NULL;
@@ -293,7 +294,7 @@ void waitqueue_wake_one(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;
 	struct task* head = list_head(&wqueue->list, struct task, list);
-	log_debug("Waking task %d", head->PID);
+	log_debug("Waking task %lu", head->PID);
 	head->state = READY;
 	list_remove(&head->list);
 }
@@ -304,7 +305,7 @@ void waitqueue_wake_all(struct waitqueue* wqueue)
 	struct task* pos;
 	list_for_each_entry(pos, &wqueue->list, list)
 	{
-		log_debug("Waking task %d", pos->PID);
+		log_debug("Waking task %lu", pos->PID);
 		pos->state = READY;
 		list_remove(&pos->list);
 	}

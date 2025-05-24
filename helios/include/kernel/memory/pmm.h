@@ -7,8 +7,9 @@
 #include <limine.h>
 #include <stdlib.h>
 
-#define PAGE_SIZE 0x1000
+#define PAGE_SIZE 0x1000ULL
 _Static_assert(IS_POWER_OF_TWO(PAGE_SIZE) == true, "PAGE_SIZE must be power of 2");
+
 #define BITSET_WIDTH 64
 
 #define ZONE_DMA_BASE  0x0

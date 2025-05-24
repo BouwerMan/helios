@@ -24,13 +24,14 @@
  * Multi page allocs should be supported but it won't be very popular.
  */
 
-#include <kernel/memory/pmm.h>
-#include <kernel/sys.h>
-#include <limine.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+#include <kernel/memory/pmm.h>
+#include <kernel/sys.h>
+#include <limine.h>
 
 #ifndef __PMM_DEBUG__
 #define LOG_LEVEL 1
@@ -155,13 +156,13 @@ void* pmm_alloc_page(void)
 		// Skip fully used words in the bitmap
 		if (bitmap[word] == UINT64_MAX) continue;
 		// Find the first free bit in the word
-		int bit = __builtin_ffsll(~bitmap[word]) - 1;
+		int bit = __builtin_ffsll(~(int64_t)bitmap[word]) - 1;
 		// bit can be -1 if ffsll is called with all allocated
 		if (bit < 0) continue;
 		bitmap[word] |= (1ULL << bit); // Set page as used
 
 		free_page_count--;
-		return (void*)get_phys_addr(word, bit);
+		return (void*)get_phys_addr(word, (uint64_t)bit);
 	}
 	log_warn("pmm_alloc_page: out of memory, no free pages left");
 	return NULL;
@@ -334,7 +335,7 @@ void pmm_test(void)
 	EXPECT(((uint64_t)block % PAGE_SIZE) == 0, "Contiguous block should be page-aligned");
 
 	if (block != NULL) {
-		for (int i = 1; i < 16; i++) {
+		for (size_t i = 1; i < 16; i++) {
 			uint64_t expected = (uint64_t)block + i * PAGE_SIZE;
 			void* check = (void*)expected;
 			// Optionally add a used check here

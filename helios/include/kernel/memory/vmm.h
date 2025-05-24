@@ -16,11 +16,11 @@
 #define KERNEL_HEAP_BASE   0xFFFFFFFFC0000000ULL
 #define KERNEL_HEAP_LIMIT  0xFFFFFFFFE0000000ULL
 #define KERNEL_VIRT_BASE   0xFFFFFFFF80000000ULL
-#define HHDM_OFFSET	   0xffff800000000000ULL // TODO: make this not hardcoded
+#define HHDM_OFFSET	   0xffff800000000000ULL
 // #define PHYS_TO_VIRT(p)	   ((void*)((uintptr_t)(p) + HHDM_OFFSET))
 // #define VIRT_TO_PHYS(v)	   ((uintptr_t)(v) - HHDM_OFFSET)
 
-#define FLAGS_MASK	   0xFFF
+#define FLAGS_MASK	   0xFFFULL
 #define PAGE_FRAME_MASK	   (~0xFFFULL)
 #define PAGE_PRESENT	   (1ULL << 0)	// Page is present in memory
 #define PAGE_WRITE	   (1ULL << 1)	// Writable

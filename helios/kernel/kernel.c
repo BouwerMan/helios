@@ -18,12 +18,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// MASTER TODO
-// TODO: clean up inports, such as size_t coming from <stddef>;
-// TODO: Pretty sure PMM will perform weird things when reaching max memory
-// TODO: Project restructuring (drivers, kernel, lib, etc.)
-// TODO: Standardize return values
-#include "../arch/x86_64/gdt.h"
 #include <drivers/ata/controller.h>
 #include <drivers/fs/vfs.h>
 #include <drivers/pci/pci.h>
@@ -39,10 +33,13 @@
 #include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
 #include <limine.h>
+
 #include <util/log.h>
 
 #define __STDC_WANT_LIB_EXT1__
 #include <string.h>
+
+#include "../arch/x86_64/gdt.h"
 
 // Set the base revision to 3, this is recommended as this is the latest
 // base revision described by the Limine boot protocol specification.
@@ -94,9 +91,6 @@ static void hcf(void)
 
 struct limine_framebuffer* framebuffer;
 
-extern void liballoc_init();
-
-// TODO: Use this
 struct kernel_context kernel = { 0 };
 
 /// Initializes the lists in the kernel_context struct
@@ -155,7 +149,6 @@ void kernel_main(void)
 	log_info("Initializing PMM");
 	pmm_init(memmap_request.response, hhdm_request.response->offset);
 
-	// TODO: VMM initialization
 	log_info("Initializing VMM");
 	vmm_init(memmap_request.response, exe_addr_req.response, hhdm_request.response->offset);
 
@@ -212,7 +205,7 @@ void kernel_main(void)
 
 	// We're done, just hang...
 	log_debug("Sleeping for 1 second");
-	// TODO: sleep kinda borked again
+	// TODO: sleep kinda borked again (can't really tell)
 	sleep(1000);
 	log_warn("entering infinite loop");
 	hcf();

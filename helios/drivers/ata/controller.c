@@ -1,9 +1,32 @@
+/**
+ * @file drivers/ata/controller.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include <stddef.h>
+
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
 #include <drivers/pci/pci.h>
 #include <kernel/liballoc.h>
 #include <kernel/memory/vmm.h>
-#include <stddef.h>
+
 #include <util/log.h>
 
 /* port-bases */
@@ -12,7 +35,6 @@ static const int PORTBASE_SECONDARY = 0x170;
 
 static const int IDE_CTRL_CLASS = 0x01;
 static const int IDE_CTRL_SUBCLASS = 0x01;
-static const int IDE_CTRL_BAR = 4;
 
 static const pci_device_t* ide_ctrl;
 
@@ -46,8 +68,8 @@ void ctrl_init()
 	uint32_t bar4 = pci_config_read_dword(ide_ctrl->bus, ide_ctrl->dev, ide_ctrl->func, BAR4);
 	if ((bar4 & 1) == 1) {
 		log_debug("BAR4: %x, actual base: %x", bar4, bar4 & 0xFFFFFFFC);
-		ctrls[0].bmr_base = bar4 & 0xFFFFFFFC;
-		ctrls[1].bmr_base = (bar4 & 0xFFFFFFFC) + 0x8;
+		ctrls[0].bmr_base = (uint16_t)(bar4 & 0xFFFFFFFC);
+		ctrls[1].bmr_base = (uint16_t)((bar4 & 0xFFFFFFFC) + 0x8);
 	}
 	log_debug("Setting Bus Master Enable for PCI: bus: %x, dev: %x, func: %x", ide_ctrl->bus, ide_ctrl->dev,
 		  ide_ctrl->func);
@@ -69,8 +91,13 @@ void ctrl_init()
 			// TODO: Make sure this is in low 4GB
 			ctrls[i].prdt = vmm_alloc_pages(1, false);
 			log_debug("prdt: %p", (void*)ctrls[i].prdt);
-			// TODO: clean up on kmalloc fail
-			uint32_t prdt_phys = (uintptr_t)vmm_translate(ctrls[i].prdt);
+			// TODO: clean up on alloc fail
+			uint64_t full_addr = (uintptr_t)vmm_translate(ctrls[i].prdt);
+			if (full_addr >= (1ULL << 32)) {
+				// handle error or log warning: address cannot be DMA'd
+				log_error("PRDT is not in valid location: %lx", full_addr);
+			}
+			uint32_t prdt_phys = (uint32_t)full_addr;
 			log_debug("Writing PRDT addr: %x", prdt_phys);
 			ctrl_bmr_outd(ctrls + i, BMR_REG_PRDT, prdt_phys);
 		}
@@ -78,7 +105,7 @@ void ctrl_init()
 		// Init attached drives, beginning with slave
 		for (short int j = 1; j >= 0; j--) {
 			ctrls[i].devices[j].present = false;
-			ctrls[i].devices[j].id = i * 2 + j;
+			ctrls[i].devices[j].id = (uint8_t)(i * 2 + (unsigned short)j);
 			ctrls[i].devices[j].ctrl = ctrls + i;
 			device_init(ctrls[i].devices + j);
 		}

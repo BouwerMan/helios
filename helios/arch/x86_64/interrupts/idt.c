@@ -1,8 +1,32 @@
-#include "idt.h"
-#include "../ports.h"
-#include <kernel/screen.h>
+/**
+ * @file arch/x86_64/interrupts/idt.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <string.h>
+
+#include <kernel/screen.h>
+
 #include <util/log.h>
+
+#include "../ports.h"
+#include "idt.h"
 
 /* To print the message which defines every exception */
 const char* exception_messages[] = {
@@ -109,7 +133,7 @@ void idt_set_descriptor(uint8_t vector, uint64_t isr, uint8_t flags)
 	descriptor->ist = 0;
 	descriptor->attributes = flags;
 	descriptor->isr_mid = (isr >> 16) & 0xFFFF;
-	descriptor->isr_high = (isr >> 32) & 0xFFFFFFFF;
+	descriptor->isr_high = (uint32_t)(isr >> 32) & 0xFFFFFFFF;
 	descriptor->reserved = 0;
 }
 
@@ -172,7 +196,8 @@ void idt_init()
 }
 
 // ISR Stuff
-static void* interrupt_handlers[256] = { NULL };
+typedef void (*int_handler)(struct registers* r);
+static int_handler interrupt_handlers[256] = { NULL };
 
 /**
  * @brief Installs an interrupt service routine (ISR) handler for a specific
@@ -190,7 +215,7 @@ static void* interrupt_handlers[256] = { NULL };
  */
 void install_isr_handler(int isr, void (*handler)(struct registers* r))
 {
-	interrupt_handlers[isr] = (void*)handler;
+	interrupt_handlers[isr] = handler;
 }
 
 /**
@@ -357,8 +382,7 @@ void irq_handler(struct registers* r)
 	/* This is a blank function pointer */
 	void (*handler)(struct registers* r);
 
-	/* Find out if we have a custom handler to run for this IRQ, and then finally,
-   * run it */
+	/* Find out if we have a custom handler to run for this IRQ, and then finally, run it */
 	handler = interrupt_handlers[r->int_no];
 
 	if (handler) {
@@ -388,7 +412,7 @@ void IRQ_set_mask(uint8_t IRQline)
 		port = PIC2_DATA;
 		IRQline -= 8;
 	}
-	value = inb(port) | (1 << IRQline);
+	value = inb(port) | (uint8_t)(1 << IRQline);
 	outb(port, value);
 }
 
@@ -403,6 +427,6 @@ void IRQ_clear_mask(uint8_t IRQline)
 		port = PIC2_DATA;
 		IRQline -= 8;
 	}
-	value = inb(port) & ~(1 << IRQline);
+	value = inb(port) & ~(uint8_t)(1 << IRQline);
 	outb(port, value);
 }

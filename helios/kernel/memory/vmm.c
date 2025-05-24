@@ -34,6 +34,7 @@
 #include <limine.h>
 
 #ifndef __VMM_DEBUG__
+#undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
 #include <util/log.h>
@@ -165,7 +166,7 @@ void vmm_init(struct limine_memmap_response* mmap, struct limine_executable_addr
 	uint64_t kernel_start = exe->virtual_base;
 	uint64_t kernel_end = kernel_start + exe_size;
 	log_info("Kernel range: [%lx - %lx)", kernel_start, kernel_end);
-	log_info("Heap range:   [%lx - %lx)", KERNEL_HEAP_BASE, KERNEL_HEAP_LIMIT);
+	log_info("Heap range:   [%llx - %llx)", KERNEL_HEAP_BASE, KERNEL_HEAP_LIMIT);
 	log_info("Recursive slot: [%lx - %lx)", 0xFFFFFE0000000000, 0xFFFFFEFFFFFFFFFF);
 	if (ranges_overlap(kernel_start, kernel_end, KERNEL_HEAP_BASE, KERNEL_HEAP_LIMIT)) {
 		panic("KERNEL AND KERNEL HEAP OVERLAP");
@@ -255,6 +256,7 @@ allocate_pages_contiguous:
 	uint64_t start_virt_addr = KERNEL_HEAP_BASE + (cont_start * PAGE_SIZE);
 	log_debug("Allocating %zu contiguous pages, starting at phys %p, and virt %lx", count, phys_addr,
 		  start_virt_addr);
+	(void)start_virt_addr; // To appease warnings while log level is 1
 
 	for (size_t virt_i = cont_start, phys_i = 0; virt_i < cont_start + count; virt_i++, phys_i++) {
 		// Calculate bitmap offsets
@@ -265,7 +267,6 @@ allocate_pages_contiguous:
 		bitmap[word_offset] |= (1ULL << bit_offset);
 
 		uint64_t virt_addr = KERNEL_HEAP_BASE + (virt_i * PAGE_SIZE);
-		size_t phys_i = virt_i - cont_start;
 		uint64_t map_phys = (uintptr_t)phys_addr + (phys_i * PAGE_SIZE);
 
 		vmm_map((void*)virt_addr, (void*)map_phys, PAGE_PRESENT | PAGE_WRITE);

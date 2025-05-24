@@ -1,8 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include <kernel/helios.h>
 #include <stddef.h>
+
+#include <kernel/helios.h>
+
 #include <util/list.h>
 
 // TODO: Try using a free list stored in the freed object's slab slice similar to the linux kernel
@@ -37,7 +39,6 @@ struct slab_cache {
 	char name[MAX_CACHE_NAME_LEN];
 };
 
-// TODO: Switch free_stack to a bitmap, going to make a custom bitmap util first
 struct slab {
 	struct list link; // points to next slab
 	size_t free_top;
@@ -45,7 +46,6 @@ struct slab {
 	void** free_stack;
 };
 
-// TODO: Return int? A lot of these should actually return error codes
 [[nodiscard]] int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_size, size_t object_align,
 				  void (*constructor)(void*), void (*destructor)(void*));
 void* slab_alloc(struct slab_cache* cache);

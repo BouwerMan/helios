@@ -1,8 +1,10 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
-#include <drivers/ata/controller.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#include <drivers/ata/controller.h>
 
 /**
  * Reads or writes from/to an ATA-device

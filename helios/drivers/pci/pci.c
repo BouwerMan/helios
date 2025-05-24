@@ -1,9 +1,32 @@
+/**
+ * @file drivers/pci/pci.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 // https://wiki.osdev.org/PCI
 // https://www.pcilookup.com/
-#include "../arch/x86_64/ports.h"
 #include <drivers/pci/pci.h>
 #include <kernel/liballoc.h>
+
 #include <util/log.h>
+
+#include "../arch/x86_64/ports.h"
 
 // TODO: Dynamiclly allocate
 pci_device_t* devices[32];
@@ -76,10 +99,10 @@ void list_devices()
 				dev->bus = i;
 				dev->dev = j;
 				dev->func = k;
-				dev->device_id = val >> 16;
+				dev->device_id = (uint16_t)(val >> 16);
 				dev->vendor_id = val & 0xFFFF;
 				val = pci_config_read_dword(i, j, k, 0x8);
-				dev->base_class = val >> 24;
+				dev->base_class = (uint8_t)(val >> 24);
 				dev->sub_class = (val >> 16) & 0xFF;
 				dev->prog_interface = (val >> 8) & 0xFF;
 				val = pci_config_read_dword(i, j, k, 0xC);

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -8,11 +9,11 @@
 
 /* represents a partition (in memory) */
 typedef struct {
-    uint8_t present;
-    /* start sector */
-    size_t start;
-    /* sector count */
-    size_t size;
+	uint8_t present;
+	/* start sector */
+	size_t start;
+	/* sector count */
+	size_t size;
 } sPartition;
 
 /**

@@ -1,11 +1,35 @@
+/**
+ * @file drivers/ata/device.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include <stdint.h>
+
 #include <drivers/ata/ata.h>
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
 #include <drivers/ata/partition.h>
 #include <kernel/timer.h>
+
 #include <util/log.h>
 
-static bool device_identify(sATADevice* device, uint16_t cmd);
+static bool device_identify(sATADevice* device, uint8_t cmd);
 
 // TODO: Clean this up a bit.
 //       Also need to implement the IDENTIFY struct.
@@ -13,7 +37,6 @@ static bool device_identify(sATADevice* device, uint16_t cmd);
 void device_init(sATADevice* device)
 {
 	uint16_t buffer[256];
-	sATAController* ctrl = device->ctrl;
 	log_debug("Sending 'IDENTIFY DEVICE' to device %d", device->id);
 	if (!device_identify(device, COMMAND_IDENTIFY)) {
 		// if (!device_identify(device, COMMAND_IDENTIFY_PACKET)) {
@@ -34,21 +57,17 @@ void device_init(sATADevice* device)
 			device->present = false;
 			return;
 		}
-		// puts("Parsing partition table");
-		// for (size_t i = 0; i < 256; i++) {
-		//     if (buffer[i]) printf("0x%X ", buffer[i]);
-		// }
 		part_fill_partitions(device->part_table, buffer);
 		part_print(device->part_table);
 	}
 }
 
-static bool device_identify(sATADevice* device, uint16_t cmd)
+static bool device_identify(sATADevice* device, uint8_t cmd)
 {
 	// ata-atapi-8 7.12
 	sATAController* ctrl = device->ctrl;
 
-	uint32_t device_select = device->id & SLAVE_BIT ? DRIVE_SLAVE : DRIVE_MASTER;
+	uint8_t device_select = device->id & SLAVE_BIT ? DRIVE_SLAVE : DRIVE_MASTER;
 
 	// printf("Selecting device %d, using value: 0x%X\n", device->id, device_select);
 	ctrl_outb(ctrl, ATA_REG_DRIVE_SELECT, device_select);

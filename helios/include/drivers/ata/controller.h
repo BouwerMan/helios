@@ -1,10 +1,13 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
-#include "../arch/x86_64/ports.h"
-#include <drivers/ata/partition.h>
-#include <drivers/pci/pci.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#include <drivers/ata/partition.h>
+#include <drivers/pci/pci.h>
+
+#include "../arch/x86_64/ports.h"
 
 enum {
 	DEVICE_PRIMARY = 0,
@@ -39,8 +42,7 @@ enum {
 #define IO_PORTBASE_PRIMARY   ((uint16_t)0x3F6)
 #define IO_PORTBASE_SECONDARY ((uint16_t)0x376)
 #define PRDT_EOT	      (1 << 15)
-
-static const int CTRL_IRQ_BASE = 14;
+#define CTRL_IRQ_BASE	      14
 
 typedef struct sATAController sATAController;
 typedef struct sATADevice sATADevice;
@@ -105,7 +107,7 @@ static inline uint8_t ctrl_bmr_inb(sATAController* ctrl, uint16_t reg)
 	return inb(ctrl->bmr_base + reg);
 }
 
-static inline uint32_t ctrl_bmr_ind(sATAController* ctrl, uint32_t reg)
+static inline uint32_t ctrl_bmr_ind(sATAController* ctrl, uint16_t reg)
 {
 	return indword(ctrl->bmr_base + reg);
 }

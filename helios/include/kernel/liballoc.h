@@ -25,6 +25,9 @@
 extern "C" {
 #endif
 
+/// Used to init the spinlock
+extern void liballoc_init();
+
 /** This function is supposed to lock the memory data structures. It
  * could be as simple as disabling interrupts or acquiring a spinlock.
  * It's up to you to decide.
@@ -61,10 +64,10 @@ extern void* liballoc_alloc(size_t);
  */
 extern int liballoc_free(void*, size_t);
 
-extern void* PREFIX(malloc)(size_t); ///< The standard function.
+extern void* PREFIX(malloc)(size_t);	     ///< The standard function.
 extern void* PREFIX(realloc)(void*, size_t); ///< The standard function.
 extern void* PREFIX(calloc)(size_t, size_t); ///< The standard function.
-extern void PREFIX(free)(void*); ///< The standard function.
+extern void PREFIX(free)(void*);	     ///< The standard function.
 
 #ifdef __cplusplus
 }

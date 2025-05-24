@@ -24,7 +24,8 @@ export INCLUDEDIR=$(PREFIX)/include
 export CWARN=-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Wcast-align \
 	-Wwrite-strings -Wmissing-prototypes -Wmissing-declarations \
         -Wredundant-decls -Wnested-externs -Winline -Wno-long-long \
-        -Wconversion -Wstrict-prototypes
+        -Wconversion -Wstrict-prototypes \
+	# -Werror -fmax-errors=10
 
 export CFLAGS=-O2 -g -pipe -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse3 -std=gnu23 $(CWARN)
 
@@ -35,19 +36,27 @@ export TESTS=#-D__PMM_TEST__
 export SYSROOT="$(shell pwd)/sysroot"
 # export CC+=--sysroot=$(SYSROOT) -isystem=$(INCLUDEDIR)
 
-.PHONY: all libc helios clean qemu headers iso bochs
+PROJDIRS := helios libc
+SRCFILES := $(shell find $(PROJDIRS) -type f -name "*.c")
+HDRFILES := $(shell find $(PROJDIRS) -type f -name "*.h")
+ALLFILES := $(SRCFILES) $(HDRFILES)
+
+.PHONY: all libc helios clean qemu headers iso bochs todolist
 
 all: headers libc helios
 
 helios:
-	DESTDIR=$(SYSROOT) $(MAKE) -C ./helios install
+	@DESTDIR=$(SYSROOT) $(MAKE) -C ./helios install
 
 libc:
-	DESTDIR=$(SYSROOT) $(MAKE)  -C ./libc install
+	@DESTDIR=$(SYSROOT) $(MAKE)  -C ./libc install
 
 headers:
-	mkdir -p $(SYSROOT)
-	DESTDIR=$(SYSROOT) $(MAKE) -C ./libc install-headers
+	@mkdir -p $(SYSROOT)
+	@DESTDIR=$(SYSROOT) $(MAKE) -C ./libc install-headers
+
+todolist:
+	-@grep --color=auto 'TODO.*' -rno $(PROJDIRS)
 
 iso: all
 	@mkdir -p isodir
