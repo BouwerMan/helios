@@ -31,10 +31,11 @@
 
 #include <kernel/memory/pmm.h>
 #include <kernel/sys.h>
+#include <kernel/timer.h>
 #include <limine.h>
 
 #ifndef __PMM_DEBUG__
-#define LOG_LEVEL 1
+#define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
 #include <util/log.h>
 #undef FORCE_LOG_REDEF
@@ -50,6 +51,33 @@ static size_t free_page_count = 0;
 static size_t total_page_count = 0; // Never changes after pmm_init()
 
 struct pmm pmm = { 0 };
+
+static uintptr_t add_entry_to_stack(struct limine_memmap_entry* entry, uintptr_t* head, uintptr_t prev,
+				    uint64_t hhdm_offset)
+{
+	__asm__ volatile("cli");
+	// log_debug("Prev: %lx", prev);
+	uintptr_t start = align_up(entry->base);		 // Align the start address.
+	uintptr_t end = align_down(entry->base + entry->length); // Align the end address.
+
+	uintptr_t addr = end;
+	if (*head == 0) {
+		*head = start;
+	}
+
+	BENCHMARK_START(inner_loop);
+	while (addr > start) {
+		addr -= PAGE_SIZE;
+		*(uint64_t*)(addr + hhdm_offset) = prev;
+		prev = addr;
+		// log_debug("Prev: %lx, Current: %lx", prev, pmm.free_dma);
+	}
+	BENCHMARK_END(inner_loop);
+	// log_debug("Head: %lx, prev: %lx", *head, prev);
+	__asm__ volatile("sti");
+	return prev;
+	// return 0;
+}
 
 /**
  * @brief Initializes the Physical Memory Manager (PMM).
@@ -67,6 +95,14 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 	uint64_t high_addr = 0; // Highest address in the memory map.
 	size_t total_len = 0;	// Total length of usable memory.
 
+	/**
+	 * 1st try:				3164434440 cycles
+	 * Now with better function overhead:	3120823485 cycles
+	 * Better looping:			2310079746 cycles
+	 */
+	BENCHMARK_START(pmm_init);
+	list_init(&pmm.f_dma);
+	uintptr_t zone_dma_tail = END_LINK;
 	// First pass: Calculate the highest address and total usable memory length.
 	for (size_t i = 0; i < mmap->entry_count; i++) {
 		struct limine_memmap_entry* entry = mmap->entries[i];
@@ -74,7 +110,18 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
 		high_addr = entry->base + entry->length;
 		total_len += entry->length;
+
+		// Time to do linked list shenanigans
+		uintptr_t start = align_up(entry->base);		 // Align the start address.
+		uintptr_t end = align_down(entry->base + entry->length); // Align the end address.
+
+		if (start < ZONE_DMA_LIMIT) {
+			zone_dma_tail = add_entry_to_stack(entry, &pmm.free_dma, zone_dma_tail, hhdm_offset);
+			continue;
+		}
+		log_debug("ZONE_DMA_FINISHED");
 	}
+	BENCHMARK_END(pmm_init);
 
 	// Calculate the size of the bitmap in bytes and entries.
 	size_t bitmap_size_bytes = high_addr / PAGE_SIZE / UINT8_WIDTH;

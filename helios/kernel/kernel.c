@@ -152,6 +152,11 @@ void kernel_main(void)
 	log_info("Initializing VMM");
 	vmm_init(memmap_request.response, exe_addr_req.response, hhdm_request.response->offset);
 
+	// FIXME: Remove
+	log_error("Early infinite loop so that I don't have to worry");
+	while (1)
+		;
+
 	init_scheduler();
 	log_info("Initializing dmesg");
 	dmesg_init();

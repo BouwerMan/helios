@@ -20,25 +20,25 @@ _Static_assert(IS_POWER_OF_TWO(PAGE_SIZE) == true, "PAGE_SIZE must be power of 2
 
 #define ZONE_NORMAL_BASE 0x100000000ULL
 
+#define END_LINK 0xDEADDEADDEADDEADULL
+
 enum MEMORY_ZONES {
 	ZONE_DMA,    // Under 16 MiB (unimplemented lmao)
 	ZONE_DMA32,  // Under 4 GiB
 	ZONE_NORMAL, // Over 4 GiB
 };
 
-struct free_stack {
-	uintptr_t* stack;
-	size_t top;
+struct free_block {
+	uintptr_t start;
+	size_t len;
+	struct list link;
 };
 
 struct pmm {
-	uintptr_t zdma_start;
-	uintptr_t zdma_end;
-	uintptr_t free_dma;
+	uintptr_t free_dma; // Head of ZONE_DMA linked stack
+	struct list f_dma;
+	uintptr_t free_dma_end;
 	uintptr_t free_dma32;
-	// struct free_stack free_dma;    // Free stack for ZONE_DMA
-	// struct free_stack free_dma32;  // Free stack for ZONE_DMA32
-	// struct free_stack free_normal; // Free stack for ZONE_NORMAL
 };
 
 // is this really needed? dumbass
