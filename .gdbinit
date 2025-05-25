@@ -4,7 +4,7 @@ target remote localhost:1234
 set print pretty on
 
 # break scheduler.c:134
-break pmm.c:70
+break pmm.c:79
 c
 
 define hook-quit

@@ -41,7 +41,7 @@ SRCFILES := $(shell find $(PROJDIRS) -type f -name "*.c")
 HDRFILES := $(shell find $(PROJDIRS) -type f -name "*.h")
 ALLFILES := $(SRCFILES) $(HDRFILES)
 
-.PHONY: all libc helios clean qemu headers iso bochs todolist
+.PHONY: all libc helios clean qemu headers iso bochs todolist limine
 
 all: headers libc helios
 
@@ -58,7 +58,13 @@ headers:
 todolist:
 	-@grep --color=auto 'TODO.*' -rno $(PROJDIRS)
 
-iso: all
+limine:
+	# Download the latest Limine binary release for the 9.x branch.
+	if ! [ -d "limine" ]; then git clone https://github.com/limine-bootloader/limine.git --branch=v9.x-binary --depth=1; fi
+	# Build "limine" utility.
+	make -C limine
+
+iso: limine all
 	@mkdir -p isodir
 	@mkdir -p isodir/boot
 	@mkdir -p isodir/boot/limine
@@ -87,7 +93,17 @@ qemu: iso
 		-d cpu_reset \
 		-D log.txt \
 		-serial stdio \
+		-enable-kvm \
+		-cpu host
 		# -nographic \
+
+qemugdb: iso
+	qemu-system-$(HOSTARCH) -cdrom $(OSNAME).iso \
+		-m 4096M \
+		-hdd ./fat.img -boot d -s -S \
+		-d cpu_reset \
+		-D log.txt \
+		-serial stdio \
 
 clean:
 	rm -rvf sysroot

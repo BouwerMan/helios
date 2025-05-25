@@ -43,6 +43,7 @@ typedef int64_t i64;
 #define ALIGN_UP(size, align) (((size + align - 1) / align) * align)
 
 #define BOCHS_BREAKPOINT (asm volatile("xchgw %bx, %bx"))
+#define QEMU_BREAKPOINT	 (__asm__ volatile("jmp $"))
 
 #define __PACKED __attribute__((packed))
 

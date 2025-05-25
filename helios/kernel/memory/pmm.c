@@ -52,31 +52,113 @@ static size_t total_page_count = 0; // Never changes after pmm_init()
 
 struct pmm pmm = { 0 };
 
-static uintptr_t add_entry_to_stack(struct limine_memmap_entry* entry, uintptr_t* head, uintptr_t prev,
-				    uint64_t hhdm_offset)
+/**
+ * @brief Links a memory region into a reverse singly linked list of free pages.
+ *
+ * Constructs a linked list of physical pages within the specified range
+ * [start, end), storing the next pointer at the start of each page.
+ * Optionally patches the previous tail to the new region's head.
+ *
+ * @param start         Aligned start of the physical region.
+ * @param end           Aligned end of the physical region (exclusive).
+ * @param head          Pointer to the zone's global head pointer.
+ * @param prev          Previous region's tail, or END_LINK if none.
+ * @param hhdm_offset   Higher-half direct map offset to translate physical addresses.
+ *
+ * @return The highest physical address used in the region (new tail).
+ */
+static uintptr_t link_region(uintptr_t start, uintptr_t end, uintptr_t* head, uintptr_t prev, uint64_t hhdm_offset)
 {
-	__asm__ volatile("cli");
-	// log_debug("Prev: %lx", prev);
-	uintptr_t start = align_up(entry->base);		 // Align the start address.
-	uintptr_t end = align_down(entry->base + entry->length); // Align the end address.
-
-	uintptr_t addr = end;
 	if (*head == 0) {
 		*head = start;
+	} else {
+		// If this region is disjoint from the previous, patch the last tail to this new head
+		if (prev != END_LINK) *(uint64_t*)(prev + hhdm_offset) = start;
+		prev = END_LINK; // Now we set prev so that our loop sets the end properly
 	}
 
-	BENCHMARK_START(inner_loop);
-	while (addr > start) {
-		addr -= PAGE_SIZE;
-		*(uint64_t*)(addr + hhdm_offset) = prev;
-		prev = addr;
-		// log_debug("Prev: %lx, Current: %lx", prev, pmm.free_dma);
+	uintptr_t current = end;
+	while (current > start) {
+		current -= PAGE_SIZE;
+		*(uint64_t*)(current + hhdm_offset) = prev;
+		prev = current;
 	}
-	BENCHMARK_END(inner_loop);
-	// log_debug("Head: %lx, prev: %lx", *head, prev);
-	__asm__ volatile("sti");
-	return prev;
-	// return 0;
+	return end - PAGE_SIZE; // Last page of list
+}
+
+/**
+ * @brief Clamps a zone limit to the last valid page-aligned address.
+ *
+ * @param limit   The upper limit of a memory zone.
+ * @return The last usable page-aligned address below the limit.
+ */
+static inline uintptr_t clamp_limit(uintptr_t limit)
+{
+	return align_up(limit) - PAGE_SIZE;
+}
+
+/**
+ * @brief Links a memory map entry into the appropriate physical memory zone stack.
+ *
+ * Splits the entry across ZONE_DMA, ZONE_DMA32, and ZONE_NORMAL as needed.
+ * Each subregion is passed to pmm_link_region, and page counters are updated.
+ *
+ * @param entry         Pointer to a usable Limine memory map entry.
+ * @param hhdm_offset   Higher-half direct map offset for pointer translation.
+ */
+static void link_entry(struct limine_memmap_entry* entry, uint64_t hhdm_offset)
+{
+	// TODO: Maybe factor out all the repeated stuff?
+	static uintptr_t zone_dma_tail = END_LINK;
+	static uintptr_t zone_dma32_tail = END_LINK;
+	static uintptr_t zone_norm_tail = END_LINK;
+
+	uintptr_t start = align_up(entry->base); // Align the start address.
+	uintptr_t end = align_down(entry->base + entry->length);
+	uintptr_t zone_end = end;
+
+	if (start < ZONE_DMA_LIMIT && end > ZONE_DMA_BASE) {
+		if (end > ZONE_DMA_LIMIT) zone_end = clamp_limit(ZONE_DMA_LIMIT);
+		size_t pages = (zone_end - start) / PAGE_SIZE;
+
+		log_debug("Filling in ZONE_DMA, start: %lx, zone_end: %lx, pages: %zx", start, zone_end, pages);
+		zone_dma_tail = link_region(start, zone_end, &pmm.free_dma, zone_dma_tail, hhdm_offset);
+
+		pmm.total_pages_dma += pages;
+		pmm.free_pages_dma += pages;
+
+		if (zone_end == end) return;
+		start = zone_end + PAGE_SIZE;
+		zone_end = end;
+	}
+	if (start < ZONE_DMA32_LIMIT && end > ZONE_DMA32_BASE) {
+		if (end > ZONE_DMA32_LIMIT) zone_end = clamp_limit(ZONE_DMA32_LIMIT);
+		size_t pages = (zone_end - start) / PAGE_SIZE;
+
+		log_debug("Filling in ZONE_DMA32, start: %lx, zone_end: %lx, pages: %zx", start, zone_end, pages);
+		zone_dma32_tail = link_region(start, zone_end, &pmm.free_dma32, zone_dma32_tail, hhdm_offset);
+
+		pmm.total_pages_dma32 += pages;
+		pmm.free_pages_dma32 += pages;
+
+		if (zone_end == end) return;
+		start = zone_end + PAGE_SIZE;
+		zone_end = end;
+	}
+	if (start < ZONE_NORMAL_LIMIT && end > ZONE_NORMAL_BASE) {
+		if (end > ZONE_NORMAL_LIMIT) zone_end = clamp_limit(ZONE_DMA_LIMIT);
+		size_t pages = (zone_end - start) / PAGE_SIZE;
+
+		log_debug("Filling in ZONE_NORMAL, start: %lx, zone_end: %lx, pages: %zx", start, zone_end, pages);
+		zone_norm_tail = link_region(start, zone_end, &pmm.free_norm, zone_norm_tail, hhdm_offset);
+
+		pmm.total_pages_norm += pages;
+		pmm.free_pages_norm += pages;
+
+		if (zone_end == end) return;
+		start = zone_end + PAGE_SIZE;
+		zone_end = end;
+	}
 }
 
 /**
@@ -95,14 +177,7 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 	uint64_t high_addr = 0; // Highest address in the memory map.
 	size_t total_len = 0;	// Total length of usable memory.
 
-	/**
-	 * 1st try:				3164434440 cycles
-	 * Now with better function overhead:	3120823485 cycles
-	 * Better looping:			2310079746 cycles
-	 */
 	BENCHMARK_START(pmm_init);
-	list_init(&pmm.f_dma);
-	uintptr_t zone_dma_tail = END_LINK;
 	// First pass: Calculate the highest address and total usable memory length.
 	for (size_t i = 0; i < mmap->entry_count; i++) {
 		struct limine_memmap_entry* entry = mmap->entries[i];
@@ -111,17 +186,13 @@ void pmm_init(struct limine_memmap_response* mmap, uint64_t hhdm_offset)
 		high_addr = entry->base + entry->length;
 		total_len += entry->length;
 
-		// Time to do linked list shenanigans
-		uintptr_t start = align_up(entry->base);		 // Align the start address.
-		uintptr_t end = align_down(entry->base + entry->length); // Align the end address.
-
-		if (start < ZONE_DMA_LIMIT) {
-			zone_dma_tail = add_entry_to_stack(entry, &pmm.free_dma, zone_dma_tail, hhdm_offset);
-			continue;
-		}
-		log_debug("ZONE_DMA_FINISHED");
+		link_entry(entry, hhdm_offset);
 	}
 	BENCHMARK_END(pmm_init);
+	// TODO: The free stack may or may not be off by 1 page (good luck finding it)
+	log_debug("dma total: %lx, dma32 total: %lx, normal total: %lx, combined total: %lx", pmm.total_pages_dma,
+		  pmm.total_pages_dma32, pmm.total_pages_norm,
+		  pmm.total_pages_dma + pmm.total_pages_dma32 + pmm.total_pages_norm);
 
 	// Calculate the size of the bitmap in bytes and entries.
 	size_t bitmap_size_bytes = high_addr / PAGE_SIZE / UINT8_WIDTH;

@@ -12,7 +12,7 @@
 
 #define BENCHMARK_END(label)            \
 	uint64_t label##_end = rdtsc(); \
-	log_debug(#label ": %lu cycles", (label##_end - label##_start))
+	log_debug(#label ": %lu (%lx) cycles", (label##_end - label##_start), (label##_end - label##_start))
 
 static inline uint64_t rdtsc(void)
 {

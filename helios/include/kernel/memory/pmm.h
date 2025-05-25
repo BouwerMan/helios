@@ -18,7 +18,8 @@ _Static_assert(IS_POWER_OF_TWO(PAGE_SIZE) == true, "PAGE_SIZE must be power of 2
 #define ZONE_DMA32_BASE	 0x1000000ULL
 #define ZONE_DMA32_LIMIT 0xffffffffULL
 
-#define ZONE_NORMAL_BASE 0x100000000ULL
+#define ZONE_NORMAL_BASE  0x100000000ULL
+#define ZONE_NORMAL_LIMIT UINT64_MAX
 
 #define END_LINK 0xDEADDEADDEADDEADULL
 
@@ -36,9 +37,14 @@ struct free_block {
 
 struct pmm {
 	uintptr_t free_dma; // Head of ZONE_DMA linked stack
-	struct list f_dma;
-	uintptr_t free_dma_end;
+	size_t free_pages_dma;
+	size_t total_pages_dma;
 	uintptr_t free_dma32;
+	size_t free_pages_dma32;
+	size_t total_pages_dma32;
+	uintptr_t free_norm;
+	size_t free_pages_norm;
+	size_t total_pages_norm;
 };
 
 // is this really needed? dumbass
