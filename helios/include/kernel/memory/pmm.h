@@ -2,38 +2,15 @@
 #pragma once
 
 #include <stddef.h>
-
-#include <kernel/helios.h>
-#include <limine.h>
 #include <stdlib.h>
 
-#define PAGE_SIZE 0x1000ULL
-_Static_assert(IS_POWER_OF_TWO(PAGE_SIZE) == true, "PAGE_SIZE must be power of 2");
+#include <kernel/helios.h>
+#include <kernel/memory/memory_limits.h>
+#include <limine.h>
 
 #define BITSET_WIDTH 64
 
-#define ZONE_DMA_BASE  0x0
-#define ZONE_DMA_LIMIT 0xffffffULL
-
-#define ZONE_DMA32_BASE	 0x1000000ULL
-#define ZONE_DMA32_LIMIT 0xffffffffULL
-
-#define ZONE_NORMAL_BASE  0x100000000ULL
-#define ZONE_NORMAL_LIMIT UINT64_MAX
-
 #define END_LINK 0xDEADDEADDEADDEADULL
-
-enum MEMORY_ZONES {
-	ZONE_DMA,    // Under 16 MiB (unimplemented lmao)
-	ZONE_DMA32,  // Under 4 GiB
-	ZONE_NORMAL, // Over 4 GiB
-};
-
-struct free_block {
-	uintptr_t start;
-	size_t len;
-	struct list link;
-};
 
 struct pmm {
 	uintptr_t free_dma; // Head of ZONE_DMA linked stack

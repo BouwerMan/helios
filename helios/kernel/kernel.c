@@ -152,6 +152,15 @@ void kernel_main(void)
 	log_info("Initializing VMM");
 	vmm_init(memmap_request.response, exe_addr_req.response, hhdm_request.response->offset);
 
+	uintptr_t* ptr = valloc(13, ALLOC_KERNEL);
+	*ptr = 1041531;
+	log_debug("Got 13 pages from valloc located at: %p, stored %lu in it", (void*)ptr, *ptr);
+	vfree(ptr);
+	ptr = valloc(14, ALLOC_KERNEL);
+	*ptr = 684023;
+	log_debug("Got 13 pages from valloc located at: %p, stored %lu in it", (void*)ptr, *ptr);
+	vfree(ptr);
+
 	// FIXME: Remove
 	log_error("Early infinite loop so that I don't have to worry");
 	while (1)

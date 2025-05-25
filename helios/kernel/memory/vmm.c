@@ -28,6 +28,8 @@
 
 #include <string.h>
 
+#include <kernel/kmath.h>
+#include <kernel/memory/memory_limits.h>
 #include <kernel/memory/pmm.h>
 #include <kernel/memory/vmm.h>
 #include <kernel/sys.h>
@@ -35,7 +37,7 @@
 
 #ifndef __VMM_DEBUG__
 #undef LOG_LEVEL
-#define LOG_LEVEL 1
+#define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
 #include <util/log.h>
 #undef FORCE_LOG_REDEF
@@ -56,6 +58,10 @@ static size_t free_page_count = 0;
 static uint64_t g_hhdm_offset;
 #define PHYS_TO_VIRT(p) ((void*)((uintptr_t)(p) + g_hhdm_offset))
 #define VIRT_TO_PHYS(v) ((uintptr_t)(v) - g_hhdm_offset)
+
+// Big boy array is a binary tree in a breadth-first array layout
+static struct buddy_block blocks[BUDDY_NODES] = { 0 };
+static struct buddy_allocator alr = { 0 };
 
 /**
  * @brief Loads the physical address of the PML4 table into the CR3 register.
@@ -121,6 +127,25 @@ static bool ranges_overlap(uint64_t a_start, uint64_t a_end, uint64_t b_start, u
 	return !(a_end <= b_start || a_start >= b_end);
 }
 
+#define BLOCK_TO_INDEX(addr, base, order)  ((addr - base) >> order)
+#define INDEX_TO_BLOCK(index, base, order) (base + (index << order))
+
+static void insert_block(struct buddy_allocator* allocator, uintptr_t addr, uint8_t order)
+{
+	log_debug("Inserting block addr: %lx, order: %u", addr, order);
+	/**
+	 * Compute the block index for the buddy metadata.
+	 * Mark it as free in block_status[].
+	 * Create a struct buddy_block that can be inserted into the appropriate free_lists[order].
+	 */
+	size_t block_index = BLOCK_TO_INDEX(addr, allocator->base, order);
+	log_debug("Block index: %zu", block_index);
+	struct buddy_block* block = &blocks[block_index];
+	list_append(&allocator->free_lists[order], &block->link);
+	block->order = order;
+	block->state = BLOCK_FREE;
+}
+
 /**
  * @brief Initializes the Virtual Memory Manager (VMM).
  *
@@ -142,7 +167,7 @@ void vmm_init(struct limine_memmap_response* mmap, struct limine_executable_addr
 		log_error("VMM Initialization failed. PMM didn't return a valid page");
 		panic("VMM Initialization failed.");
 	}
-	log_debug("pml4 address: %p", pml4);
+	log_debug("pml4 address: %p", (void*)pml4);
 	memset(pml4, 0, PAGE_SIZE); // Clear page tables
 
 	// Identity map first 64 MiB, skip first 1 MiB
@@ -161,17 +186,43 @@ void vmm_init(struct limine_memmap_response* mmap, struct limine_executable_addr
 	// Load the PML4 physical address into CR3 to activate the page tables
 	vmm_load_cr3((uintptr_t)pml4_phys);
 
+	// Time to setup buddy
+
 	// Setting up heap
 	log_debug("Found exe size to be: %lx", exe_size);
 	uint64_t kernel_start = exe->virtual_base;
 	uint64_t kernel_end = kernel_start + exe_size;
 	log_info("Kernel range: [%lx - %lx)", kernel_start, kernel_end);
 	log_info("Heap range:   [%llx - %llx)", KERNEL_HEAP_BASE, KERNEL_HEAP_LIMIT);
-	log_info("Recursive slot: [%lx - %lx)", 0xFFFFFE0000000000, 0xFFFFFEFFFFFFFFFF);
 	if (ranges_overlap(kernel_start, kernel_end, KERNEL_HEAP_BASE, KERNEL_HEAP_LIMIT)) {
 		panic("KERNEL AND KERNEL HEAP OVERLAP");
 	}
 
+	// TODO: Get rid of lists below MIN_ORDER
+	for (size_t i = MIN_ORDER; i <= MAX_ORDER; i++) {
+		list_init(&alr.free_lists[i]);
+	}
+	uintptr_t addr = KERNEL_HEAP_BASE;
+	size_t remaining = KERNEL_POOL;
+
+	alr.base = KERNEL_HEAP_BASE;
+	alr.size = KERNEL_POOL;
+
+	while (remaining > 0) {
+		int order = MAX_ORDER;
+
+		// Find largest block that fits and is aligned
+		while ((1UL << order) > remaining || (addr & ((1UL << order) - 1)) != 0) {
+			order--;
+		}
+
+		// Insert this block into the free list for that order
+		insert_block(&alr, addr, order);
+
+		addr += (1UL << order);
+		remaining -= (1UL << order);
+	}
+	return;
 	size_t bitmap_size_bytes = (KERNEL_HEAP_LIMIT - KERNEL_HEAP_BASE) / PAGE_SIZE / UINT8_WIDTH;
 	bitmap_size = bitmap_size_bytes / sizeof(uintptr_t);
 	total_page_count = bitmap_size * BITSET_WIDTH;
@@ -304,6 +355,203 @@ void vmm_free_pages(void* addr, size_t count)
 		vmm_unmap((void*)(KERNEL_HEAP_BASE + (page_index * PAGE_SIZE)), true);
 	}
 	free_page_count += count;
+}
+
+#define LEFT_CHILD(node)  (2 * node + 1)
+#define RIGHT_CHILD(node) (2 * node + 2)
+#define PARENT(node)	  ((node - 1) / 2)
+
+// static inline struct buddy_block* address_to_block(uintptr_t addr, uintptr_t base, uint8_t order){
+// 	size_t block_index = addr - blocks;
+// 	return blocks[]
+// }
+
+static struct buddy_block* split_until_order(struct buddy_allocator* allocator, uintptr_t addr, int current_order,
+					     int target_order)
+{
+	size_t block_index = BLOCK_TO_INDEX(addr, allocator->base, current_order);
+	struct buddy_block* block = &blocks[block_index];
+	log_debug("block_index: %zu, left child: %zu, right child: %zu", block_index, LEFT_CHILD(block_index),
+		  RIGHT_CHILD(block_index));
+	if (current_order == target_order) {
+		block->state = BLOCK_ALLOCATED;
+		return block;
+	}
+	// Now we split into 2 blocks
+	struct buddy_block* parent = block;
+	struct buddy_block* left = &blocks[LEFT_CHILD(block_index)];
+	struct buddy_block* right = &blocks[RIGHT_CHILD(block_index)];
+
+	// These are always set this way
+	parent->state = BLOCK_SPLIT;
+	parent->order = current_order;
+	right->state = BLOCK_FREE;
+	right->order = parent->order - 1;
+	left->order = parent->order - 1;
+	left->state = BLOCK_SPLIT;
+
+	// Add right to free list
+	list_insert(&allocator->free_lists[right->order], &right->link);
+
+	size_t left_block_index = left - blocks;
+	uintptr_t left_addr = INDEX_TO_BLOCK(left_block_index, allocator->base, left->order);
+	return split_until_order(allocator, left_addr, left->order, target_order);
+}
+
+// Size is in bytes
+static uintptr_t buddy_alloc(struct buddy_allocator* allocator, size_t size)
+{
+	size_t rounded_size = round_to_power_of_2(size);
+	int target_order = log2(rounded_size);
+	log_debug("Allocating rounded_size: %lx, target_order: %d", rounded_size, target_order);
+
+	for (size_t i = target_order; i <= MAX_ORDER; i++) {
+		log_debug("Checking order: %zu", i);
+		struct list* order_list = &allocator->free_lists[i];
+		if (list_empty(order_list)) continue;
+		// Getting next entry in list
+		struct list* next_block = list_next(order_list);
+		struct buddy_block* block = list_entry(next_block, struct buddy_block, link);
+
+		// TODO: Better handling (maybe remove it from the list or smthn)
+		if (block->state != BLOCK_FREE) continue;
+		log_debug("Found free block with order: %zu, blockmeta_order: %u, blockmeta_state: %u", i, block->order,
+			  block->state);
+
+		// Remove it from the list and mark it as split if needed
+		list_remove(&block->link);
+		if (block->order > target_order) block->state = BLOCK_SPLIT;
+
+		size_t block_index = block - blocks;
+		uintptr_t addr = INDEX_TO_BLOCK(block_index, allocator->base, block->order);
+		log_debug("block_index: %zu, addr: %lx", block_index, addr);
+
+		struct buddy_block* split_block = split_until_order(allocator, addr, block->order, target_order);
+		size_t split_block_index = split_block - blocks;
+		uintptr_t split_addr = INDEX_TO_BLOCK(split_block_index, allocator->base, split_block->order);
+		log_debug("Found block at block_index: %zu, addr: %lx, with order: %u", split_block_index, split_addr,
+			  split_block->order);
+		return split_addr;
+	}
+
+	return 0;
+}
+
+void* valloc(size_t pages, size_t flags)
+{
+	size_t rounded_pages = round_to_power_of_2(pages);
+	log_debug("rounded %zu to power of 2: %zu", pages, rounded_pages);
+	if (flags & ALLOC_KERNEL) {
+		uintptr_t vaddr_start = buddy_alloc(&alr, rounded_pages * PAGE_SIZE);
+		if (vaddr_start == 0) return NULL;
+		log_debug("Start of region at %lx", vaddr_start);
+		for (size_t i = 0; i < rounded_pages; i++) {
+			uintptr_t vaddr = vaddr_start + (i * PAGE_SIZE);
+			uintptr_t paddr = (uintptr_t)pmm_alloc_page();
+
+			log_debug("Mapping virtual address: %lx, to physical: %lx", vaddr, paddr);
+
+			vmm_map((void*)vaddr, (void*)paddr, PAGE_PRESENT | PAGE_WRITE);
+		}
+		return (void*)vaddr_start;
+	}
+	return NULL;
+}
+
+static uint8_t get_order(struct buddy_allocator* allocator, uintptr_t addr)
+{
+	for (int order = MIN_ORDER; order <= MAX_ORDER; order++) {
+		size_t index = BLOCK_TO_INDEX(addr, allocator->base, order);
+		if (INDEX_TO_BLOCK(index, allocator->base, order) == addr && blocks[index].state == BLOCK_ALLOCATED) {
+			return order;
+		}
+	}
+	return UINT8_MAX;
+}
+
+static void combine_blocks(struct buddy_allocator* allocator, uintptr_t addr, int order)
+{
+	// size_t rounded_size = round_to_power_of_2(size);
+	// int order = log2(rounded_size);
+	log_debug("addr %lx, order %d", addr, order);
+	if (order >= MAX_ORDER) return;
+
+	size_t block_idx = BLOCK_TO_INDEX(addr, allocator->base, order);
+	log_debug("Found block at addr %lx with idx: %zu, current order %u", addr, block_idx, order);
+	struct buddy_block* block = &blocks[block_idx];
+	block->state = BLOCK_FREE;
+
+	int level = order - MIN_ORDER;
+	size_t level_start = (1 << level) - 1;
+	size_t offset_in_level = block_idx - level_start;
+
+	// Flip the lowest bit to get the buddy's offset
+	size_t buddy_offset = offset_in_level ^ 1;
+	size_t buddy_idx = level_start + buddy_offset;
+
+	struct buddy_block* buddy = &blocks[buddy_idx];
+	log_debug("Found buddy with idx: %zu", buddy_idx);
+
+	if (buddy->state == BLOCK_FREE && buddy->order == block->order) {
+		log_debug("Coalescing block idx %zu with buddy idx %zu", block_idx, buddy_idx);
+		list_remove(&buddy->link);
+		block->state = BLOCK_INVALID;
+		buddy->state = BLOCK_INVALID;
+		size_t parent_idx = PARENT(block_idx);
+		struct buddy_block* parent = &blocks[parent_idx];
+
+		list_append(&allocator->free_lists[parent->order], &parent->link);
+		parent->state = BLOCK_FREE;
+		parent->order = block->order + 1;
+
+		uintptr_t parent_addr = INDEX_TO_BLOCK(parent_idx, allocator->base, parent->order);
+		log_debug("parent addr: %lx, parent idx: %zu, parent order: %u (size=%zu)", parent_addr, parent_idx,
+			  parent->order, 1UL << (size_t)parent->order);
+		combine_blocks(allocator, parent_addr, parent->order);
+		// buddy_free(allocator, parent_addr, 1 << parent->order);
+	} else {
+		list_append(&allocator->free_lists[block->order], &block->link);
+	}
+}
+
+static void buddy_free(struct buddy_allocator* allocator, uintptr_t addr, size_t size)
+{
+	if (addr < KERNEL_HEAP_BASE || addr > KERNEL_HEAP_LIMIT) {
+		log_warn("Invalid address specified: %lx is outside of heap range", addr);
+		return;
+	}
+
+	uint8_t order = get_order(allocator, addr);
+	if (order == UINT8_MAX) {
+		log_error("Unable to determine order for address: %lx", addr);
+		return;
+	}
+	combine_blocks(allocator, addr, order);
+
+	size_t block_size = 1UL << order;
+	size_t pages = block_size / PAGE_SIZE;
+
+	log_debug("Start of region at %lx", addr);
+	for (size_t i = 0; i < pages; i++) {
+		uintptr_t vaddr = addr + (i * PAGE_SIZE);
+		vmm_unmap((void*)vaddr, true);
+	}
+}
+
+void vfree_pages(void* addr, size_t pages)
+{
+	size_t size = pages * PAGE_SIZE;
+	log_debug("Deallocating addr: %p, with size of %zu pages", addr, size);
+	// TODO: figure out which allocator to use
+	buddy_free(&alr, (uintptr_t)addr, size);
+}
+
+void vfree(void* addr)
+{
+	// This is a little slow, but thats what happens when you just vfree without telling me how many pages
+	size_t size = 1 << get_order(&alr, (uintptr_t)addr);
+	// TODO: figure out which allocator to use
+	buddy_free(&alr, (uintptr_t)addr, size);
 }
 
 /**
