@@ -87,17 +87,6 @@ static uintptr_t link_region(uintptr_t start, uintptr_t end, uintptr_t* head, ui
 }
 
 /**
- * @brief Clamps a zone limit to the last valid page-aligned address.
- *
- * @param limit   The upper limit of a memory zone.
- * @return The last usable page-aligned address below the limit.
- */
-static inline uintptr_t clamp_limit(uintptr_t limit)
-{
-	return align_up(limit) - PAGE_SIZE;
-}
-
-/**
  * @brief Links a memory map entry into the appropriate physical memory zone stack.
  *
  * Splits the entry across ZONE_DMA, ZONE_DMA32, and ZONE_NORMAL as needed.
@@ -116,9 +105,10 @@ static void link_entry(struct limine_memmap_entry* entry, uint64_t hhdm_offset)
 	uintptr_t start = align_up(entry->base); // Align the start address.
 	uintptr_t end = align_down(entry->base + entry->length);
 	uintptr_t zone_end = end;
+	log_debug("Aligned entry start: %lx, aligned entry end: %lx", start, end);
 
 	if (start < ZONE_DMA_LIMIT && end > ZONE_DMA_BASE) {
-		if (end > ZONE_DMA_LIMIT) zone_end = clamp_limit(ZONE_DMA_LIMIT);
+		if (end > ZONE_DMA_LIMIT) zone_end = align_up(ZONE_DMA_LIMIT);
 		size_t pages = (zone_end - start) / PAGE_SIZE;
 
 		log_debug("Filling in ZONE_DMA, start: %lx, zone_end: %lx, pages: %zx", start, zone_end, pages);
@@ -127,12 +117,13 @@ static void link_entry(struct limine_memmap_entry* entry, uint64_t hhdm_offset)
 		pmm.total_pages_dma += pages;
 		pmm.free_pages_dma += pages;
 
+		// If we didn't clamp then we are done
 		if (zone_end == end) return;
-		start = zone_end + PAGE_SIZE;
+		start = zone_end;
 		zone_end = end;
 	}
 	if (start < ZONE_DMA32_LIMIT && end > ZONE_DMA32_BASE) {
-		if (end > ZONE_DMA32_LIMIT) zone_end = clamp_limit(ZONE_DMA32_LIMIT);
+		if (end > ZONE_DMA32_LIMIT) zone_end = align_up(ZONE_DMA32_LIMIT);
 		size_t pages = (zone_end - start) / PAGE_SIZE;
 
 		log_debug("Filling in ZONE_DMA32, start: %lx, zone_end: %lx, pages: %zx", start, zone_end, pages);
@@ -142,11 +133,11 @@ static void link_entry(struct limine_memmap_entry* entry, uint64_t hhdm_offset)
 		pmm.free_pages_dma32 += pages;
 
 		if (zone_end == end) return;
-		start = zone_end + PAGE_SIZE;
+		start = zone_end;
 		zone_end = end;
 	}
 	if (start < ZONE_NORMAL_LIMIT && end > ZONE_NORMAL_BASE) {
-		if (end > ZONE_NORMAL_LIMIT) zone_end = clamp_limit(ZONE_DMA_LIMIT);
+		if (end > ZONE_NORMAL_LIMIT) zone_end = align_up(ZONE_NORMAL_LIMIT);
 		size_t pages = (zone_end - start) / PAGE_SIZE;
 
 		log_debug("Filling in ZONE_NORMAL, start: %lx, zone_end: %lx, pages: %zx", start, zone_end, pages);
@@ -156,8 +147,6 @@ static void link_entry(struct limine_memmap_entry* entry, uint64_t hhdm_offset)
 		pmm.free_pages_norm += pages;
 
 		if (zone_end == end) return;
-		start = zone_end + PAGE_SIZE;
-		zone_end = end;
 	}
 }
 
