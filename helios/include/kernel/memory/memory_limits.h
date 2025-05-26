@@ -26,4 +26,4 @@ _Static_assert(IS_POWER_OF_TWO(PAGE_SIZE) == true, "PAGE_SIZE must be power of 2
 // Virtual memory
 #define ALLOC_KERNEL (1 << 3)
 #define ALLOC_USER   (1 << 4)
-#define ALLOC_KDMA32 ALLOC_KERNEL | ZONE_DMA32
+#define ALLOC_KDMA32 (ALLOC_KERNEL | ZONE_DMA32)

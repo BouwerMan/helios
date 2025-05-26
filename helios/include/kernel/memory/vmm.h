@@ -35,8 +35,8 @@
 #define PAGE_NO_EXECUTE	   (1ULL << 63) // Requires EFER.NXE to be set
 
 // TODO: Dynamic MAX_ORDER
-#define MAX_ORDER   29
-#define MIN_ORDER   12 // 4 KiB blocks (2^12)
+#define MAX_ORDER   29UL
+#define MIN_ORDER   12UL // 4 KiB blocks (2^12)
 #define BUDDY_NODES ((1 << (MAX_ORDER - MIN_ORDER + 1)) - 1)
 
 enum BLOCK_STATE {
@@ -49,7 +49,8 @@ enum BLOCK_STATE {
 struct buddy_allocator {
 	struct list free_lists[MAX_ORDER + 1]; // One for each order
 	uintptr_t base;			       // Base virtual address this allocator manages
-	size_t size;			       // Total size in bytes
+	uintptr_t limit;
+	size_t size; // Total size in bytes
 	spinlock_t lock;
 };
 
