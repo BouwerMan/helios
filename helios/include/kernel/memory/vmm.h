@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include <kernel/memory/memory_limits.h>
+#include <kernel/spinlock.h>
 #include <limine.h>
 
 // #define PHYS_TO_HHDM(x)   ((void *)((uintptr_t)(x) + hhdm_offset))
@@ -49,6 +50,7 @@ struct buddy_allocator {
 	struct list free_lists[MAX_ORDER + 1]; // One for each order
 	uintptr_t base;			       // Base virtual address this allocator manages
 	size_t size;			       // Total size in bytes
+	spinlock_t lock;
 };
 
 struct buddy_block {

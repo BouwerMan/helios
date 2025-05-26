@@ -155,7 +155,7 @@ void kernel_main(void)
 	uintptr_t* ptr = valloc(1, ALLOC_KERNEL);
 	*ptr = 1041531;
 	log_debug("Got 13 pages from valloc located at: %p, stored %lu in it", (void*)ptr, *ptr);
-	// vfree(ptr);
+	vfree(ptr);
 
 	uintptr_t* ptr2 = valloc(1, ALLOC_KERNEL);
 	*ptr2 = 684023;
@@ -167,9 +167,9 @@ void kernel_main(void)
 	// while (1)
 	// 	;
 
-	// init_scheduler();
-	// log_info("Initializing dmesg");
-	// dmesg_init();
+	init_scheduler();
+	log_info("Initializing dmesg");
+	dmesg_init();
 
 	log_info("Initializing Timer");
 	timer_init();

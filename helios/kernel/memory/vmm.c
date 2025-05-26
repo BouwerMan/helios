@@ -26,6 +26,7 @@
  * The slab allocator and any other special purpose allocators should get pages directly.
  */
 
+#include <kernel/spinlock.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -132,25 +133,6 @@ static bool ranges_overlap(uint64_t a_start, uint64_t a_end, uint64_t b_start, u
 #define RIGHT_CHILD(node) (2 * node + 2)
 #define PARENT(node)	  ((node - 1) / 2)
 
-#define BLOCK_TO_INDEX(addr, base, order)  ((addr - base) >> order)
-#define INDEX_TO_BLOCK(index, base, order) (base + (index << order))
-
-static void insert_block(struct buddy_allocator* allocator, uintptr_t addr, uint8_t order)
-{
-	log_debug("Inserting block addr: %lx, order: %u", addr, order);
-	/**
-	 * Compute the block index for the buddy metadata.
-	 * Mark it as free in block_status[].
-	 * Create a struct buddy_block that can be inserted into the appropriate free_lists[order].
-	 */
-	size_t block_index = BLOCK_TO_INDEX(addr, allocator->base, order);
-	log_debug("Block index: %zu", block_index);
-	struct buddy_block* block = &blocks[block_index];
-	list_append(&allocator->free_lists[order], &block->link);
-	block->order = order;
-	block->state = BLOCK_FREE;
-}
-
 static inline uintptr_t index_to_addr(size_t index, uintptr_t base, size_t order)
 {
 	size_t level = MAX_ORDER - order;
@@ -167,25 +149,26 @@ static inline uintptr_t addr_to_index(uintptr_t addr, uintptr_t base, size_t ord
 	return level_start + offset;
 }
 
-/*
- * This maps from the index of a node to the address of memory that node
- * represents. The bucket can be derived from the index using a loop but is
- * required to be provided here since having them means we can avoid the loop
- * and have this function return in constant time.
- */
-static uint8_t* ptr_for_node(size_t index, size_t bucket)
+static void insert_block(struct buddy_allocator* allocator, uintptr_t addr, uint8_t order)
 {
-	return (uint8_t*)KERNEL_HEAP_BASE + ((index - (1 << bucket) + 1) << (MAX_ORDER - bucket));
+	log_debug("Inserting block addr: %lx, order: %u", addr, order);
+	size_t block_index = addr_to_index(addr, allocator->base, order);
+	struct buddy_block* block = &blocks[block_index];
+	list_append(&allocator->free_lists[order], &block->link);
+	block->order = order;
+	block->state = BLOCK_FREE;
 }
 
-/*
- * This maps from an address of memory to the node that represents that
- * address. There are often many nodes that all map to the same address, so
- * the bucket is needed to uniquely identify a node.
- */
-static size_t node_for_ptr(uint8_t* ptr, size_t bucket)
+// TODO: Make allocator agnostic
+static inline size_t get_buddy_idx(size_t index, size_t order)
 {
-	return (((uintptr_t)ptr - KERNEL_HEAP_BASE) >> (MAX_ORDER - bucket)) + (1 << bucket) - 1;
+	int level = MAX_ORDER - order;
+	size_t level_start = (1 << level) - 1;
+	size_t offset_in_level = index - level_start;
+
+	// Flip the lowest bit to get the buddy's offset
+	size_t buddy_offset = offset_in_level ^ 1;
+	return level_start + buddy_offset;
 }
 
 /**
@@ -250,6 +233,9 @@ void vmm_init(struct limine_memmap_response* mmap, struct limine_executable_addr
 
 	alr.base = KERNEL_HEAP_BASE;
 	alr.size = KERNEL_POOL;
+	spinlock_init(&alr.lock);
+
+	spinlock_acquire(&alr.lock);
 
 	while (remaining > 0) {
 		int order = MAX_ORDER;
@@ -265,37 +251,19 @@ void vmm_init(struct limine_memmap_response* mmap, struct limine_executable_addr
 		addr += (1UL << order);
 		remaining -= (1UL << order);
 	}
-	log_debug("i=0,bucket=29:%lx", (uintptr_t)ptr_for_node(0, 29));
-	log_debug("i=0,bucket=29:%lx", (uintptr_t)index_to_addr(0, alr.base, MAX_ORDER));
-	log_debug("i=1,bucket=28:%lx", (uintptr_t)index_to_addr(2, alr.base, MAX_ORDER - 1));
-	log_debug("Addr: %lx, index: %lx", KERNEL_HEAP_BASE, addr_to_index(KERNEL_HEAP_BASE, alr.base, MAX_ORDER));
+	spinlock_release(&alr.lock);
 }
-
-/*
- * Allocations are done in powers of two starting from MIN_ALLOC and ending at
- * MAX_ALLOC inclusive. Each allocation size has a bucket that stores the free
- * list for that allocation size.
- *
- * Given a bucket index, the size of the allocations in that bucket can be
- * found with "(size_t)1 << (MAX_ALLOC_LOG2 - bucket)".
- */
-#define BUCKET_COUNT (MAX_ALLOC_LOG2 - MIN_ALLOC_LOG2 + 1)
-
-// static inline struct buddy_block* address_to_block(uintptr_t addr, uintptr_t base, uint8_t order){
-// 	size_t block_index = addr - blocks;
-// 	return blocks[]
-// }
 
 static struct buddy_block* split_until_order(struct buddy_allocator* allocator, uintptr_t addr, int current_order,
 					     int target_order)
 {
-	// size_t block_index = BLOCK_TO_INDEX(addr, allocator->base, current_order);
 	size_t block_index = addr_to_index(addr, allocator->base, current_order);
 	struct buddy_block* block = &blocks[block_index];
 	if (current_order == target_order) {
 		block->state = BLOCK_ALLOCATED;
 		return block;
 	}
+
 	// Now we split into 2 blocks
 	struct buddy_block* parent = block;
 	struct buddy_block* left = &blocks[LEFT_CHILD(block_index)];
@@ -310,22 +278,15 @@ static struct buddy_block* split_until_order(struct buddy_allocator* allocator, 
 	left->state = BLOCK_SPLIT;
 
 	// Add right to free list
-	list_insert(&allocator->free_lists[right->order], &right->link);
-
-	size_t left_block_index = left - blocks;
-	size_t right_block_index = right - blocks;
-	// uintptr_t left_addr = INDEX_TO_BLOCK(left_block_index, allocator->base, left->order);
-	// uintptr_t right_addr = INDEX_TO_BLOCK((right - blocks), allocator->base, right->order);
+	list_append(&allocator->free_lists[right->order], &right->link);
 
 	size_t size = 1 << (current_order - 1);
 	uintptr_t left_addr = addr;
 	uintptr_t right_addr = addr + size;
-	uintptr_t left_addr2 = (uintptr_t)ptr_for_node(left_block_index, left->order);
-	uintptr_t right_addr2 = (uintptr_t)ptr_for_node(right_block_index, right->order);
-	log_debug("block_index: %zu(%zu), left child: %zu(%zu) (%lx)(%lx), right child: %zu(%zu) (%lx)(%lx)",
-		  block_index, node_for_ptr((uint8_t*)addr, block->order), LEFT_CHILD(block_index),
-		  node_for_ptr((uint8_t*)left_addr, left->order), left_addr, left_addr2, RIGHT_CHILD(block_index),
-		  node_for_ptr((uint8_t*)right_addr, right->order), right_addr, right_addr2);
+	log_debug("block_index: %zu, left child: %zu (%lx), right child: %zu (%lx)", block_index,
+		  LEFT_CHILD(block_index), left_addr, RIGHT_CHILD(block_index), right_addr);
+
+	// We always recurse with the left child
 	return split_until_order(allocator, left_addr, left->order, target_order);
 }
 
@@ -340,28 +301,37 @@ static uintptr_t buddy_alloc(struct buddy_allocator* allocator, size_t size)
 		log_debug("Checking order: %zu", i);
 		struct list* order_list = &allocator->free_lists[i];
 		if (list_empty(order_list)) continue;
-		// Getting next entry in list
-		struct list* next_block = list_next(order_list);
-		struct buddy_block* block = list_entry(next_block, struct buddy_block, link);
+		log_debug("List not empty for order: %zu", i);
 
-		// TODO: Better handling (maybe remove it from the list or smthn)
+		// Getting next entry in list
+		struct buddy_block* block;
+		list_for_each_entry(block, order_list, link)
+		{
+			if (block->state == BLOCK_FREE) {
+				break;
+			} else {
+				// Since everything in this list should be free, going to go ahead and remove it
+				log_debug(
+					"Found non free block in free list with order: %zu, blockmeta_order: %u, blockmeta_state: %u",
+					i, block->order, block->state);
+				list_remove(&block->link);
+			}
+		}
+
+		// Just 1 final sanity check
 		if (block->state != BLOCK_FREE) continue;
-		log_debug("Found free block with order: %zu, blockmeta_order: %u, blockmeta_state: %u", i, block->order,
-			  block->state);
 
 		// Remove it from the list and mark it as split if needed
 		list_remove(&block->link);
 		if (block->order > target_order) block->state = BLOCK_SPLIT;
 
 		size_t block_index = block - blocks;
-		// uintptr_t addr = INDEX_TO_BLOCK(block_index, allocator->base, block->order);
 		uintptr_t addr = index_to_addr(block_index, allocator->base, block->order);
-		log_debug("block_index: %zu, addr: %lx, other addr: %lx", block_index, addr,
-			  (uintptr_t)ptr_for_node(block_index, block->order));
+		log_debug("block_index: %zu, addr: %lx", block_index, addr);
 
+		// Now we split recursively until we get the right size
 		struct buddy_block* split_block = split_until_order(allocator, addr, block->order, target_order);
 		size_t split_block_index = split_block - blocks;
-		// uintptr_t split_addr = INDEX_TO_BLOCK(split_block_index, allocator->base, split_block->order);
 		uintptr_t split_addr = index_to_addr(split_block_index, allocator->base, split_block->order);
 		log_debug("Found block at block_index: %zu, addr: %lx, with order: %u", split_block_index, split_addr,
 			  split_block->order);
@@ -374,11 +344,15 @@ static uintptr_t buddy_alloc(struct buddy_allocator* allocator, size_t size)
 void* valloc(size_t pages, size_t flags)
 {
 	size_t rounded_pages = round_to_power_of_2(pages);
-	log_debug("rounded %zu to power of 2: %zu", pages, rounded_pages);
+
 	// TODO: FIGURE OUT MEMORY ZONES
 	if (flags & ALLOC_KERNEL || flags & ALLOC_KDMA32) {
+		spinlock_acquire(&alr.lock);
 		uintptr_t vaddr_start = buddy_alloc(&alr, rounded_pages * PAGE_SIZE);
-		if (vaddr_start == 0) return NULL;
+		if (vaddr_start == 0) {
+			spinlock_release(&alr.lock);
+			return NULL;
+		}
 		log_debug("Start of region at %lx", vaddr_start);
 		for (size_t i = 0; i < rounded_pages; i++) {
 			uintptr_t vaddr = vaddr_start + (i * PAGE_SIZE);
@@ -388,6 +362,7 @@ void* valloc(size_t pages, size_t flags)
 
 			vmm_map((void*)vaddr, (void*)paddr, PAGE_PRESENT | PAGE_WRITE);
 		}
+		spinlock_release(&alr.lock);
 		return (void*)vaddr_start;
 	}
 	return NULL;
@@ -396,10 +371,8 @@ void* valloc(size_t pages, size_t flags)
 static uint8_t get_order(struct buddy_allocator* allocator, uintptr_t addr)
 {
 	for (int order = MIN_ORDER; order <= MAX_ORDER; order++) {
-		// size_t index = BLOCK_TO_INDEX(addr, allocator->base, order);
 		size_t index = addr_to_index(addr, allocator->base, order);
 
-		// if (INDEX_TO_BLOCK(index, allocator->base, order) == addr && blocks[index].state == BLOCK_ALLOCATED) {
 		if (index_to_addr(index, allocator->base, order) == addr && blocks[index].state == BLOCK_ALLOCATED) {
 			return order;
 		}
@@ -411,46 +384,43 @@ static void combine_blocks(struct buddy_allocator* allocator, uintptr_t addr, in
 {
 	// size_t rounded_size = round_to_power_of_2(size);
 	// int order = log2(rounded_size);
-	log_debug("addr %lx, order %d", addr, order);
-	if (order >= MAX_ORDER) return;
+	// log_debug("addr %lx, order %d", addr, order);
 
 	// size_t block_idx = BLOCK_TO_INDEX(addr, allocator->base, order);
+
+	// Get the block and mark it as free
 	size_t block_idx = addr_to_index(addr, allocator->base, order);
 	log_debug("Found block at addr %lx with idx: %zu, current order %u", addr, block_idx, order);
 	struct buddy_block* block = &blocks[block_idx];
 	block->state = BLOCK_FREE;
+	list_append(&allocator->free_lists[block->order], &block->link);
 
-	int level = order - MIN_ORDER;
-	size_t level_start = (1 << level) - 1;
-	size_t offset_in_level = block_idx - level_start;
+	// If we are already at the highest order we have freed everything
+	if (order >= MAX_ORDER) return;
 
-	// Flip the lowest bit to get the buddy's offset
-	size_t buddy_offset = offset_in_level ^ 1;
-	size_t buddy_idx = level_start + buddy_offset;
+	size_t buddy_idx = get_buddy_idx(block_idx, block->order);
 
 	struct buddy_block* buddy = &blocks[buddy_idx];
 	log_debug("Found buddy with idx: %zu", buddy_idx);
+	bool can_coalesce = buddy->state == BLOCK_FREE && buddy->order == block->order;
 
-	if (buddy->state == BLOCK_FREE && buddy->order == block->order) {
+	if (can_coalesce) {
 		log_debug("Coalescing block idx %zu with buddy idx %zu", block_idx, buddy_idx);
+		// Remove from free lists and mark as invalid
+		list_remove(&block->link);
 		list_remove(&buddy->link);
 		block->state = BLOCK_INVALID;
 		buddy->state = BLOCK_INVALID;
 		size_t parent_idx = PARENT(block_idx);
 		struct buddy_block* parent = &blocks[parent_idx];
 
-		list_append(&allocator->free_lists[parent->order], &parent->link);
-		parent->state = BLOCK_FREE;
+		// Only need to setup the order, the first stage of this function will handle the rest during recursion
 		parent->order = block->order + 1;
 
-		// uintptr_t parent_addr = INDEX_TO_BLOCK(parent_idx, allocator->base, parent->order);
 		uintptr_t parent_addr = index_to_addr(parent_idx, allocator->base, parent->order);
 		log_debug("parent addr: %lx, parent idx: %zu, parent order: %u (size=%zu)", parent_addr, parent_idx,
 			  parent->order, 1UL << (size_t)parent->order);
 		combine_blocks(allocator, parent_addr, parent->order);
-		// buddy_free(allocator, parent_addr, 1 << parent->order);
-	} else {
-		list_append(&allocator->free_lists[block->order], &block->link);
 	}
 }
 
@@ -461,21 +431,25 @@ static void buddy_free(struct buddy_allocator* allocator, uintptr_t addr, size_t
 		return;
 	}
 
+	spinlock_acquire(&alr.lock);
 	uint8_t order = get_order(allocator, addr);
 	if (order == UINT8_MAX) {
 		log_error("Unable to determine order for address: %lx", addr);
+		spinlock_release(&alr.lock);
 		return;
 	}
+	// combine_blocks marks things as free if needed (including addr block)
 	combine_blocks(allocator, addr, order);
 
 	size_t block_size = 1UL << order;
 	size_t pages = block_size / PAGE_SIZE;
 
-	log_debug("Start of region at %lx", addr);
+	log_debug("Start of region to unmap and free at %lx", addr);
 	for (size_t i = 0; i < pages; i++) {
 		uintptr_t vaddr = addr + (i * PAGE_SIZE);
 		vmm_unmap((void*)vaddr, true);
 	}
+	spinlock_release(&alr.lock);
 }
 
 void vfree_pages(void* addr, size_t pages)
