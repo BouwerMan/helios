@@ -182,8 +182,8 @@ void slab_free(struct slab_cache* cache, void* object)
 
 	// I am currently doing address masking, this works because I am only using 1 page slabs.
 	// If I use larger page sizes then I should set mask to ~(slab_bytes - 1) where
-	// slab_bytes = cache->slab_size_pages * PAGE_SIZE
-	uint64_t mask = ~(PAGE_SIZE - 1);
+	size_t slab_bytes = cache->slab_size_pages * PAGE_SIZE;
+	uint64_t mask = ~(slab_bytes - 1);
 	struct slab* slab = (struct slab*)((uintptr_t)object & mask);
 	if (slab->parent != cache) {
 		log_error("Somehow got the wrong slab (parent doesn't match the cache), good luck debugging this one");

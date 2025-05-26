@@ -7,19 +7,11 @@
 #include <kernel/spinlock.h>
 #include <limine.h>
 
-// #define PHYS_TO_HHDM(x)   ((void *)((uintptr_t)(x) + hhdm_offset))
-// #define HHDM_TO_PHYS(x)   ((uintptr_t)(x) - hhdm_offset)
-//
-// #define PHYS_TO_KERNEL(x) ((void *)((uintptr_t)(x) + KERNEL_VIRT_OFFSET))  // for higher-half kernel
-// #define KERNEL_TO_PHYS(x) ((uintptr_t)(x) - KERNEL_VIRT_OFFSET)
-
 #define LOW_IDENTITY	   0x4000000 // 64 MiB
 #define PAGE_TABLE_ENTRIES 512
 #define KERNEL_HEAP_BASE   0xFFFFFFFFC0000000ULL
 #define KERNEL_HEAP_LIMIT  0xFFFFFFFFE0000000ULL
 #define KERNEL_POOL	   (KERNEL_HEAP_LIMIT - KERNEL_HEAP_BASE)
-// #define PHYS_TO_VIRT(p)	   ((void*)((uintptr_t)(p) + HHDM_OFFSET))
-// #define VIRT_TO_PHYS(v)	   ((uintptr_t)(v) - HHDM_OFFSET)
 
 #define FLAGS_MASK	   0xFFFULL
 #define PAGE_FRAME_MASK	   (~0xFFFULL)
@@ -34,7 +26,8 @@
 #define PAGE_GLOBAL	   (1ULL << 8)	// Global page (ignores CR3 reload)
 #define PAGE_NO_EXECUTE	   (1ULL << 63) // Requires EFER.NXE to be set
 
-// TODO: Dynamic MAX_ORDER
+// TODO: Dynamic MAX_ORDER and dynamic heap ig
+// TODO: Shift MIN_ORDER down to 0
 #define MAX_ORDER   29UL
 #define MIN_ORDER   12UL // 4 KiB blocks (2^12)
 #define BUDDY_NODES ((1 << (MAX_ORDER - MIN_ORDER + 1)) - 1)
@@ -51,6 +44,8 @@ struct buddy_allocator {
 	uintptr_t base;			       // Base virtual address this allocator manages
 	uintptr_t limit;
 	size_t size; // Total size in bytes
+	size_t min_order;
+	size_t max_order;
 	spinlock_t lock;
 };
 

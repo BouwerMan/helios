@@ -26,6 +26,7 @@ enum LOG_MODE {
 #undef log_error
 #undef log_debug_long
 #endif
+// TODO: Make screen accept ANSI color codes
 
 // Define or redefine log_debug
 #if !defined(log_debug) || defined(FORCE_LOG_REDEF)
@@ -45,12 +46,12 @@ enum LOG_MODE {
 // Define or redefine log_info
 #if !defined(log_info) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_INFO
-#define log_info(fmt, ...)                                                                                            \
-	do {                                                                                                          \
-		char __log_buf[LOG_BUFFER_SIZE];                                                                      \
-		snprintf(__log_buf, sizeof(__log_buf), "[INFO]  %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, __func__, \
-			 ##__VA_ARGS__);                                                                              \
-		log_output(__log_buf);                                                                                \
+#define log_info(fmt, ...)                                                                                         \
+	do {                                                                                                       \
+		char __log_buf[LOG_BUFFER_SIZE];                                                                   \
+		snprintf(__log_buf, sizeof(__log_buf), "\x1b[1;36m[INFO]\x1b[0m  %s:%d:%s(): " fmt "\n", __FILE__, \
+			 __LINE__, __func__, ##__VA_ARGS__);                                                       \
+		log_output(__log_buf);                                                                             \
 	} while (0)
 #else
 #define log_info(fmt, ...) ((void)0)
@@ -60,12 +61,12 @@ enum LOG_MODE {
 // Define or redefine log_warn
 #if !defined(log_warn) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_WARN
-#define log_warn(fmt, ...)                                                                                            \
-	do {                                                                                                          \
-		char __log_buf[LOG_BUFFER_SIZE];                                                                      \
-		snprintf(__log_buf, sizeof(__log_buf), "[WARN]  %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, __func__, \
-			 ##__VA_ARGS__);                                                                              \
-		log_output(__log_buf);                                                                                \
+#define log_warn(fmt, ...)                                                                                         \
+	do {                                                                                                       \
+		char __log_buf[LOG_BUFFER_SIZE];                                                                   \
+		snprintf(__log_buf, sizeof(__log_buf), "\x1b[1;33m[WARN]\x1b[0m  %s:%d:%s(): " fmt "\n", __FILE__, \
+			 __LINE__, __func__, ##__VA_ARGS__);                                                       \
+		log_output(__log_buf);                                                                             \
 	} while (0)
 #else
 #define log_warn(fmt, ...) ((void)0)
@@ -75,12 +76,12 @@ enum LOG_MODE {
 // Define or redefine log_error
 #if !defined(log_error) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_ERROR
-#define log_error(fmt, ...)                                                                                           \
-	do {                                                                                                          \
-		char __log_buf[LOG_BUFFER_SIZE];                                                                      \
-		snprintf(__log_buf, sizeof(__log_buf), "[ERROR] %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, __func__, \
-			 ##__VA_ARGS__);                                                                              \
-		log_output(__log_buf);                                                                                \
+#define log_error(fmt, ...)                                                                                          \
+	do {                                                                                                         \
+		char __log_buf[LOG_BUFFER_SIZE];                                                                     \
+		snprintf(__log_buf, sizeof(__log_buf), "\x1b[1;31m[ERROR]\x1b[1;0m %s:%d:%s(): " fmt "\n", __FILE__, \
+			 __LINE__, __func__, ##__VA_ARGS__);                                                         \
+		log_output(__log_buf);                                                                               \
 	} while (0)
 #else
 #define log_error(fmt, ...) ((void)0)

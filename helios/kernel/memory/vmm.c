@@ -51,11 +51,10 @@
 
 // stores size of exe mappings (usually just kernel)
 static size_t exe_size = 0;
-uint64_t* pml4 = NULL;
-
 static uint64_t g_hhdm_offset;
-#define PHYS_TO_VIRT(p) ((void*)((uintptr_t)(p) + g_hhdm_offset))
-#define VIRT_TO_PHYS(v) ((uintptr_t)(v) - g_hhdm_offset)
+
+#define PHYS_TO_HHDM(p) ((void*)((uintptr_t)(p) + g_hhdm_offset))
+#define HHDM_TO_PHYS(v) ((uintptr_t)(v) - g_hhdm_offset)
 
 // Big boy array is a binary tree in a breadth-first array layout
 static struct buddy_block blocks[BUDDY_NODES] = { 0 };
@@ -129,36 +128,66 @@ static bool ranges_overlap(uint64_t a_start, uint64_t a_end, uint64_t b_start, u
 #define RIGHT_CHILD(node) (2 * node + 2)
 #define PARENT(node)	  ((node - 1) / 2)
 
-static inline uintptr_t index_to_addr(size_t index, uintptr_t base, size_t order)
+/**
+ * @brief Converts a block index and order into a physical address.
+ *
+ * @param allocator Pointer to the buddy allocator structure.
+ * @param index The index of the block in the buddy system.
+ * @param order The order of the block.
+ * @return The physical address corresponding to the block index and order.
+ */
+static inline uintptr_t index_to_addr(struct buddy_allocator* allocator, size_t index, size_t order)
 {
-	size_t level = MAX_ORDER - order;
+	size_t level = allocator->max_order - order;
 	size_t level_start = (1UL << level) - 1;
 	size_t offset = index - level_start;
-	return base + (offset << order);
+	return allocator->base + (offset << order);
 }
 
-static inline uintptr_t addr_to_index(uintptr_t addr, uintptr_t base, size_t order)
+/**
+ * @brief Converts a physical address and order into a block index.
+ *
+ * @param allocator Pointer to the buddy allocator structure.
+ * @param addr The physical address of the block.
+ * @param order The order of the block.
+ * @return The index of the block in the buddy system.
+ */
+static inline uintptr_t addr_to_index(struct buddy_allocator* allocator, uintptr_t addr, size_t order)
 {
-	size_t level = MAX_ORDER - order;
-	size_t offset = (addr - base) >> order;
+	size_t level = allocator->max_order - order;
+	size_t offset = (addr - allocator->base) >> order;
 	size_t level_start = (1UL << level) - 1;
 	return level_start + offset;
 }
 
+/**
+ * @brief Inserts a block into the free list of the buddy allocator.
+ *
+ * @param allocator Pointer to the buddy allocator structure.
+ * @param addr The physical address of the block to insert.
+ * @param order The order of the block to insert.
+ */
 static void insert_block(struct buddy_allocator* allocator, uintptr_t addr, size_t order)
 {
 	log_debug("Inserting block addr: %lx, order: %zu", addr, order);
-	size_t block_index = addr_to_index(addr, allocator->base, order);
+	size_t block_index = addr_to_index(allocator, addr, order);
 	struct buddy_block* block = &blocks[block_index];
 	list_append(&allocator->free_lists[order], &block->link);
 	block->order = (uint8_t)order;
 	block->state = BLOCK_FREE;
 }
 
-// TODO: Make allocator agnostic
-static inline size_t get_buddy_idx(size_t index, size_t order)
+/**
+ * @brief Calculates the index of the buddy block for a given block.
+ *
+ * @param allocator Pointer to the buddy allocator structure.
+ * @param index The index of the block.
+ * @param order The order of the block.
+ * @return The index of the buddy block.
+ */
+static inline size_t get_buddy_idx(struct buddy_allocator* allocator, size_t index, size_t order)
 {
-	size_t level = MAX_ORDER - order;
+	size_t level = allocator->max_order - order;
 	size_t level_start = (1UL << level) - 1;
 	size_t offset_in_level = index - level_start;
 
@@ -181,14 +210,16 @@ void vmm_init(struct limine_memmap_response* mmap, struct limine_executable_addr
 {
 	g_hhdm_offset = hhdm_offset;
 	log_debug("hhdm_offset: %lx", g_hhdm_offset);
+
 	uint64_t* pml4_phys = pmm_alloc_page();
-	pml4 = PHYS_TO_VIRT(pml4_phys);
-	log_debug("pml4_phys: %lx, pml4_virt: %lx", (uint64_t)pml4_phys, (uint64_t)pml4);
-	if (pml4 == NULL) {
+	if (!pml4_phys) {
 		log_error("VMM Initialization failed. PMM didn't return a valid page");
 		panic("VMM Initialization failed.");
 	}
-	log_debug("pml4 address: %p", (void*)pml4);
+
+	kernel.pml4 = PHYS_TO_HHDM(pml4_phys);
+	uint64_t* pml4 = kernel.pml4;
+	log_debug("pml4_phys: %lx, pml4_virt: %lx", (uint64_t)pml4_phys, (uint64_t)pml4);
 	memset(pml4, 0, PAGE_SIZE); // Clear page tables
 
 	// Identity map first 64 MiB, skip first 1 MiB
@@ -207,20 +238,16 @@ void vmm_init(struct limine_memmap_response* mmap, struct limine_executable_addr
 	// Load the PML4 physical address into CR3 to activate the page tables
 	vmm_load_cr3((uintptr_t)pml4_phys);
 
-	// Time to setup buddy
-
-	// Setting up heap
+	// Time to setup buddy allocator
 	log_debug("Found exe size to be: %lx", exe_size);
 	uint64_t kernel_start = exe->virtual_base;
 	uint64_t kernel_end = kernel_start + exe_size;
 	log_info("Kernel range: [%lx - %lx)", kernel_start, kernel_end);
 	log_info("Heap range:   [%llx - %llx)", KERNEL_HEAP_BASE, KERNEL_HEAP_LIMIT);
-	log_info("heap+order: %llx", KERNEL_HEAP_BASE + (1 << MAX_ORDER));
 	if (ranges_overlap(kernel_start, kernel_end, KERNEL_HEAP_BASE, KERNEL_HEAP_LIMIT)) {
 		panic("KERNEL AND KERNEL HEAP OVERLAP");
 	}
 
-	// TODO: Get rid of lists below MIN_ORDER
 	for (size_t i = MIN_ORDER; i <= MAX_ORDER; i++) {
 		list_init(&alr.free_lists[i]);
 	}
@@ -230,12 +257,16 @@ void vmm_init(struct limine_memmap_response* mmap, struct limine_executable_addr
 	alr.base = KERNEL_HEAP_BASE;
 	alr.limit = KERNEL_HEAP_LIMIT;
 	alr.size = KERNEL_POOL;
+
+	alr.max_order = MAX_ORDER;
+	alr.min_order = MIN_ORDER;
+
 	spinlock_init(&alr.lock);
 
 	spinlock_acquire(&alr.lock);
 
 	while (remaining > 0) {
-		size_t order = MAX_ORDER;
+		size_t order = alr.max_order;
 
 		// Find largest block that fits and is aligned
 		while ((1UL << order) > remaining || (addr & ((1UL << order) - 1)) != 0) {
@@ -251,10 +282,19 @@ void vmm_init(struct limine_memmap_response* mmap, struct limine_executable_addr
 	spinlock_release(&alr.lock);
 }
 
+/**
+ * @brief Recursively splits a block in the buddy allocator until the desired order is reached.
+ *
+ * @param allocator Pointer to the buddy allocator structure.
+ * @param addr The physical address of the block to split.
+ * @param current_order The current order of the block.
+ * @param target_order The desired order to split down to.
+ * @return Pointer to the buddy block at the target order.
+ */
 static struct buddy_block* split_until_order(struct buddy_allocator* allocator, uintptr_t addr, size_t current_order,
 					     size_t target_order)
 {
-	size_t block_index = addr_to_index(addr, allocator->base, current_order);
+	size_t block_index = addr_to_index(allocator, addr, current_order);
 	struct buddy_block* block = &blocks[block_index];
 
 	// Base case: if the current order matches the target, allocate the block
@@ -288,7 +328,13 @@ static struct buddy_block* split_until_order(struct buddy_allocator* allocator, 
 	return split_until_order(allocator, left_addr, left->order, target_order);
 }
 
-// Size is in bytes
+/**
+ * @brief Allocates memory from the buddy allocator.
+ *
+ * @param allocator Pointer to the buddy allocator structure.
+ * @param size The size of the memory to allocate, in bytes.
+ * @return The physical address of the allocated memory, or 0 if allocation fails.
+ */
 static uintptr_t buddy_alloc(struct buddy_allocator* allocator, size_t size)
 {
 	size_t rounded_size = round_to_power_of_2(size);
@@ -299,7 +345,7 @@ static uintptr_t buddy_alloc(struct buddy_allocator* allocator, size_t size)
 		struct list* order_list = &allocator->free_lists[i];
 		if (list_empty(order_list)) continue;
 
-		// Getting next entry in list
+		// Search for a free block in the current order list
 		struct buddy_block* block = NULL;
 		list_for_each_entry(block, order_list, link)
 		{
@@ -322,61 +368,99 @@ static uintptr_t buddy_alloc(struct buddy_allocator* allocator, size_t size)
 		if (block->order > target_order) block->state = BLOCK_SPLIT;
 
 		size_t block_index = (size_t)(block - blocks);
-		uintptr_t addr = index_to_addr(block_index, allocator->base, block->order);
+		uintptr_t addr = index_to_addr(allocator, block_index, block->order);
 
-		// Now we split recursively until we get the right size
+		// Now we split recursively until we reach the desired order
 		struct buddy_block* split_block = split_until_order(allocator, addr, block->order, target_order);
 		size_t split_block_index = (size_t)(split_block - blocks);
-		uintptr_t split_addr = index_to_addr(split_block_index, allocator->base, split_block->order);
+		uintptr_t split_addr = index_to_addr(allocator, split_block_index, split_block->order);
 
 		log_debug("Allocated block: index=%zu, addr=%lx, order=%u", split_block_index, split_addr,
 			  split_block->order);
 		return split_addr;
 	}
 
+	// Return 0 if no suitable block was found
 	return 0;
 }
 
+/**
+ * Allocates virtual memory for a specified number of pages.
+ *
+ * This function allocates virtual memory aligned to the number of pages,
+ * rounded up to the next power of 2. The returned pointer is page-aligned.
+ *
+ * @param pages The number of pages to allocate.
+ * @param flags Allocation flags specifying the memory zone (e.g., kernel or DMA32).
+ * @return A pointer to the start of the allocated virtual memory region, or NULL if allocation fails.
+ */
 void* valloc(size_t pages, size_t flags)
 {
+	// Round the number of pages to the next power of 2 for alignment
 	size_t rounded_pages = round_to_power_of_2(pages);
 
 	// TODO: FIGURE OUT MEMORY ZONES
 	if (flags & ALLOC_KERNEL || flags & ALLOC_KDMA32) {
 		spinlock_acquire(&alr.lock);
+
+		// Allocate a contiguous virtual memory region
 		uintptr_t vaddr_start = buddy_alloc(&alr, rounded_pages * PAGE_SIZE);
 		if (vaddr_start == 0) {
 			spinlock_release(&alr.lock);
 			return NULL;
 		}
+
 		log_debug("Start of region to map at %lx", vaddr_start);
+
+		// Map each page in the allocated region to a physical page
 		for (size_t i = 0; i < rounded_pages; i++) {
 			uintptr_t vaddr = vaddr_start + (i * PAGE_SIZE);
 			uintptr_t paddr = (uintptr_t)pmm_alloc_page();
 
+			// Map the virtual address to the physical address with appropriate flags
 			vmm_map((void*)vaddr, (void*)paddr, PAGE_PRESENT | PAGE_WRITE);
 		}
 		spinlock_release(&alr.lock);
 		return (void*)vaddr_start;
 	}
+
+	// Return NULL if the allocation flags do not match any supported memory zone
 	return NULL;
 }
 
+/**
+ * @brief Retrieves the order of a block in the buddy allocator.
+ *
+ * @param allocator Pointer to the buddy allocator structure.
+ * @param addr The physical address of the block.
+ * @return The order of the block if found, or UINT8_MAX if the block is not allocated.
+ */
 static uint8_t get_order(struct buddy_allocator* allocator, uintptr_t addr)
 {
 	for (size_t order = MIN_ORDER; order <= MAX_ORDER; order++) {
-		size_t index = addr_to_index(addr, allocator->base, order);
-		if (index_to_addr(index, allocator->base, order) == addr && blocks[index].state == BLOCK_ALLOCATED) {
+		size_t index = addr_to_index(allocator, addr, order);
+		if (index_to_addr(allocator, index, order) == addr && blocks[index].state == BLOCK_ALLOCATED) {
 			return (uint8_t)order;
 		}
 	}
 	return UINT8_MAX;
 }
 
+/**
+ * @brief Combines adjacent free blocks in the buddy allocator to form larger blocks.
+ *
+ * This function attempts to coalesce a block with its buddy if both are free
+ * and of the same order. The process is recursive and continues until no further
+ * coalescing is possible or the maximum order is reached.
+ *
+ * @param allocator Pointer to the buddy allocator structure.
+ * @param addr The physical address of the block to combine.
+ * @param order The order of the block to combine.
+ */
 static void combine_blocks(struct buddy_allocator* allocator, uintptr_t addr, size_t order)
 {
 	// Get the block and mark it as free
-	size_t block_idx = addr_to_index(addr, allocator->base, order);
+	size_t block_idx = addr_to_index(allocator, addr, order);
 	struct buddy_block* block = &blocks[block_idx];
 	block->state = BLOCK_FREE;
 	list_append(&allocator->free_lists[block->order], &block->link);
@@ -385,12 +469,13 @@ static void combine_blocks(struct buddy_allocator* allocator, uintptr_t addr, si
 	// NOTE: This HAS to come after the freeing above
 	if (order >= MAX_ORDER) return;
 
-	size_t buddy_idx = get_buddy_idx(block_idx, block->order);
+	// Get the buddy block
+	size_t buddy_idx = get_buddy_idx(allocator, block_idx, block->order);
 	struct buddy_block* buddy = &blocks[buddy_idx];
 
 	// Check if coalescing is possible
 	if (buddy->state == BLOCK_FREE && buddy->order == block->order) {
-		// Remove from free lists and mark as invalid
+		// Remove both blocks from the free lists and mark them as invalid
 		list_remove(&block->link);
 		list_remove(&buddy->link);
 		block->state = BLOCK_INVALID;
@@ -402,42 +487,67 @@ static void combine_blocks(struct buddy_allocator* allocator, uintptr_t addr, si
 		struct buddy_block* parent = &blocks[parent_idx];
 		parent->order = block->order + 1;
 
-		uintptr_t parent_addr = index_to_addr(parent_idx, allocator->base, parent->order);
+		uintptr_t parent_addr = index_to_addr(allocator, parent_idx, parent->order);
 
 		combine_blocks(allocator, parent_addr, parent->order);
 	}
 }
 
+/**
+ * Frees a block of memory in the buddy allocator.
+ *
+ * This function releases a block of memory back to the buddy allocator.
+ * It validates the address, determines the order of the block, and attempts
+ * to coalesce it with adjacent free blocks. Additionally, it unmaps the
+ * virtual memory region associated with the block.
+ *
+ * @param allocator Pointer to the buddy allocator structure.
+ * @param addr The starting address of the block to free.
+ * @param size The size of the block to free (currently unused).
+ */
 static void buddy_free(struct buddy_allocator* allocator, uintptr_t addr, size_t size)
 {
-	(void)size;
+	(void)size; // The size parameter is currently unused.
 
+	// Validate that the address is within the kernel heap range.
 	if (addr < KERNEL_HEAP_BASE || addr > KERNEL_HEAP_LIMIT) {
 		log_warn("Invalid address specified: %lx is outside of heap range", addr);
 		return;
 	}
 
 	spinlock_acquire(&alr.lock);
+
+	// Determine the order of the block to be freed.
 	uint8_t order = get_order(allocator, addr);
 	if (order == UINT8_MAX) {
 		log_error("Unable to determine order for address: %lx", addr);
 		spinlock_release(&alr.lock);
 		return;
 	}
-	// combine_blocks marks things as free if needed (including addr block)
+	// Combine the block with adjacent free blocks if possible.
 	combine_blocks(allocator, addr, order);
 
+	// Calculate the size of the block and the number of pages it spans.
 	size_t block_size = 1UL << order;
 	size_t pages = block_size / PAGE_SIZE;
 
 	log_debug("Start of region to unmap and free at %lx", addr);
+
+	// Unmap the virtual memory region associated with the block.
 	for (size_t i = 0; i < pages; i++) {
 		uintptr_t vaddr = addr + (i * PAGE_SIZE);
 		vmm_unmap((void*)vaddr, true);
 	}
+
 	spinlock_release(&alr.lock);
 }
 
+/**
+ * Frees a specified number of pages starting from a given virtual address.
+ *
+ * @param addr The starting virtual address of the pages to free.
+ * @param pages The number of pages to free.
+ */
 void vfree_pages(void* addr, size_t pages)
 {
 	size_t size = pages * PAGE_SIZE;
@@ -446,6 +556,11 @@ void vfree_pages(void* addr, size_t pages)
 	buddy_free(&alr, (uintptr_t)addr, size);
 }
 
+/**
+ * Frees a virtual memory region without specifying the number of pages.
+ *
+ * @param addr The starting virtual address of the region to free.
+ */
 void vfree(void* addr)
 {
 	// This is a little slow, but thats what happens when you just vfree without telling me how many pages
@@ -471,9 +586,9 @@ static inline void invalidate(void* vaddr)
  */
 static uint64_t vmm_alloc_table()
 {
-	void* new_page = PHYS_TO_VIRT(pmm_alloc_page());
+	void* new_page = PHYS_TO_HHDM(pmm_alloc_page());
 	memset(new_page, 0, PAGE_SIZE);
-	return VIRT_TO_PHYS((uint64_t)new_page);
+	return HHDM_TO_PHYS((uint64_t)new_page);
 }
 
 #define VADDR_PML4_INDEX(vaddr) (((uint64_t)(vaddr) >> 39) & 0x1FF)
@@ -495,29 +610,29 @@ static uint64_t vmm_alloc_table()
  */
 void vmm_map(void* virt_addr, void* phys_addr, uint64_t flags)
 {
-	// log_debug("Mapping virt_addr: %p, to phys_addr: %p", virt_addr,
-	// 	  phys_addr);
-	flags |= PAGE_PRESENT | PAGE_WRITE;
+	uint64_t* pml4 = kernel.pml4;
+
+	// flags |= PAGE_PRESENT | PAGE_WRITE;
 	uint64_t pml4_i = VADDR_PML4_INDEX(virt_addr);
 	if ((pml4[pml4_i] & PAGE_PRESENT) == 0) {
 		pml4[pml4_i] = vmm_alloc_table() | flags;
 	}
 
 	// Extract the physical address and convert it to a usable virtual pointer
-	uint64_t* pdpt = (uint64_t*)PHYS_TO_VIRT(pml4[pml4_i] & ~FLAGS_MASK); // Mask off flags
+	uint64_t* pdpt = (uint64_t*)PHYS_TO_HHDM(pml4[pml4_i] & ~FLAGS_MASK); // Mask off flags
 	uint64_t pdpt_i = VADDR_PDPT_INDEX(virt_addr);
 	if ((pdpt[pdpt_i] & PAGE_PRESENT) == 0) {
 		pdpt[pdpt_i] = vmm_alloc_table() | flags;
 	}
 
-	uint64_t* pd = (uint64_t*)PHYS_TO_VIRT(pdpt[pdpt_i] & ~FLAGS_MASK); // Mask off flags
+	uint64_t* pd = (uint64_t*)PHYS_TO_HHDM(pdpt[pdpt_i] & ~FLAGS_MASK); // Mask off flags
 	uint64_t pd_i = VADDR_PD_INDEX(virt_addr);
 	if ((pd[pd_i] & PAGE_PRESENT) == 0) {
 		pd[pd_i] = vmm_alloc_table() | flags;
 	}
 
 	// Mask off flags
-	uint64_t* pt = (uint64_t*)PHYS_TO_VIRT(pd[pd_i] & ~FLAGS_MASK);
+	uint64_t* pt = (uint64_t*)PHYS_TO_HHDM(pd[pd_i] & ~FLAGS_MASK);
 	uint64_t pt_i = VADDR_PT_INDEX(virt_addr);
 	if ((pt[pt_i] & PAGE_PRESENT) == 0) {
 		pt[pt_i] = (uint64_t)phys_addr | flags;
@@ -531,23 +646,25 @@ void vmm_map(void* virt_addr, void* phys_addr, uint64_t flags)
 
 void* vmm_translate(void* virt_addr)
 {
+	uint64_t* pml4 = kernel.pml4;
+
 	uint64_t va = (uint64_t)virt_addr;
 	log_debug("Translating virtual address %lx", va);
 
 	uint64_t pml4_i = VADDR_PML4_INDEX(va);
 	if (!(pml4[pml4_i] & PAGE_PRESENT)) return NULL;
 
-	uint64_t* pdpt = (uint64_t*)PHYS_TO_VIRT(pml4[pml4_i] & PAGE_FRAME_MASK);
+	uint64_t* pdpt = (uint64_t*)PHYS_TO_HHDM(pml4[pml4_i] & PAGE_FRAME_MASK);
 	log_debug("pml4: %p, pml4_i: %lu, pdpt: %p", (void*)pml4, pml4_i, (void*)pdpt);
 	uint64_t pdpt_i = VADDR_PDPT_INDEX(va);
 	if (!(pdpt[pdpt_i] & PAGE_PRESENT)) return NULL;
 
-	uint64_t* pd = (uint64_t*)PHYS_TO_VIRT(pdpt[pdpt_i] & PAGE_FRAME_MASK);
+	uint64_t* pd = (uint64_t*)PHYS_TO_HHDM(pdpt[pdpt_i] & PAGE_FRAME_MASK);
 	log_debug("pdpt: %p, pdpt_i: %lu, pd: %p", (void*)pdpt, pdpt_i, (void*)pd);
 	uint64_t pd_i = VADDR_PD_INDEX(va);
 	if (!(pd[pd_i] & PAGE_PRESENT)) return NULL;
 
-	uint64_t* pt = (uint64_t*)PHYS_TO_VIRT(pd[pd_i] & PAGE_FRAME_MASK);
+	uint64_t* pt = (uint64_t*)PHYS_TO_HHDM(pd[pd_i] & PAGE_FRAME_MASK);
 	log_debug("pd: %p, pd_i: %lu, pt: %p", (void*)pt, pd_i, (void*)pt);
 	uint64_t pt_i = VADDR_PT_INDEX(va);
 	if (!(pt[pt_i] & PAGE_PRESENT)) return NULL;
@@ -578,21 +695,22 @@ void* vmm_translate(void* virt_addr)
  */
 void vmm_unmap(void* virt_addr, bool free_phys)
 {
+	uint64_t* pml4 = kernel.pml4;
 	// TODO: Detect and free empty tables
 	uint64_t va = (uint64_t)virt_addr;
 
 	uint64_t pml4_i = VADDR_PML4_INDEX(va);
 	if (!(pml4[pml4_i] & PAGE_PRESENT)) goto not_present;
 
-	uint64_t* pdpt = (uint64_t*)PHYS_TO_VIRT(pml4[pml4_i] & PAGE_FRAME_MASK);
+	uint64_t* pdpt = (uint64_t*)PHYS_TO_HHDM(pml4[pml4_i] & PAGE_FRAME_MASK);
 	uint64_t pdpt_i = VADDR_PDPT_INDEX(va);
 	if (!(pdpt[pdpt_i] & PAGE_PRESENT)) goto not_present;
 
-	uint64_t* pd = (uint64_t*)PHYS_TO_VIRT(pdpt[pdpt_i] & PAGE_FRAME_MASK);
+	uint64_t* pd = (uint64_t*)PHYS_TO_HHDM(pdpt[pdpt_i] & PAGE_FRAME_MASK);
 	uint64_t pd_i = VADDR_PD_INDEX(va);
 	if (!(pd[pd_i] & PAGE_PRESENT)) goto not_present;
 
-	uint64_t* pt = (uint64_t*)PHYS_TO_VIRT(pd[pd_i] & PAGE_FRAME_MASK);
+	uint64_t* pt = (uint64_t*)PHYS_TO_HHDM(pd[pd_i] & PAGE_FRAME_MASK);
 	uint64_t pt_i = VADDR_PT_INDEX(va);
 	if (!(pt[pt_i] & PAGE_PRESENT)) goto not_present;
 	if (free_phys) {

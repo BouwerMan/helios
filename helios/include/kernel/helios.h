@@ -61,6 +61,7 @@ enum ERROR_CODES {
 };
 
 struct kernel_context {
+	uint64_t* pml4;
 	struct gdt_ptr* gdt;
 	struct idtr* idtr;
 	struct scheduler_queue* squeue;
