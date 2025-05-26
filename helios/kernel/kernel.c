@@ -152,23 +152,24 @@ void kernel_main(void)
 	log_info("Initializing VMM");
 	vmm_init(memmap_request.response, exe_addr_req.response, hhdm_request.response->offset);
 
-	uintptr_t* ptr = valloc(13, ALLOC_KERNEL);
+	uintptr_t* ptr = valloc(1, ALLOC_KERNEL);
 	*ptr = 1041531;
 	log_debug("Got 13 pages from valloc located at: %p, stored %lu in it", (void*)ptr, *ptr);
-	vfree(ptr);
-	ptr = valloc(14, ALLOC_KERNEL);
-	*ptr = 684023;
-	log_debug("Got 13 pages from valloc located at: %p, stored %lu in it", (void*)ptr, *ptr);
-	vfree(ptr);
+	// vfree(ptr);
 
-	// FIXME: Remove
-	log_error("Early infinite loop so that I don't have to worry");
-	while (1)
-		;
+	uintptr_t* ptr2 = valloc(1, ALLOC_KERNEL);
+	*ptr2 = 684023;
+	log_debug("Got 13 pages from valloc located at: %p, stored %lu in it", (void*)ptr2, *ptr2);
+	vfree(ptr2);
 
-	init_scheduler();
-	log_info("Initializing dmesg");
-	dmesg_init();
+	// // FIXME: Remove
+	// log_error("Early infinite loop so that I don't have to worry");
+	// while (1)
+	// 	;
+
+	// init_scheduler();
+	// log_info("Initializing dmesg");
+	// dmesg_init();
 
 	log_info("Initializing Timer");
 	timer_init();
@@ -180,6 +181,7 @@ void kernel_main(void)
 	sATADevice* fat_device = ctrl_get_device(3);
 	mount("/", fat_device, &fat_device->part_table[0], FAT16);
 
+#if 0
 	struct vfs_file f = { 0 };
 	int res2 = vfs_open("/dir/test2.txt", &f);
 	if (res2 < 0) {
@@ -199,6 +201,7 @@ void kernel_main(void)
 	log_debug("Closing");
 	vfs_close(&f);
 	vfs_close(&f2);
+#endif
 
 	struct slab_cache test_cache = { 0 };
 	(void)slab_cache_init(&test_cache, "Test cache", sizeof(uint64_t), 0, NULL, NULL);

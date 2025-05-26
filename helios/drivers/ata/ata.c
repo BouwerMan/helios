@@ -179,7 +179,7 @@ static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_
 	size_t pages = (sec_count * sec_size / PAGE_SIZE) + 1;
 	log_debug("Allocating dma buffer of %d pages", pages);
 	// TODO: Make sure dma_buffer is < 4GB.
-	void* dma_buffer = vmm_alloc_pages(pages, true);
+	void* dma_buffer = valloc(pages, ALLOC_KDMA32);
 	if (!dma_buffer) goto clean;
 
 	uint64_t full_addr = (uintptr_t)vmm_translate(dma_buffer);
@@ -226,11 +226,11 @@ static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_
 	// TODO: Maybe do some stuff with caching dma_buffer
 	memcpy(buffer, dma_buffer, prdt->size);
 	log_debug("Freeing dma_buffer");
-	vmm_free_pages(dma_buffer, pages);
+	vfree_pages(dma_buffer, pages);
 	return true;
 
 clean_prog:
-	vmm_free_pages(dma_buffer, pages);
+	vfree_pages(dma_buffer, pages);
 clean:
 	return false;
 }

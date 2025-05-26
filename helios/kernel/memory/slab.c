@@ -308,7 +308,7 @@ static void destroy_slab(struct slab* slab)
 
 	list_remove(&slab->link);
 	kfree(slab->free_stack);
-	vmm_free_pages(base, cache->slab_size_pages);
+	vfree_pages(base, cache->slab_size_pages);
 }
 
 /**
@@ -323,7 +323,7 @@ static void destroy_slab(struct slab* slab)
 static int slab_grow(struct slab_cache* cache)
 {
 	log_debug("Creating new slab for cache: %s", cache->name);
-	void* base = vmm_alloc_pages(cache->slab_size_pages, false);
+	void* base = valloc(cache->slab_size_pages, ALLOC_KERNEL);
 	if (!base) {
 		log_error("OOM growing slab for cache %s", cache->name);
 		return -EOOM;
@@ -334,7 +334,7 @@ static int slab_grow(struct slab_cache* cache)
 	new_slab->free_stack = kmalloc(cache->objects_per_slab * sizeof(void*));
 	if (!new_slab->free_stack) {
 		log_error("OOM growing slab for cache %s", cache->name);
-		vmm_free_pages(base, cache->slab_size_pages);
+		vfree_pages(base, cache->slab_size_pages);
 		return -EOOM;
 	}
 

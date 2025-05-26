@@ -120,7 +120,8 @@ void check_reschedule(struct registers* regs)
  */
 static int create_stack(struct task* task)
 {
-	void* stack = vmm_alloc_pages(STACK_SIZE_PAGES, false);
+	// TODO: Allocate in userspace if needed
+	void* stack = valloc(STACK_SIZE_PAGES, ALLOC_KERNEL);
 	if (!stack) return -EOOM;
 	memset(stack, 0, STACK_SIZE_PAGES * PAGE_SIZE);
 

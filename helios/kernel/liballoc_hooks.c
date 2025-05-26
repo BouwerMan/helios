@@ -33,12 +33,12 @@ int liballoc_unlock()
 // Returns and allocs [pages] number of contiguous pages
 void* liballoc_alloc(size_t pages)
 {
-	return vmm_alloc_pages(pages, false);
+	return valloc(pages, ALLOC_KERNEL);
 }
 
 // Frees [pages] number of contiguous pages, starting at first_page
 int liballoc_free(void* first_page, size_t pages)
 {
-	vmm_free_pages(first_page, pages);
+	vfree_pages(first_page, pages);
 	return 0;
 }

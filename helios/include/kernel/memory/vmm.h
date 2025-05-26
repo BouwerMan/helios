@@ -90,11 +90,9 @@ void vmm_init(struct limine_memmap_response* mmap, struct limine_executable_addr
 	      uint64_t hhdm_offset);
 void vmm_map(void* virt_addr, void* phys_addr, uint64_t flags);
 void vmm_unmap(void* virt_addr, bool free_phys);
-void* vmm_alloc_pages(size_t count, bool contiguous);
-void vmm_free_pages(void* addr, size_t count);
+
 // For testing
 void* vmm_translate(void* virt_addr);
-void* recursive_vmm_translate(void* addr);
 uint64_t test_virt_to_phys(uint64_t virt_addr);
 void vmm_dump_page_table();
 
@@ -102,4 +100,4 @@ void vmm_dump_page_table();
 
 void* valloc(size_t pages, size_t flags);
 void vfree(void* addr);
-void vfree_pages(void* addr, size_t size);
+void vfree_pages(void* addr, size_t pages);
