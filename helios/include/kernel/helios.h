@@ -42,6 +42,18 @@ typedef int64_t i64;
  */
 #define ALIGN_UP(size, align) (((size + align - 1) / align) * align)
 
+/**
+ * @brief Macro to indicate that the given expression is unlikely to be true.
+ * @param expr The expression to evaluate.
+ */
+#define unlikely(expr) __builtin_expect(!!(expr), 0)
+
+/**
+ * @brief Macro to indicate that the given expression is likely to be true.
+ * @param expr The expression to evaluate.
+ */
+#define likely(expr) __builtin_expect(!!(expr), 1)
+
 #define BOCHS_BREAKPOINT (asm volatile("xchgw %bx, %bx"))
 #define QEMU_BREAKPOINT	 (__asm__ volatile("jmp $"))
 

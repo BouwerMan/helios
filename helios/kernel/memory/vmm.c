@@ -76,7 +76,7 @@ static struct buddy_allocator alr = { 0 };
 static inline void vmm_load_cr3(uintptr_t pml4_phys_addr)
 {
 	// Ensure it's 4 KiB aligned
-	if (__builtin_expect((pml4_phys_addr & 0xFFF) != 0, 0)) {
+	if (unlikely((pml4_phys_addr & 0xFFF) != 0)) {
 		panic("CR3 address not 4 KiB aligned");
 	}
 
