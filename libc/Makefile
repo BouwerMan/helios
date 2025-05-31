@@ -64,12 +64,14 @@ libk.a: $(LIBK_OBJS)
 	@$(AR) rcs $(BUILDDIR)/$@ $(LIBK_OBJS)
 
 $(BUILDDIR)/%.o: %.c
+	@echo "  CC      $@"
 	@$(CC) -MD -c $< -o $(BUILDDIR)/$@ $(CFLAGS) $(CPPFLAGS)
 
 .c.S:
 	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
 
 $(BUILDDIR)/%.o: %.asm
+	@echo "  AR      $@"
 	@mkdir -p $(@D)
 	@nasm -felf32 $< -o $@
 

@@ -1,7 +1,8 @@
 #include <stdint.h>
 #include <string.h>
 
-static uint64_t* memset64(uint64_t* restrict dst, uint64_t value, size_t count)
+[[maybe_unused]]
+static uint64_t* __memset64(uint64_t* restrict dst, uint64_t value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;
@@ -9,7 +10,8 @@ static uint64_t* memset64(uint64_t* restrict dst, uint64_t value, size_t count)
 	return dst;
 }
 
-static uint32_t* memset32(uint32_t* restrict dst, uint32_t value, size_t count)
+[[maybe_unused]]
+static uint32_t* __memset32(uint32_t* restrict dst, uint32_t value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;
@@ -17,7 +19,8 @@ static uint32_t* memset32(uint32_t* restrict dst, uint32_t value, size_t count)
 	return dst;
 }
 
-static uint16_t* memset16(uint16_t* restrict dst, uint16_t value, size_t count)
+[[maybe_unused]]
+static uint16_t* __memset16(uint16_t* restrict dst, uint16_t value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;
@@ -25,7 +28,8 @@ static uint16_t* memset16(uint16_t* restrict dst, uint16_t value, size_t count)
 	return dst;
 }
 
-static uint8_t* memset8(uint8_t* restrict dst, uint8_t value, size_t count)
+[[maybe_unused]]
+static uint8_t* __memset8(uint8_t* restrict dst, uint8_t value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;
@@ -49,7 +53,7 @@ static void* small_memset(void* restrict dest, int ch, size_t count)
 	uintptr_t d = (uintptr_t)dest;
 
 	// If count is small we just use memset 8 and call it a day
-	if (count < 128) return memset8(dest, c, count);
+	if (count < 128) return __memset8(dest, c, count);
 
 	if (CHECK_ALIGN(d, count, sizeof(uint64_t))) {
 		uint64_t val = 0x0101010101010101ULL * c;
@@ -104,3 +108,27 @@ void* memset(void* restrict dest, int ch, size_t count)
 
 	return dest;
 }
+
+#ifdef __HAVE_ARCH_MEMSET8
+extern void* memset8(uint8_t* s, uint8_t v, size_t n) __attribute__((alias("__arch_memset8")));
+#else
+extern void* memset8(uint8_t* s, uint8_t v, size_t n) __attribute__((alias("__memset8")));
+#endif
+
+#ifdef __HAVE_ARCH_MEMSET16
+extern void* memset16(uint16_t* s, uint16_t v, size_t n) __attribute__((alias("__arch_memset16")));
+#else
+extern void* memset16(uint16_t* s, uint16_t v, size_t n) __attribute__((alias("__memset16")));
+#endif
+
+#ifdef __HAVE_ARCH_MEMSET32
+extern void* memset32(uint32_t* s, uint32_t v, size_t n) __attribute__((alias("__arch_memset32")));
+#else
+extern void* memset32(uint32_t* s, uint32_t v, size_t n) __attribute__((alias("__memset32")));
+#endif
+
+#ifdef __HAVE_ARCH_MEMSET64
+extern void* memset64(uint64_t* s, uint64_t v, size_t n) __attribute__((alias("__arch_memset64")));
+#else
+extern void* memset64(uint64_t* s, uint64_t v, size_t n) __attribute__((alias("__memset64")));
+#endif

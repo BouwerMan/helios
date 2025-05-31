@@ -9,6 +9,10 @@
 #define __need_size_t
 #include <stddef.h>
 
+#if defined(__x86_64__) || defined(_M_X64)
+#include <private/string_64.h>
+#endif
+
 /// Checks the alignment of dest and src while making sure num can be evenly divisible
 #define __STRING_H_CHECK_ALIGN(num, dest, src, size) ((num % size == 0) && (dest % size == 0) && (src % size == 0))
 
@@ -46,12 +50,13 @@ size_t strspn(const char* s1, const char* s2);
 // FIXME: Unimplemented
 char* strstr(const char* s1, const char* s2);
 char* strtok(char* restrict s1, const char* restrict s2);
-void* memset(void* s, int c, size_t n);
 // FIXME: Unimplemented
 void* memset_explicit(void* s, int c, size_t n);
 // FIXME: Unimplemented
 char* strerror(int errnum);
 size_t strlen(const char*);
+
+extern void* memset(void* s, int c, size_t n);
 
 #ifdef __STDC_WANT_LIB_EXT1__
 size_t strnlen_s(const char* s, size_t n);

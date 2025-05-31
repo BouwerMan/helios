@@ -9,7 +9,8 @@ BUILDDIR=build
 KERNELDIR=kernel
 DRIVERDIR=drivers
 UTILDIR=util
-SRC_DIRS:=$(KERNELDIR) $(DRIVERDIR) $(UTILDIR)
+MMDIR=mm
+SRC_DIRS:=$(KERNELDIR) $(DRIVERDIR) $(UTILDIR) $(MMDIR)
 
 CFLAGS:=$(CFLAGS) -Iinclude -I$(PWD)/libc/include
 LDFLAGS:=$(LDFLAGS)
@@ -60,6 +61,7 @@ $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 	@OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
 
 $(BUILDDIR)/%.o: %.c
+	@echo "  CC      $@"
 	@mkdir -p $(@D)
 	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS) $(DEFINES) $(GDEFINES) $(TESTS)
 
@@ -68,6 +70,7 @@ $(BUILDDIR)/%.o: %.s
 	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
 
 $(BUILDDIR)/%.o: %.asm
+	@echo "  AR      $@"
 	@mkdir -p $(@D)
 	@nasm -Wall -felf64 -g -F dwarf $< -o $@
 

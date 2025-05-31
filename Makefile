@@ -58,13 +58,14 @@ headers:
 todolist:
 	-@grep --color=auto 'TODO.*' -rno $(PROJDIRS)
 
-limine:
+limine/limine:
+	rm -rf limine
 	# Download the latest Limine binary release for the 9.x branch.
-	if ! [ -d "limine" ]; then git clone https://github.com/limine-bootloader/limine.git --branch=v9.x-binary --depth=1; fi
+	git clone https://github.com/limine-bootloader/limine.git --branch=v9.x-binary --depth=1
 	# Build "limine" utility.
 	make -C limine
 
-iso: limine all
+iso: limine/limine all
 	@mkdir -p isodir
 	@mkdir -p isodir/boot
 	@mkdir -p isodir/boot/limine
@@ -111,3 +112,4 @@ clean:
 	rm -rvf *.iso
 	$(MAKE) -C ./libc clean
 	$(MAKE) -C ./helios clean
+	$(MAKE) -C ./limine clean

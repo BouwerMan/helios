@@ -4,6 +4,7 @@ CompileFlags:
     - "-isystem/home/dylan/code/osdev/libc/include"
     - "-nostdlibinc"
     - "-D__is_libk"
+    - "-D__KDEBUG__"
     - "-DLIMINE_API_REVISION=3"
     - "--target=x86_64"
     - "-std=gnu23"

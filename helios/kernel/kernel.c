@@ -33,6 +33,7 @@
 #include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
 #include <limine.h>
+#include <mm/bootmem.h>
 
 #include <util/log.h>
 
@@ -97,6 +98,7 @@ struct kernel_context kernel = { 0 };
 static void init_kernel_structure()
 {
 	list_init(&kernel.slab_caches);
+	kernel.memmap = memmap_request.response;
 }
 
 // Doing some quirky stuff to get around clang and gcc errors for functions called from asm
@@ -145,6 +147,15 @@ void kernel_main(void)
 	log_info("Initializing IDT");
 	idt_init();
 
+	log_debug("Time for funny new allocators");
+	log_debug("HHDM_OFFSET: %lx", hhdm_request.response->offset);
+	bootmem_init(kernel.memmap);
+
+	// FIXME: Remove
+	log_error("Early infinite loop so that I don't have to worry");
+	while (1)
+		;
+
 	liballoc_init(); // Just initializes the liballoc spinlock
 	log_info("Initializing PMM");
 	pmm_init(memmap_request.response, hhdm_request.response->offset);
@@ -161,11 +172,6 @@ void kernel_main(void)
 	*ptr2 = 684023;
 	log_debug("Got 13 pages from valloc located at: %p, stored %lu in it", (void*)ptr2, *ptr2);
 	vfree(ptr2);
-
-	// // FIXME: Remove
-	// log_error("Early infinite loop so that I don't have to worry");
-	// while (1)
-	// 	;
 
 	init_scheduler();
 	log_info("Initializing dmesg");
