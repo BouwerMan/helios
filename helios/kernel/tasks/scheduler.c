@@ -22,11 +22,10 @@
 #include <string.h>
 
 #include <kernel/liballoc.h>
-#include <kernel/memory/pmm.h>
 #include <kernel/memory/slab.h>
-#include <kernel/memory/vmm.h>
 #include <kernel/sys.h>
 #include <kernel/tasks/scheduler.h>
+#include <mm/page_alloc.h>
 #include <util/list.h>
 #include <util/log.h>
 
@@ -121,7 +120,7 @@ void check_reschedule(struct registers* regs)
 static int create_stack(struct task* task)
 {
 	// TODO: Allocate in userspace if needed
-	void* stack = valloc(STACK_SIZE_PAGES, ALLOC_KERNEL);
+	void* stack = (void*)get_free_pages(0, STACK_SIZE_PAGES);
 	if (!stack) return -EOOM;
 	memset(stack, 0, STACK_SIZE_PAGES * PAGE_SIZE);
 

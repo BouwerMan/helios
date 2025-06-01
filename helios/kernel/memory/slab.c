@@ -22,13 +22,22 @@
 #include <string.h>
 
 #include <kernel/liballoc.h>
-#include <kernel/memory/pmm.h>
 #include <kernel/memory/slab.h>
-#include <kernel/memory/vmm.h>
+#include <mm/page_alloc.h>
 #include <util/log.h>
 
 [[nodiscard]] static int slab_grow(struct slab_cache* cache);
 static void destroy_slab(struct slab* slab);
+
+static inline void* slab_alloc_pages(size_t pages)
+{
+	return (void*)get_free_pages(0, pages);
+}
+
+static inline void slab_free_pages(void* addr, size_t pages)
+{
+	free_pages(addr, pages);
+}
 
 /**
  * @brief Initialize a slab cache for fixed‐size object allocations.
@@ -308,7 +317,7 @@ static void destroy_slab(struct slab* slab)
 
 	list_remove(&slab->link);
 	kfree(slab->free_stack);
-	vfree_pages(base, cache->slab_size_pages);
+	slab_free_pages(base, cache->slab_size_pages);
 }
 
 /**
@@ -323,7 +332,7 @@ static void destroy_slab(struct slab* slab)
 static int slab_grow(struct slab_cache* cache)
 {
 	log_debug("Creating new slab for cache: %s", cache->name);
-	void* base = valloc(cache->slab_size_pages, ALLOC_KERNEL);
+	void* base = (void*)slab_alloc_pages(cache->slab_size_pages);
 	if (!base) {
 		log_error("OOM growing slab for cache %s", cache->name);
 		return -EOOM;
@@ -334,7 +343,7 @@ static int slab_grow(struct slab_cache* cache)
 	new_slab->free_stack = kmalloc(cache->objects_per_slab * sizeof(void*));
 	if (!new_slab->free_stack) {
 		log_error("OOM growing slab for cache %s", cache->name);
-		vfree_pages(base, cache->slab_size_pages);
+		slab_free_pages(base, cache->slab_size_pages);
 		return -EOOM;
 	}
 

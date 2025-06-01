@@ -25,7 +25,7 @@
 #include <drivers/ata/device.h>
 #include <drivers/pci/pci.h>
 #include <kernel/liballoc.h>
-#include <kernel/memory/vmm.h>
+#include <mm/page_alloc.h>
 
 #include <util/log.h>
 
@@ -89,10 +89,10 @@ void ctrl_init()
 
 		if (ctrls[i].use_dma) {
 			// TODO: Make sure this is in low 4GB
-			ctrls[i].prdt = valloc(1, ALLOC_KDMA32);
+			ctrls[i].prdt = (void*)get_free_pages(0, 1);
 			log_debug("prdt: %p", (void*)ctrls[i].prdt);
 			// TODO: clean up on alloc fail
-			uint64_t full_addr = (uintptr_t)vmm_translate(ctrls[i].prdt);
+			uint64_t full_addr = (uintptr_t)HHDM_TO_PHYS(ctrls[i].prdt);
 			if (full_addr >= (1ULL << 32)) {
 				// handle error or log warning: address cannot be DMA'd
 				log_error("PRDT is not in valid location: %lx", full_addr);

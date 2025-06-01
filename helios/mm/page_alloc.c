@@ -27,13 +27,24 @@
 // This does mean that consecutive allocs and frees may give different results.
 // Maybe I should make it not do thet?
 
+#include <stdint.h>
 #include <string.h>
 
+#include <kernel/kmath.h>
 #include <kernel/spinlock.h>
 #include <mm/bootmem.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
+
+#ifndef __VMM_DEBUG__
+#undef LOG_LEVEL
+#define LOG_LEVEL 0
+#define FORCE_LOG_REDEF
 #include <util/log.h>
+#undef FORCE_LOG_REDEF
+#else
+#include <util/log.h>
+#endif
 
 static struct free_area free_areas[MAX_ORDER];
 static struct buddy_allocator alr = { 0 };
@@ -66,12 +77,8 @@ void buddy_dump_free_lists()
 	spinlock_release(&allocator->lock);
 }
 
-bool test = false;
-
 void page_alloc_init()
 {
-	// Going to init the buddy allocator AND THEN move away from limine cr3.
-	// That way the buddy allocator has complete control of the page tables and such
 	spinlock_init(&alr.lock);
 	spinlock_acquire(&alr.lock);
 
@@ -84,16 +91,6 @@ void page_alloc_init()
 	spinlock_release(&alr.lock);
 
 	bootmem_free_all();
-	// log_debug("manually running through and combining again");
-
-	// test = true;
-
-	// for (pfn_t pfn = min_pfn; pfn < max_pfn + min_pfn; pfn++) {
-	// 	if (mem_map[pfn].state != BLOCK_FREE) continue;
-	// 	log_debug("Combining %zu", pfn);
-	// 	combine_blocks(&alr, &mem_map[pfn], mem_map[pfn].order);
-	// }
-	buddy_dump_free_lists();
 }
 
 static inline pfn_t get_buddy_idx(pfn_t pfn, size_t order)
@@ -126,10 +123,10 @@ static struct page* split_until_order(struct buddy_allocator* allocator, struct 
 	page->order = (uint8_t)current_order;
 
 	left->state = BLOCK_SPLIT;
-	left->order = page->order - 1;
+	left->order = (uint8_t)current_order - 1;
 
 	right->state = BLOCK_FREE;
-	right->order = page->order - 1;
+	right->order = (uint8_t)current_order - 1;
 
 	// Add the right child to the free list
 	log_debug("Inserting right child (pfn: %lx, order: %u) into free list", page_to_pfn(right), right->order);
@@ -143,7 +140,7 @@ static struct page* split_until_order(struct buddy_allocator* allocator, struct 
 	return split_until_order(allocator, left, left->order, target_order);
 }
 
-static struct page* __alloc_pages_core(struct buddy_allocator* allocator, unsigned long flags, size_t order)
+static struct page* __alloc_pages_core(struct buddy_allocator* allocator, flags_t flags, size_t order)
 {
 	(void)flags;
 	if (order >= allocator->max_order) {
@@ -200,14 +197,49 @@ static struct page* __alloc_pages_core(struct buddy_allocator* allocator, unsign
 	return NULL;
 }
 
-struct page* alloc_pages(unsigned long flags, size_t order)
+struct page* alloc_page(flags_t flags)
+{
+	return alloc_pages(flags, 0);
+}
+
+struct page* alloc_pages(flags_t flags, size_t order)
 {
 	return __alloc_pages_core(&alr, flags, order);
 }
 
-struct page* alloc_page(unsigned long flags)
+uintptr_t __get_free_pages(flags_t flags, size_t order)
 {
-	return alloc_pages(flags, 0);
+	struct page* pg = alloc_pages(flags, order);
+	if (!pg) {
+		log_error("Failed to allocate %zu pages with flags: %lx", 1UL << order, flags);
+		return 0;
+	}
+
+	uintptr_t page_phys = page_to_phys(pg);
+	return PHYS_TO_HHDM(page_phys);
+}
+
+uintptr_t __get_free_page(flags_t flags)
+{
+	return __get_free_pages(flags, 0);
+}
+
+uintptr_t get_free_pages(flags_t flags, size_t pages)
+{
+	size_t rounded_size = round_to_power_of_2(pages);
+	size_t order = (size_t)log2(rounded_size);
+	uintptr_t page_virt = __get_free_pages(flags, order);
+	if (!page_virt) return 0;
+
+	size_t region_size = PAGE_SIZE << order;
+	memset((void*)page_virt, 0, region_size);
+
+	return page_virt;
+}
+
+uintptr_t get_free_page(flags_t flags)
+{
+	return get_free_pages(flags, 0);
 }
 
 static void combine_blocks(struct buddy_allocator* allocator, struct page* page, size_t order)
@@ -228,7 +260,7 @@ static void combine_blocks(struct buddy_allocator* allocator, struct page* page,
 	// }
 
 	// Set the order of the first page of the block
-	page->order = order;
+	page->order = (uint8_t)order;
 	page->state = BLOCK_FREE;
 
 	list_append(&allocator->free_lists[order], &page->list);
@@ -277,31 +309,37 @@ static void combine_blocks(struct buddy_allocator* allocator, struct page* page,
 static void buddy_free(struct buddy_allocator* allocator, struct page* page, size_t order)
 {
 	spinlock_acquire(&allocator->lock);
-	size_t total_pages = 1UL << order;
-	pfn_t init_pfn = page_to_pfn(page);
-
-	// log_debug("Freeing %zu pages starting at pfn: %zu", total_pages, init_pfn);
 
 	combine_blocks(allocator, page, order);
 
 	spinlock_release(&allocator->lock);
 }
 
-// Free single page
+void __free_pages(struct page* page, unsigned int order)
+{
+	if (!page) return;
+	buddy_free(&alr, page, order);
+}
+
 void __free_page(struct page* page)
 {
-	if (page->flags & PG_RESERVED) {
-		log_warn("Attempting to free reserved page, skipping");
-		return;
-	}
-	buddy_free(&alr, page, 0);
+	__free_pages(page, 0);
 }
 
-void __free_orphan_page(struct page* page);
+void free_pages(void* addr, size_t pages)
+{
+	if (!addr) return;
 
-// Free single page from virtual address
+	uintptr_t page_virt = HHDM_TO_PHYS((uintptr_t)addr);
+	struct page* page = &mem_map[phys_to_pfn(page_virt)];
+
+	size_t rounded_size = round_to_power_of_2(pages);
+	size_t order = (size_t)log2(rounded_size);
+
+	__free_pages(page, order);
+}
+
 void free_page(void* addr)
 {
+	free_pages(addr, 0);
 }
-
-// TODO: Free pages

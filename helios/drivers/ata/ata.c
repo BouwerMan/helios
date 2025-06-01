@@ -27,9 +27,8 @@
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
 #include <kernel/liballoc.h>
-#include <kernel/memory/pmm.h>
-#include <kernel/memory/vmm.h>
 #include <kernel/sys.h>
+#include <mm/page_alloc.h>
 
 // Disabling debug log messages
 #ifndef __ATA_DEBUG__
@@ -179,10 +178,10 @@ static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_
 	size_t pages = (sec_count * sec_size / PAGE_SIZE) + 1;
 	log_debug("Allocating dma buffer of %d pages", pages);
 	// TODO: Make sure dma_buffer is < 4GB.
-	void* dma_buffer = valloc(pages, ALLOC_KDMA32);
+	void* dma_buffer = (void*)get_free_pages(0, pages);
 	if (!dma_buffer) goto clean;
 
-	uint64_t full_addr = (uintptr_t)vmm_translate(dma_buffer);
+	uint64_t full_addr = (uintptr_t)HHDM_TO_PHYS(dma_buffer);
 	if (full_addr >= (1ULL << 32)) {
 		// handle error or log warning: address cannot be DMA'd
 		log_error("PRDT buffer is not in valid location: %lx", full_addr);
@@ -201,7 +200,7 @@ static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_
 	outb(bmr_base + BMR_REG_STATUS, bmr_st | BMR_STATUS_IRQ | BMR_STATUS_ERROR);
 
 	// 3. Write PRDT pointer
-	uint64_t full_prdt_addr = (uintptr_t)vmm_translate(prdt);
+	uint64_t full_prdt_addr = (uintptr_t)HHDM_TO_PHYS(prdt);
 	if (full_addr >= (1ULL << 32)) {
 		// handle error or log warning: address cannot be DMA'd
 		log_error("PRDT is not in valid location: %lx", full_prdt_addr);
@@ -226,11 +225,11 @@ static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_
 	// TODO: Maybe do some stuff with caching dma_buffer
 	memcpy(buffer, dma_buffer, prdt->size);
 	log_debug("Freeing dma_buffer");
-	vfree_pages(dma_buffer, pages);
+	free_pages(dma_buffer, pages);
 	return true;
 
 clean_prog:
-	vfree_pages(dma_buffer, pages);
+	free_pages(dma_buffer, pages);
 clean:
 	return false;
 }

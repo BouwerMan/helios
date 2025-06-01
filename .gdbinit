@@ -3,7 +3,7 @@ target remote localhost:1234
 
 set print pretty on
 
-break __alloc_pages_core
+break read_dma
 # break bootmem_free_all
 c
 

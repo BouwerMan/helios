@@ -6,6 +6,10 @@
 #include <kernel/types.h>
 #include <util/list.h>
 
+#if defined(__x86_64__)
+#include <arch/x86_64/page.h>
+#endif
+
 #define PAGE_SHIFT 12
 #define PAGE_SIZE  (1UL << PAGE_SHIFT)
 
@@ -73,6 +77,12 @@ static inline pfn_t phys_to_pfn(uintptr_t phys)
 static inline struct page* phys_to_page(uintptr_t phys)
 {
 	return &mem_map[phys_to_pfn(phys)];
+}
+
+static inline uintptr_t page_to_phys(struct page* pg)
+{
+	if (pg) return pfn_to_phys(page_to_pfn(pg));
+	return 0;
 }
 
 // Page flag functions

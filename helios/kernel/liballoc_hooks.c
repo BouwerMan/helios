@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include <kernel/kmath.h>
 #include <stddef.h>
 
 #include <kernel/liballoc.h>
-#include <kernel/memory/vmm.h>
 #include <kernel/spinlock.h>
+#include <mm/page_alloc.h>
 
 #include <util/log.h>
 
@@ -33,12 +34,12 @@ int liballoc_unlock()
 // Returns and allocs [pages] number of contiguous pages
 void* liballoc_alloc(size_t pages)
 {
-	return valloc(pages, ALLOC_KERNEL);
+	return (void*)get_free_pages(0, pages);
 }
 
 // Frees [pages] number of contiguous pages, starting at first_page
 int liballoc_free(void* first_page, size_t pages)
 {
-	vfree_pages(first_page, pages);
+	free_pages(first_page, pages);
 	return 0;
 }

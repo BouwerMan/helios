@@ -71,7 +71,7 @@ void screen_init(struct limine_framebuffer* fb, uint32_t fg_color, uint32_t bg_c
 
 void screen_clear()
 {
-	spinlock_acquire(&sc.lock);
+	// spinlock_acquire(&sc.lock);
 
 	uintptr_t addr = (uintptr_t)sc.fb->address;
 	uint64_t char_height = sc.char_height;
@@ -89,7 +89,7 @@ void screen_clear()
 	sc.cx = 0;
 	sc.cy = 0;
 
-	spinlock_release(&sc.lock);
+	// spinlock_release(&sc.lock);
 }
 
 /**
