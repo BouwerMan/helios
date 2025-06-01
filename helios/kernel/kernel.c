@@ -25,9 +25,7 @@
 #include <kernel/dmesg.h>
 #include <kernel/helios.h>
 #include <kernel/liballoc.h>
-#include <kernel/memory/pmm.h>
 #include <kernel/memory/slab.h>
-#include <kernel/memory/vmm.h>
 #include <kernel/screen.h>
 #include <kernel/sys.h>
 #include <kernel/tasks/scheduler.h>
@@ -35,6 +33,7 @@
 #include <limine.h>
 #include <mm/bootmem.h>
 
+#include <mm/page_alloc.h>
 #include <util/log.h>
 
 #define __STDC_WANT_LIB_EXT1__
@@ -151,11 +150,44 @@ void kernel_main(void)
 	log_debug("HHDM_OFFSET: %lx", hhdm_request.response->offset);
 	bootmem_init(kernel.memmap);
 
+	page_alloc_init();
+
+	struct page* page = alloc_page(0);
+	log_debug("Allocated page %p, pfn: %zu, phys: %lx", (void*)page, page_to_pfn(page),
+		  pfn_to_phys(page_to_pfn(page)));
+	struct page* page2 = alloc_page(0);
+	log_debug("Allocated page %p, pfn: %zu, phys: %lx", (void*)page2, page_to_pfn(page2),
+		  pfn_to_phys(page_to_pfn(page2)));
+	struct page* page3 = alloc_page(0);
+	log_debug("Allocated page %p, pfn: %zu, phys: %lx", (void*)page3, page_to_pfn(page3),
+		  pfn_to_phys(page_to_pfn(page3)));
+
+	log_debug("Freeing");
+	__free_page(page3);
+	__free_page(page2);
+	__free_page(page);
+
+	page = alloc_page(0);
+	log_debug("Allocated page %p, pfn: %zu, phys: %lx", (void*)page, page_to_pfn(page),
+		  pfn_to_phys(page_to_pfn(page)));
+	page2 = alloc_page(0);
+	log_debug("Allocated page %p, pfn: %zu, phys: %lx", (void*)page2, page_to_pfn(page2),
+		  pfn_to_phys(page_to_pfn(page2)));
+	page3 = alloc_page(0);
+	log_debug("Allocated page %p, pfn: %zu, phys: %lx", (void*)page3, page_to_pfn(page3),
+		  pfn_to_phys(page_to_pfn(page3)));
+
+	log_debug("Freeing");
+	__free_page(page);
+	__free_page(page2);
+	__free_page(page3);
+
 	// FIXME: Remove
 	log_error("Early infinite loop so that I don't have to worry");
 	while (1)
 		;
 
+#if 0
 	liballoc_init(); // Just initializes the liballoc spinlock
 	log_info("Initializing PMM");
 	pmm_init(memmap_request.response, hhdm_request.response->offset);
@@ -232,4 +264,5 @@ void kernel_main(void)
 	sleep(1000);
 	log_warn("entering infinite loop");
 	hcf();
+#endif
 }

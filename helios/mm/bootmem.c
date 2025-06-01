@@ -41,12 +41,13 @@
 #include <limine.h>
 #include <mm/bootmem.h>
 #include <mm/page.h>
+#include <mm/page_alloc.h>
 #include <util/log.h>
 
 struct page* mem_map;
 
-static pfn_t max_pfn;
-const static pfn_t min_pfn = 0; // Always 0
+pfn_t max_pfn = 0;
+const pfn_t min_pfn = 0; // Always 0
 static size_t free_page_count;
 static size_t total_page_count;
 
@@ -154,6 +155,7 @@ void bootmem_init(struct limine_memmap_response* mmap)
 			free_page_count++;
 		}
 	}
+	// TODO: Invert mem_map and bitmap init order, that way when we free the bitmap we have less fragmentation
 
 	// Setup the mem_map
 	total_page_count = max_pfn - min_pfn;
@@ -165,6 +167,7 @@ void bootmem_init(struct limine_memmap_response* mmap)
 		panic("Could not allocate mem_map");
 	}
 	log_debug("Somehow allocated mem_map at: %p", (void*)mem_map);
+	memset(mem_map, 0, mem_map_size);
 
 	for (pfn_t pfn = 0; pfn < max_pfn; pfn++) {
 		uintptr_t paddr = pfn_to_phys(pfn);
@@ -175,6 +178,7 @@ void bootmem_init(struct limine_memmap_response* mmap)
 			atomic_set(&pg->ref_count, 1);
 		} else { /* Page is free */
 			atomic_set(&pg->ref_count, 0);
+			// pg->state = BLOCK_FREE;
 		}
 	}
 
@@ -314,4 +318,50 @@ bool bootmem_page_is_used(uintptr_t phys_addr)
 	uintptr_t bit_offset = page_index % BITSET_WIDTH;
 
 	return ((boot_bitmap[word_offset] & (1ULL << bit_offset)) != 0);
+}
+
+// Free all pages managed by the boot allocator
+void bootmem_free_all()
+{
+	// For testing, I will allocate a couple of pages in the bitmap, then send them to the buddy allocator
+	// void* page1 = bootmem_alloc_page();
+	// void* page2 = bootmem_alloc_page();
+	// pfn_t pfn1 = phys_to_pfn((uintptr_t)page1);
+	// pfn_t pfn2 = phys_to_pfn((uintptr_t)page2);
+	//
+	// log_debug("Freeing page %p (%zu) and %p (%zu)", page1, pfn1, page2, pfn2);
+	//
+	// __free_page(&mem_map[pfn1]);
+	// __free_page(&mem_map[pfn2]);
+
+	for (pfn_t pfn = min_pfn; pfn < max_pfn + min_pfn; pfn++) {
+		uintptr_t page_phys = pfn_to_phys(pfn);
+		if (bootmem_page_is_used(page_phys)) continue;
+		struct page* page = &mem_map[pfn];
+
+		clear_page_reserved(page);
+		set_page_buddy(page);
+		page->state = BLOCK_FREE;
+
+		__free_page(page);
+	}
+	log_debug("Freed all old allocator memory");
+	// for (size_t word = 0; word < map_elems; word++) {
+	// 	// Skip fully used words in the bitmap
+	// 	if (boot_bitmap[word] == UINT64_MAX) continue;
+	//
+	// 	for (size_t bit = 0; bit < BITSET_WIDTH; bit++) {
+	// 		int used = boot_bitmap[word] & bit;
+	// 		if (used == 0) continue;
+	// 		phys_to_page()
+	// 	}
+	// 	// Find the first free bit in the word
+	// 	int bit = __builtin_ffsll(~(int64_t)boot_bitmap[word]) - 1;
+	// 	// bit can be -1 if ffsll is called with all allocated
+	// 	if (bit < 0) continue;
+	// 	boot_bitmap[word] |= (1ULL << bit); // Set page as used
+	//
+	// 	free_page_count--;
+	// 	return (void*)get_phys_addr(word, (uint64_t)bit);
+	// }
 }

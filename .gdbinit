@@ -3,8 +3,8 @@ target remote localhost:1234
 
 set print pretty on
 
-# break scheduler.c:134
-# break pmm.c:79
+break __alloc_pages_core
+# break bootmem_free_all
 c
 
 define hook-quit

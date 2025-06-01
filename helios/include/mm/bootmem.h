@@ -11,3 +11,5 @@ extern void bootmem_free_page(void* addr);
 extern void* bootmem_alloc_contiguous(size_t count);
 extern void bootmem_free_contiguous(void* addr, size_t count);
 extern bool bootmem_page_is_used(uintptr_t phys_addr);
+
+extern void bootmem_free_all();

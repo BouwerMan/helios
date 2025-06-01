@@ -27,7 +27,7 @@ export CWARN=-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Wcast-align \
         -Wconversion -Wstrict-prototypes \
 	# -Werror -fmax-errors=10
 
-export CFLAGS=-O2 -g -pipe -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse3 -std=gnu23 $(CWARN)
+export CFLAGS=-O0 -ggdb -pipe -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse3 -std=gnu23 $(CWARN)
 
 export GDEFINES=-D__KDEBUG__ -DLOG_LEVEL=0 -DENABLE_SERIAL_LOGGING
 export TESTS=#-D__PMM_TEST__
