@@ -23,9 +23,9 @@ export INCLUDEDIR=$(PREFIX)/include
 
 export CWARN=-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Wcast-align \
 	-Wwrite-strings -Wmissing-prototypes -Wmissing-declarations \
-        -Wredundant-decls -Wnested-externs -Winline -Wno-long-long \
+        -Wredundant-decls -Wnested-externs -Wno-long-long \
         -Wconversion -Wstrict-prototypes \
-	# -Werror -fmax-errors=10
+	# -Wsuggest-attribute=pure -Wsuggest-attribute=const -Wno-error=suggest-attribute=pure -Wno-error=suggest-attribute=const
 
 export CFLAGS=-Og -ggdb -pipe -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse3 -std=gnu23 $(CWARN)
 

@@ -165,6 +165,7 @@ void kernel_main(void)
 	log_info("Initializing Timer");
 	timer_init();
 
+#if 0
 	list_devices();
 	ctrl_init();
 	vfs_init(64);
@@ -172,7 +173,6 @@ void kernel_main(void)
 	sATADevice* fat_device = ctrl_get_device(3);
 	mount("/", fat_device, &fat_device->part_table[0], FAT16);
 
-#if 0
 	struct vfs_file f = { 0 };
 	int res2 = vfs_open("/dir/test2.txt", &f);
 	if (res2 < 0) {

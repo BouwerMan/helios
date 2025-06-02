@@ -7,4 +7,16 @@
 #define __USE_C23
 #endif
 
+/**
+ * Means that the return value is solely a function of the arguments,
+ * and if any of the arguments are pointers, then the pointers must not be dereferenced.
+ */
+#define __attribute_const __attribute__((const))
+
+/**
+* Means that the function has no side effects and the value returned
+* depends on the arguments and the state of global variables.
+*/
+#define __pure __attribute__((pure))
+
 #endif /* _FEATURES_H */

@@ -8,18 +8,18 @@
 
 // TODO: DMA allocations
 
+#include <kernel/compiler_attributes.h>
 #include <stddef.h>
 #include <stdint.h>
 
+#include <kernel/helios.h>
 #include <kernel/spinlock.h>
 #include <mm/page.h>
 #include <util/list.h>
 
-#define MAX_ORDER 10 // 2^10 pages (1024 pages), or 4MiB blocks
+#include "page_alloc_internal.h"
 
-struct free_area {
-	struct list free_list; // Linked list of free blocks
-};
+#define MAX_ORDER 10 // 2^10 pages (1024 pages), or 4MiB blocks
 
 struct buddy_allocator {
 	struct list free_lists[MAX_ORDER + 1]; // One for each order
@@ -32,9 +32,9 @@ struct buddy_allocator {
 /**
  * @brief Initializes the page allocator.
  */
-extern void page_alloc_init();
+void page_alloc_init();
 
-extern void buddy_dump_free_lists();
+void buddy_dump_free_lists();
 
 /**
 * ============================================================
@@ -46,15 +46,6 @@ extern void buddy_dump_free_lists();
 */
 
 /**
- * @brief Allocates a single page, zeros it, and returns its virtual address.
- *
- * @param flags Allocation flags specifying memory constraints.
- *
- * @return the virtual address of the zeroed page, or 0 on failure.
- */
-[[nodiscard]] extern uintptr_t get_free_page(flags_t flags);
-
-/**
  * @brief Allocates a contiguous block of pages, zeros them, and returns their virtual address.
  *
  * @param flags Allocation flags specifying memory constraints.
@@ -62,16 +53,21 @@ extern void buddy_dump_free_lists();
  *
  * @return The virtual address of the first zeroed page, or 0 on failure.
  */
-[[nodiscard]] extern uintptr_t get_free_pages(flags_t flags, size_t pages);
+[[nodiscard]]
+uintptr_t get_free_pages(flags_t flags, size_t pages);
 
 /**
- * @brief Allocates a single page.
+ * @brief Allocates a single page, zeros it, and returns its virtual address.
  *
  * @param flags Allocation flags specifying memory constraints.
  *
- * @return a pointer to the allocated page, or NULL on failure.
+ * @return the virtual address of the zeroed page, or 0 on failure.
  */
-[[nodiscard]] extern struct page* alloc_page(flags_t flags);
+[[nodiscard, gnu::always_inline]]
+static inline uintptr_t get_free_page(flags_t flags)
+{
+	return get_free_pages(flags, 1);
+}
 
 /**
  * @brief Allocates a contiguous block of pages.
@@ -81,7 +77,25 @@ extern void buddy_dump_free_lists();
  *
  * @return a pointer to the first page in the allocated block, or NULL on failure.
  */
-[[nodiscard]] extern struct page* alloc_pages(flags_t flags, size_t order);
+[[nodiscard, gnu::always_inline]]
+static inline struct page* alloc_pages(flags_t flags, size_t order)
+
+{
+	return __alloc_pages_core(&alr, flags, order);
+}
+
+/**
+ * @brief Allocates a single page.
+ *
+ * @param flags Allocation flags specifying memory constraints.
+ *
+ * @return a pointer to the allocated page, or NULL on failure.
+ */
+[[nodiscard, gnu::always_inline]]
+static inline struct page* alloc_page(flags_t flags)
+{
+	return alloc_pages(flags, 0);
+}
 
 /**
  * @brief Allocates a contiguous block of pages and returns their virtual address.
@@ -93,7 +107,8 @@ extern void buddy_dump_free_lists();
  *
  * @return the virtual address of the first page, or 0 on failure.
  */
-[[nodiscard]] extern uintptr_t __get_free_pages(flags_t flags, size_t order);
+[[nodiscard]]
+uintptr_t __get_free_pages(flags_t flags, size_t order);
 
 /**
  * @brief Allocates a single page and returns its virtual address.
@@ -104,7 +119,11 @@ extern void buddy_dump_free_lists();
  *
  * @return the virtual address of the page, or 0 on failure.
  */
-[[nodiscard]] extern uintptr_t __get_free_page(flags_t flags);
+[[nodiscard, gnu::always_inline]]
+static inline uintptr_t __get_free_page(flags_t flags)
+{
+	return __get_free_pages(flags, 0);
+}
 
 /**
 * ============================================================
@@ -116,13 +135,6 @@ extern void buddy_dump_free_lists();
 */
 
 /**
- * @prief Frees a single page from a virtual address.
- *
- * @param addr Virtual address of the page to be freed.
- */
-extern void free_page(void* addr);
-
-/**
  * @brief Frees a block of pages from a virtual address.
  *
  * This function converts the virtual address to a physical address,
@@ -132,18 +144,38 @@ extern void free_page(void* addr);
  * @param addr Virtual address of the first page in the block.
  * @param pages Number of pages to free.
  */
-extern void free_pages(void* addr, size_t pages);
+void free_pages(void* addr, size_t pages);
+
+/**
+ * @brief Frees a single page from a virtual address.
+ *
+ * @param addr Virtual address of the page to be freed.
+ */
+[[gnu::always_inline]]
+static inline void free_page(void* addr)
+{
+	free_pages(addr, 0);
+}
 
 /**
  * @brief Frees a block of pages.
  *
  * @param page Pointer to the first page in the block to be freed.
  */
-extern void __free_pages(struct page* page, unsigned int order);
+[[gnu::always_inline]]
+static inline void __free_pages(struct page* page, size_t order)
+{
+	if (!page) return;
+	__free_pages_core(&alr, page, order);
+}
 
 /**
  * @brief Frees a single page.
  *
  * @page: Pointer to the page to be freed.
  */
-extern void __free_page(struct page* page);
+[[gnu::always_inline]]
+static inline void __free_page(struct page* page)
+{
+	__free_pages(page, 0);
+}

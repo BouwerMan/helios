@@ -42,7 +42,12 @@
 #include <mm/bootmem.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
+
+#undef LOG_LEVEL
+#define LOG_LEVEL 1
+#define FORCE_LOG_REDEF
 #include <util/log.h>
+#undef FORCE_LOG_REDEF
 
 struct page* mem_map;
 
@@ -53,82 +58,126 @@ static size_t total_page_count;
 
 // Number of elements in bitmap
 static size_t map_elems;
+static size_t bitmap_size;
+static uintptr_t boot_bitmap_phys;
 uint64_t* boot_bitmap = NULL;
 #define BITSET_WIDTH (sizeof(uint64_t) * UINT8_WIDTH)
 
-static inline uint64_t get_phys_addr(uint64_t word_offset, uint64_t bit_offset)
+/**
+ * @brief Calculates the physical address from word and bit offsets.
+ *
+ * @param word_offset Offset in the bitmap array (in words).
+ * @param bit_offset Offset within the word (in bits).
+ *
+ * @return The physical address.
+ */
+[[gnu::always_inline]]
+static inline uintptr_t get_phys_addr(size_t word_offset, size_t bit_offset)
 {
-	return (word_offset * (BITSET_WIDTH * UINT8_WIDTH) + bit_offset) * PAGE_SIZE;
+	return (word_offset * BITSET_WIDTH + bit_offset) * PAGE_SIZE;
 }
 
-static inline uint64_t get_word_offset(uint64_t phys_addr)
+/**
+ * @brief Calculates the page index from a physical address.
+ *
+ * @param phys_addr Physical address to calculate the page index for.
+ *
+ * @returns The page index.
+ */
+[[gnu::always_inline]]
+static inline size_t get_page_index(uintptr_t phys_addr)
 {
-	return (phys_addr / PAGE_SIZE) / BITSET_WIDTH;
+	return phys_addr >> PAGE_SHIFT;
 }
 
-static inline uint64_t get_bit_offset(uint64_t phys_addr)
+/**
+ * @brief Calculates the word offset in the bitmap from a physical address.
+ *
+ * @param phys_addr Physical address to calculate the word offset for.
+ *
+ * @returns The word offset.
+ */
+[[gnu::always_inline]]
+static inline size_t get_word_offset(uintptr_t phys_addr)
 {
-	return (phys_addr / PAGE_SIZE) % BITSET_WIDTH;
+	return get_page_index(phys_addr) / BITSET_WIDTH;
 }
 
+/**
+ * @brief Calculates the bit offset within a word from a physical address.
+ *
+ * @param phys_addr Physical address to calculate the bit offset for.
+ *
+ * @return The bit offset.
+ */
+[[gnu::always_inline]]
+static inline size_t get_bit_offset(uintptr_t phys_addr)
+{
+	return get_page_index(phys_addr) % BITSET_WIDTH;
+}
+
+/**
+ * @brief Initializes the bootmem memmory manager and mem_map.
+ *
+ * @param mmap Pointer to the Limine memory map response structure.
+ *
+ * This function performs the following steps:
+ * 1. Calculates the total usable memory and the highest physical address.
+ * 2. Finds a suitable location for the PMM bitmap and maps it to virtual memory.
+ * 3. Initializes the bitmap, marking all pages as allocated.
+ * 4. Marks usable pages as free in the bitmap.
+ * 5. Sets up the memory map structure to track page states.
+ */
 void bootmem_init(struct limine_memmap_response* mmap)
 {
 	log_debug("Reading Memory Map");
-	uint64_t high_addr = 0; // Highest address in the memory map.
-	size_t total_len = 0;	// Total length of usable memory.
-	uintptr_t boot_bitmap_phys = 0;
-
-	// Example:  1. Start Addr: 52000 | Length: 4d000 | Type: 0
+	size_t total_len = 0; // Total length of usable memory.
 
 	// First pass: Calculate the highest address and total usable memory length.
 	for (size_t i = 0; i < mmap->entry_count; i++) {
 		struct limine_memmap_entry* entry = mmap->entries[i];
 		log_debug("%zu. Start Addr: %lx | Length: %lx | Type: %lu", i, entry->base, entry->length, entry->type);
 		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
-		high_addr = entry->base + entry->length;
+
+		/**
+		 * NOTE: According to the limine protocol:
+		 * The entries are guaranteed to be sorted by base address, lowest to highest.
+		 * Usable and bootloader reclaimable entries are guaranteed to be 4096 byte aligned for both base and length.
+		 */
+
+		uintptr_t end = entry->base + entry->length;
 		total_len += entry->length;
-		uintptr_t start = align_up_page(entry->base);
-		uintptr_t end = align_down_page(entry->base + entry->length);
-		size_t first_pfn = start >> PAGE_SHIFT;
-		size_t last_pfn = (end - PAGE_SIZE) >> PAGE_SHIFT;
-		max_pfn = last_pfn;
+		max_pfn = (end - PAGE_SIZE) >> PAGE_SHIFT;
 	}
+	log_debug("Highest address: 0x%lx, Total memory length: %zx", pfn_to_phys(max_pfn + 1), total_len);
 
-	// Calculate the size of the bitmap in bytes and entries.
-	// size_t bitmap_size_bytes = high_addr / PAGE_SIZE / UINT8_WIDTH;
-	// bitmap_size = bitmap_size_bytes / sizeof(uint64_t);
-	// total_page_count = bitmap_size * BITSET_WIDTH;
-	// log_debug("Highest address: 0x%lx, Total memory length: %zx, requires a %zu byte bitmap", high_addr, total_len,
-	// 	  bitmap_size_bytes);
+	bitmap_size = CEIL_DIV(max_pfn - min_pfn, (pfn_t)8);
+	map_elems = bitmap_size / sizeof(boot_bitmap[0]);
+	log_debug("min_pfn: %lu, max_pfn: %lu, mapsize: %zu, map_elems: %zu", min_pfn, max_pfn, bitmap_size, map_elems);
 
-	size_t mapsize = ((max_pfn - min_pfn) + 7) / 8;
-	map_elems = mapsize / sizeof(boot_bitmap[0]);
-	log_debug("min_pfn: %lu, max_pfn: %lu, mapsize: %zu, map_elems: %zu", min_pfn, max_pfn, mapsize, map_elems);
 	// Second pass: Find a suitable location for the bitmap.
 	for (size_t i = 0; i < mmap->entry_count; i++) {
 		struct limine_memmap_entry* entry = mmap->entries[i];
-
 		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
 
 		// Check if the memory region is large enough to hold the bitmap.
-		if (!(entry->length > mapsize)) continue;
+		if (!(entry->length > bitmap_size)) continue;
 		log_debug("Found valid location for bitmap at mmap entry: %zu, base: 0x%lx, length: %lu", i,
 			  entry->base, entry->length);
 
-		// Align the base address.
-		boot_bitmap_phys = align_up_page(entry->base);
+		boot_bitmap_phys = entry->base;
 		// Map to virtual memory.
-		boot_bitmap = (uint64_t*)(boot_bitmap_phys + HHDM_OFFSET);
+		boot_bitmap = (uint64_t*)PHYS_TO_HHDM(boot_bitmap_phys);
 		break;
 	}
 
 	// Ensure a valid location for the bitmap was found.
-	if (boot_bitmap_phys == 0 || boot_bitmap == NULL) {
+	if (!boot_bitmap_phys || !boot_bitmap) {
 		panic("Could not find valid location for memory bitmap");
 	}
 
-	log_debug("Located valid PMM bitmap location");
-	log_debug("Putting bitmap at location: 0x%lx, HHDM_OFFSET: 0x%lx", (uint64_t)boot_bitmap, HHDM_OFFSET);
+	log_debug("Located valid PMM bitmap location at: 0x%lx", boot_bitmap_phys);
+	log_debug("Mapped bitmap to virtual memory at: %p", (void*)boot_bitmap);
 
 	// Initialize the bitmap: Mark all pages as allocated.
 	memset64(boot_bitmap, UINT64_MAX, map_elems);
@@ -140,33 +189,34 @@ void bootmem_init(struct limine_memmap_response* mmap)
 
 		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
 
-		uint64_t start = align_up_page(entry->base);		     // Align the start address.
-		uint64_t end = align_down_page(entry->base + entry->length); // Align the end address.
+		uint64_t start = entry->base;
+		uint64_t end = entry->base + entry->length;
 
 		for (uint64_t addr = start; addr < end; addr += PAGE_SIZE) {
 			// Skip pages that overlap with the bitmap itself.
-			if (addr >= boot_bitmap_phys && addr < (boot_bitmap_phys + mapsize)) continue;
-			uint64_t page_index = addr / PAGE_SIZE;
-			uint64_t word_index = page_index / BITSET_WIDTH;
-			uint64_t bit_offset = page_index % BITSET_WIDTH;
+			if (addr >= boot_bitmap_phys && addr < (boot_bitmap_phys + bitmap_size)) continue;
+			uint64_t word_index = get_word_offset(addr);
+			uint64_t bit_offset = get_bit_offset(addr);
 
 			// Mark as free
 			boot_bitmap[word_index] &= ~(1ULL << bit_offset);
 			free_page_count++;
 		}
 	}
+
 	// TODO: Invert mem_map and bitmap init order, that way when we free the bitmap we have less fragmentation
 
 	// Setup the mem_map
 	total_page_count = max_pfn - min_pfn;
 	size_t mem_map_size = total_page_count * sizeof(struct page);
 	size_t req_pages = CEIL_DIV(mem_map_size, PAGE_SIZE);
+
 	log_debug("mem_map_size: %zu, req_pages: %zu", mem_map_size, req_pages);
 	mem_map = (void*)PHYS_TO_HHDM(bootmem_alloc_contiguous(req_pages));
 	if (!mem_map) {
 		panic("Could not allocate mem_map");
 	}
-	log_debug("Somehow allocated mem_map at: %p", (void*)mem_map);
+
 	memset(mem_map, 0, mem_map_size);
 
 	for (pfn_t pfn = 0; pfn < max_pfn; pfn++) {
@@ -178,16 +228,8 @@ void bootmem_init(struct limine_memmap_response* mmap)
 			atomic_set(&pg->ref_count, 1);
 		} else { /* Page is free */
 			atomic_set(&pg->ref_count, 0);
-			// pg->state = BLOCK_FREE;
 		}
 	}
-
-#ifdef __KDEBUG__
-	// This is a known reserved area, so we are just checking we set the flags right
-	size_t test_pfn = boot_bitmap_phys >> PAGE_SHIFT;
-	log_debug("Page %zu flags: %lx, ref_count: %d", test_pfn, mem_map[test_pfn].flags,
-		  atomic_read(&mem_map[test_pfn].ref_count));
-#endif
 }
 
 /**
@@ -202,6 +244,11 @@ void bootmem_init(struct limine_memmap_response* mmap)
  */
 void* bootmem_alloc_page(void)
 {
+	if (!boot_bitmap) {
+		log_error("boot_bitmap is not initialized or has already been decommissioned");
+		return NULL;
+	}
+
 	for (size_t word = 0; word < map_elems; word++) {
 		// Skip fully used words in the bitmap
 		if (boot_bitmap[word] == UINT64_MAX) continue;
@@ -229,7 +276,13 @@ void* bootmem_alloc_page(void)
  */
 void bootmem_free_page(void* addr)
 {
-	if (addr == NULL) return;
+	if (!boot_bitmap) {
+		log_error("boot_bitmap is not initialized or has already been decommissioned");
+		return;
+	}
+
+	if (!addr) return;
+
 	uint64_t phys_addr = (uint64_t)addr;
 	uint64_t word_offset = get_word_offset(phys_addr);
 	uint64_t bit_offset = get_bit_offset(phys_addr);
@@ -251,10 +304,16 @@ void bootmem_free_page(void* addr)
  */
 void* bootmem_alloc_contiguous(size_t count)
 {
-	if (count == 0) {
-		log_warn("count cannot be 0");
+	if (!boot_bitmap) {
+		log_error("boot_bitmap is not initialized or has already been decommissioned");
 		return NULL;
 	}
+
+	if (count == 0) {
+		log_error("count cannot be 0");
+		return NULL;
+	}
+
 	size_t cont_start = SIZE_MAX;
 	size_t cont_len = 0;
 	for (size_t i = 0; i < total_page_count; i++) {
@@ -297,6 +356,11 @@ allocate_page:
  */
 void bootmem_free_contiguous(void* addr, size_t count)
 {
+	if (!boot_bitmap) {
+		log_error("boot_bitmap is not initialized or has already been decommissioned");
+		return;
+	}
+
 	uint64_t page_index = (uint64_t)addr / PAGE_SIZE;
 	if (page_index >= total_page_count) {
 		log_error("Attempted to free page out of bounds: %lu", page_index);
@@ -311,29 +375,53 @@ void bootmem_free_contiguous(void* addr, size_t count)
 	free_page_count += count;
 }
 
+/**
+ * @brief Checks if a physical page is marked as used in the boot allocator bitmap.
+ *
+ * @param phys_addr Physical address of the page to check.
+ *
+ * This function determines whether a physical page is marked as used by inspecting
+ * the corresponding bit in the boot allocator bitmap. The bitmap tracks the allocation
+ * state of physical pages during the boot process.
+ *
+ * @returns true if the page is marked as used, false otherwise.
+ */
 bool bootmem_page_is_used(uintptr_t phys_addr)
 {
-	uintptr_t page_index = phys_addr >> PAGE_SHIFT;
-	uintptr_t word_offset = page_index / BITSET_WIDTH;
-	uintptr_t bit_offset = page_index % BITSET_WIDTH;
+	if (!boot_bitmap) {
+		log_error("boot_bitmap is not initialized or has already been decommissioned");
+		return true;
+	}
+
+	uintptr_t word_offset = get_word_offset(phys_addr);
+	uintptr_t bit_offset = get_bit_offset(phys_addr);
 
 	return ((boot_bitmap[word_offset] & (1ULL << bit_offset)) != 0);
 }
 
-// Free all pages managed by the boot allocator
-void bootmem_free_all()
+/**
+ * @brief Frees all pages managed by the boot allocator.
+ *
+ * This function decommissions the boot allocator by freeing all pages it manages.
+ * It performs the following steps:
+ * 1. Iterates through all physical pages tracked by the boot allocator and frees
+ *    those that are not marked as used.
+ * 2. Frees the memory used by the boot allocator bitmap itself.
+ * 3. Logs the decommissioning process for debugging purposes.
+ *
+ * @note: This function should only be called when the boot allocator is no longer needed.
+ * @note: We assume that all pages allocated by the boot allocator are critical and should NEVER be deallocated.
+ */
+void bootmem_free_all(void)
 {
-	// For testing, I will allocate a couple of pages in the bitmap, then send them to the buddy allocator
-	// void* page1 = bootmem_alloc_page();
-	// void* page2 = bootmem_alloc_page();
-	// pfn_t pfn1 = phys_to_pfn((uintptr_t)page1);
-	// pfn_t pfn2 = phys_to_pfn((uintptr_t)page2);
-	//
-	// log_debug("Freeing page %p (%zu) and %p (%zu)", page1, pfn1, page2, pfn2);
-	//
-	// __free_page(&mem_map[pfn1]);
-	// __free_page(&mem_map[pfn2]);
+	if (!boot_bitmap) {
+		log_error("boot_bitmap is not initialized or has already been decommissioned");
+		return;
+	}
 
+	log_info("Decommissioning old bootmem allocator");
+
+	// Free all pages not marked as used in the boot allocator bitmap.
 	for (pfn_t pfn = min_pfn; pfn < max_pfn + min_pfn; pfn++) {
 		uintptr_t page_phys = pfn_to_phys(pfn);
 		if (bootmem_page_is_used(page_phys)) continue;
@@ -345,23 +433,22 @@ void bootmem_free_all()
 
 		__free_page(page);
 	}
-	log_debug("Freed all old allocator memory");
-	// for (size_t word = 0; word < map_elems; word++) {
-	// 	// Skip fully used words in the bitmap
-	// 	if (boot_bitmap[word] == UINT64_MAX) continue;
-	//
-	// 	for (size_t bit = 0; bit < BITSET_WIDTH; bit++) {
-	// 		int used = boot_bitmap[word] & bit;
-	// 		if (used == 0) continue;
-	// 		phys_to_page()
-	// 	}
-	// 	// Find the first free bit in the word
-	// 	int bit = __builtin_ffsll(~(int64_t)boot_bitmap[word]) - 1;
-	// 	// bit can be -1 if ffsll is called with all allocated
-	// 	if (bit < 0) continue;
-	// 	boot_bitmap[word] |= (1ULL << bit); // Set page as used
-	//
-	// 	free_page_count--;
-	// 	return (void*)get_phys_addr(word, (uint64_t)bit);
-	// }
+
+	log_debug("Freed all old allocator memory, freeing bootmem bitmap");
+
+	// Free the memory used by the boot allocator bitmap.
+	for (uintptr_t phys = boot_bitmap_phys; phys < boot_bitmap_phys + bitmap_size; phys += PAGE_SIZE) {
+		pfn_t pfn = phys_to_pfn(phys);
+		struct page* page = &mem_map[pfn];
+
+		clear_page_reserved(page);
+		set_page_buddy(page);
+		page->state = BLOCK_FREE;
+
+		__free_page(page);
+	}
+
+	boot_bitmap = NULL;
+
+	log_debug("Successfully decommissioned old bootmem allocator");
 }

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include <kernel/compiler_attributes.h>
 #include <kernel/types.h>
 #include <limine.h>
 #include <util/list.h>
@@ -68,30 +69,6 @@
 
 #define BOCHS_BREAKPOINT (asm volatile("xchgw %bx, %bx"))
 #define QEMU_BREAKPOINT	 (__asm__ volatile("jmp $"))
-
-// Bunch of attribute defines
-
-#define __packed __attribute__((packed))
-
-/**
- * Means that the return value is solely a function of the arguments,
- * and if any of the arguments are pointers, then the pointers must not be dereferenced.
- */
-#define __attribute_const __attribute__((const))
-
-/**
-* Means that the function has no side effects and the value returned
-* depends on the arguments and the state of global variables.
-*/
-#define __pure __attribute__((pure))
-
-#if __has_attribute(__fallthrough__)
-#define fallthrough __attribute__((__fallthrough__))
-#else
-#define fallthrough \
-	do {        \
-	} while (0) /* fallthrough */
-#endif
 
 static inline void halt()
 {

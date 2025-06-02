@@ -27,29 +27,26 @@
 // This does mean that consecutive allocs and frees may give different results.
 // Maybe I should make it not do thet?
 
+// FIXME: We never use anything other than BLOCK_FREE and BLOCK_ALLOCATED.
+// And we only check for BLOCK_FREE.
+
 #include <stdint.h>
 #include <string.h>
 
+#include <kernel/helios.h>
 #include <kernel/kmath.h>
 #include <kernel/spinlock.h>
 #include <mm/bootmem.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 
-#ifndef __VMM_DEBUG__
 #undef LOG_LEVEL
-#define LOG_LEVEL 0
+#define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
 #include <util/log.h>
 #undef FORCE_LOG_REDEF
-#else
-#include <util/log.h>
-#endif
 
-static struct free_area free_areas[MAX_ORDER];
-static struct buddy_allocator alr = { 0 };
-
-static void combine_blocks(struct buddy_allocator* allocator, struct page* page, size_t order);
+struct buddy_allocator alr = { 0 };
 
 void buddy_dump_free_lists()
 {
@@ -82,8 +79,8 @@ void page_alloc_init()
 	spinlock_init(&alr.lock);
 	spinlock_acquire(&alr.lock);
 
-	for (size_t i = 0; i <= MAX_ORDER; i++) {
-		list_init(&alr.free_lists[i]);
+	for (size_t order = 0; order <= MAX_ORDER; order++) {
+		list_init(&alr.free_lists[order]);
 	}
 	alr.max_order = MAX_ORDER;
 	alr.min_order = 0;
@@ -93,14 +90,45 @@ void page_alloc_init()
 	bootmem_free_all();
 }
 
-static inline pfn_t get_buddy_idx(pfn_t pfn, size_t order)
+[[gnu::always_inline]]
+static inline pfn_t parent_pfn(pfn_t pfn, size_t order)
+{
+	return pfn & ~((1UL << (order + 1UL)) - 1UL);
+}
+
+[[gnu::always_inline]]
+static inline pfn_t left_child_pfn(pfn_t pfn, size_t order)
+{
+	(void)order;
+	return pfn;
+}
+
+[[gnu::always_inline]]
+static inline pfn_t right_child_pfn(pfn_t pfn, size_t order)
+{
+	return pfn + (1UL << (order - 1UL));
+}
+
+[[gnu::always_inline]]
+static inline pfn_t buddy_pfn(pfn_t pfn, size_t order)
 {
 	return pfn ^ (1UL << order);
 }
 
-#define LEFT_CHILD(pfn, order)	(pfn)
-#define RIGHT_CHILD(pfn, order) ((pfn) + (1 << (order - 1)))
-
+/**
+ * @brief Recursively splits a memory block until it reaches the target order.
+ *
+ * @param allocator Pointer to the buddy allocator structure.
+ * @param page Pointer to the page representing the current memory block.
+ * @param current_order The current order of the memory block.
+ * @param target_order The desired order to split the block down to.
+ *
+ * This function recursively splits a memory block into smaller blocks until the block
+ * reaches the desired order. It updates the state and order of the parent and child blocks,
+ * adds the right child to the free list, and always recurses with the left child.
+ *
+ * @return A pointer to the page representing the allocated block at the target order.
+ */
 static struct page* split_until_order(struct buddy_allocator* allocator, struct page* page, size_t current_order,
 				      size_t target_order)
 {
@@ -111,36 +139,51 @@ static struct page* split_until_order(struct buddy_allocator* allocator, struct 
 		clear_page_buddy(page);
 		return page;
 	}
-	pfn_t parent_pfn = page_to_pfn(page);
-	log_debug("pfn: %zu, left child: %zu, right child: %zu", parent_pfn, LEFT_CHILD(parent_pfn, current_order),
-		  RIGHT_CHILD(parent_pfn, current_order));
+
+	pfn_t prnt_pfn = page_to_pfn(page);
+	pfn_t left_pfn = left_child_pfn(prnt_pfn, current_order);
+	pfn_t right_pfn = right_child_pfn(prnt_pfn, current_order);
+	log_debug("Splitting block: parent pfn: %zu, left pfn: %zu, right pfn: %zu", prnt_pfn, left_pfn, right_pfn);
 
 	// Split the block into two children
-	struct page* left = &mem_map[parent_pfn];
-	struct page* right = &mem_map[parent_pfn + (1 << (current_order - 1))];
+	struct page* left = &mem_map[left_pfn];
+	struct page* right = &mem_map[right_pfn];
 
+	// Update states and orders
 	page->state = BLOCK_SPLIT;
 	page->order = (uint8_t)current_order;
 
 	left->state = BLOCK_SPLIT;
-	left->order = (uint8_t)current_order - 1;
+	left->order = (uint8_t)(current_order - 1);
 
 	right->state = BLOCK_FREE;
-	right->order = (uint8_t)current_order - 1;
+	right->order = (uint8_t)(current_order - 1);
 
 	// Add the right child to the free list
-	log_debug("Inserting right child (pfn: %lx, order: %u) into free list", page_to_pfn(right), right->order);
 	list_append(&allocator->free_lists[right->order], &right->list);
 
-	log_debug("Split block pfn: %zu -> left pfn: %zu (%lx), right pfn: %zu (%lx)", parent_pfn, parent_pfn,
-		  pfn_to_phys(parent_pfn), parent_pfn + (1 << (current_order - 1)),
-		  pfn_to_phys(parent_pfn + (1 << (current_order - 1))));
+	log_debug("Split block pfn: %zu -> left pfn: %zu (%lx), right pfn: %zu (%lx)", prnt_pfn, left_pfn,
+		  pfn_to_phys(left_pfn), right_pfn, pfn_to_phys(right_pfn));
 
 	// We always recurse with the left child
 	return split_until_order(allocator, left, left->order, target_order);
 }
 
-static struct page* __alloc_pages_core(struct buddy_allocator* allocator, flags_t flags, size_t order)
+/**
+ * @brief Allocates pages from the buddy allocator.
+ *
+ * @param allocator Pointer to the buddy allocator structure.
+ * @param flags Allocation flags (currently unused).
+ * @param order The order of the pages to allocate.
+ *
+ * This function attempts to allocate pages of the specified order from the buddy allocator.
+ * It iterates through the free lists starting from the requested order up to the maximum order.
+ * If a free block is found, it is either allocated directly or split recursively to match the
+ * desired order. Invalid blocks are removed from the free list to maintain consistency.
+ *
+ * @return A pointer to the allocated page structure, or NULL if allocation fails.
+ */
+struct page* __alloc_pages_core(struct buddy_allocator* allocator, flags_t flags, size_t order)
 {
 	(void)flags;
 	if (order >= allocator->max_order) {
@@ -149,10 +192,9 @@ static struct page* __alloc_pages_core(struct buddy_allocator* allocator, flags_
 	}
 	log_debug("Allocating pages with order: %zu", order);
 
-	// Iterate from min requested order to largest possible
+	// Iterate from requested order to largest possible
 	for (size_t i = order; i <= allocator->max_order; i++) {
 		struct list* order_list = &allocator->free_lists[i];
-		log_debug("Trying order %zu free list", i);
 		if (list_empty(order_list)) {
 			log_debug("Free list for order %zu is empty", i);
 			continue;
@@ -178,9 +220,8 @@ static struct page* __alloc_pages_core(struct buddy_allocator* allocator, flags_
 
 		log_debug("Found free block at pfn: %lx (order %u)", page_to_pfn(pg), pg->order);
 
-		// Remove it from the list and mark it as split if needed
+		// Remove it from the list
 		list_remove(&pg->list);
-		if (pg->order > order) pg->state = BLOCK_SPLIT;
 
 		// Now we split recursively until we reach the desired order
 		struct page* split_block = split_until_order(allocator, pg, pg->order, order);
@@ -189,22 +230,12 @@ static struct page* __alloc_pages_core(struct buddy_allocator* allocator, flags_
 			log_debug("Successfully allocated block at pfn: %lx (order %zu)", page_to_pfn(split_block),
 				  order);
 		} else {
-			log_warn("Failed to split block for order %zu", order);
+			log_error("Failed to split block for order %zu", order);
 		}
 
 		return split_block;
 	}
 	return NULL;
-}
-
-struct page* alloc_page(flags_t flags)
-{
-	return alloc_pages(flags, 0);
-}
-
-struct page* alloc_pages(flags_t flags, size_t order)
-{
-	return __alloc_pages_core(&alr, flags, order);
 }
 
 uintptr_t __get_free_pages(flags_t flags, size_t order)
@@ -217,11 +248,6 @@ uintptr_t __get_free_pages(flags_t flags, size_t order)
 
 	uintptr_t page_phys = page_to_phys(pg);
 	return PHYS_TO_HHDM(page_phys);
-}
-
-uintptr_t __get_free_page(flags_t flags)
-{
-	return __get_free_pages(flags, 0);
 }
 
 uintptr_t get_free_pages(flags_t flags, size_t pages)
@@ -237,76 +263,71 @@ uintptr_t get_free_pages(flags_t flags, size_t pages)
 	return page_virt;
 }
 
-uintptr_t get_free_page(flags_t flags)
-{
-	return get_free_pages(flags, 0);
-}
-
+/**
+ * @brief Coalesces free memory blocks into larger blocks.
+ *
+ * @param allocator Pointer to the buddy allocator structure.
+ * @param page Pointer to the page structure representing the current block.
+ * @param order The order of the current block.
+ *
+ * This function attempts to combine adjacent free blocks of the same order
+ * into a larger block of the next order. It recursively continues this process
+ * until no further coalescing is possible or the maximum order is reached.
+ *
+ * Steps:
+ * 1. Mark the current block as free and add it to the free list.
+ * 2. Check if the buddy block is free and of the same order.
+ * 3. If coalescing is possible, remove both blocks from the free list,
+ *    mark them as invalid, and recursively combine them into a parent block.
+ */
 static void combine_blocks(struct buddy_allocator* allocator, struct page* page, size_t order)
 {
-	// First we mark the block as free
-
-	size_t total_pages = 1UL << order;
+	// Mark the block as free and initialize its state
 	pfn_t init_pfn = page_to_pfn(page);
-
-	// NOTE: I am just going to set the first page buddy for now, in the future I may have to mark more depending on (?)
 	set_page_buddy(page);
-
-	// // Go through each page and set PG_BUDDY so we know it is "free" and we contol it
-	// // NOTE: No clue if this is required????
-	// for (pfn_t pfn = init_pfn; pfn < init_pfn + total_pages; pfn++) {
-	// 	struct page* pg = &mem_map[pfn];
-	// 	set_page_buddy(pg);
-	// }
-
-	// Set the order of the first page of the block
 	page->order = (uint8_t)order;
 	page->state = BLOCK_FREE;
 
+	// Add the block to the free list
 	list_append(&allocator->free_lists[order], &page->list);
 
-	// log_debug("Found block at addr %lx with idx: %zu, current order %zu", pfn_to_phys(init_pfn), init_pfn, order);
 	// If we are already at the highest order we have freed everything
 	// NOTE: This HAS to come after the freeing above
 	if (order >= allocator->max_order) {
-		// log_debug("Reached map order (%zu) for page: %lx", order, init_pfn);
 		return;
 	}
 
 	// Get the buddy
-	pfn_t buddy_idx = get_buddy_idx(init_pfn, order);
-	struct page* buddy = &mem_map[buddy_idx];
-	// log_debug("Found buddy with pfn: %zu, state: %hhx, order: %hhx, next: %lx, prev: %lx", buddy_idx, buddy->state,
-	// 	  buddy->order, (uintptr_t)buddy->list.next, (uintptr_t)buddy->list.prev);
-	// Add to free list if needed (orphaned)
-	// FIXME: This doesn't do what I think it does
-	if ((buddy->state == BLOCK_INVALID) && page_buddy(buddy)) {
-		log_debug("Buddy %zu not on free list for order %zu, adding...", buddy_idx, order);
-		buddy->state = BLOCK_FREE;
-		set_page_buddy(buddy);
-		list_append(&allocator->free_lists[order], &buddy->list);
-	}
+	pfn_t bdy_pfn = buddy_pfn(init_pfn, order);
+	struct page* buddy = &mem_map[bdy_pfn];
+
 	// Check if coalescing is possible
 	if (buddy->state == BLOCK_FREE && buddy->order == page->order) {
-		// log_debug("Coalescing block idx %zu with buddy idx %zu", init_pfn, buddy_idx);
 		// Remove both blocks from the free lists and mark them as invalid
 		list_remove(&page->list);
 		list_remove(&buddy->list);
 		page->state = BLOCK_INVALID;
 		buddy->state = BLOCK_INVALID;
 
-		// Only need to setup the order for the parent,
-		// the first stage of this function will handle the rest during recursion
-		// TODO: Document this
-		size_t parent_pfn = init_pfn & ~((1 << (order + 1)) - 1);
-		struct page* parent = &mem_map[parent_pfn];
-		// log_debug("parent addr: %lx, parent idx: %zu, parent order: %u (size=%zu)", pfn_to_phys(parent_pfn),
-		// 	  parent_pfn, parent->order, 1UL << (size_t)parent->order);
+		size_t prnt_pfn = parent_pfn(init_pfn, order);
+		struct page* parent = &mem_map[prnt_pfn];
+
 		combine_blocks(allocator, parent, order + 1);
 	}
 }
 
-static void buddy_free(struct buddy_allocator* allocator, struct page* page, size_t order)
+/**
+ * @brief Frees pages back to the buddy allocator.
+ *
+ * @param allocator Pointer to the buddy allocator structure.
+ * @param page Pointer to the page structure representing the block to free.
+ * @param order The order of the block being freed.
+ *
+ * This function frees a block of memory back to the buddy allocator. It acquires
+ * the allocator's spinlock to ensure thread safety, combines adjacent free blocks
+ * to maintain the buddy system's structure, and then releases the spinlock.
+ */
+void __free_pages_core(struct buddy_allocator* allocator, struct page* page, size_t order)
 {
 	spinlock_acquire(&allocator->lock);
 
@@ -315,20 +336,26 @@ static void buddy_free(struct buddy_allocator* allocator, struct page* page, siz
 	spinlock_release(&allocator->lock);
 }
 
-void __free_pages(struct page* page, unsigned int order)
-{
-	if (!page) return;
-	buddy_free(&alr, page, order);
-}
-
-void __free_page(struct page* page)
-{
-	__free_pages(page, 0);
-}
-
+/**
+ * @brief Frees a specified number of pages starting at a given address.
+ * @param addr The virtual address of the first page to free.
+ * @param pages The number of pages to free.
+ *
+ * This function releases memory pages back to the system. It calculates
+ * the physical address corresponding to the virtual address, determines
+ * the page structure, and computes the order of pages to free based on
+ * the rounded size. The pages are then freed using the __free_pages function.
+ *
+ * If the provided address is NULL, the function returns immediately without
+ * performing any operations.
+ */
 void free_pages(void* addr, size_t pages)
 {
 	if (!addr) return;
+	if ((uintptr_t)addr & ~PAGE_MASK) {
+		log_error("Address %p is not page-aligned", addr);
+		return;
+	}
 
 	uintptr_t page_virt = HHDM_TO_PHYS((uintptr_t)addr);
 	struct page* page = &mem_map[phys_to_pfn(page_virt)];
@@ -337,9 +364,4 @@ void free_pages(void* addr, size_t pages)
 	size_t order = (size_t)log2(rounded_size);
 
 	__free_pages(page, order);
-}
-
-void free_page(void* addr)
-{
-	free_pages(addr, 0);
 }
