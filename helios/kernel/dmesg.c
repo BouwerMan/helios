@@ -21,6 +21,7 @@
 
 #include <drivers/serial.h>
 #include <kernel/dmesg.h>
+#include <kernel/panic.h>
 #include <kernel/screen.h>
 #include <kernel/spinlock.h>
 #include <kernel/tasks/scheduler.h>
@@ -63,25 +64,41 @@ void dmesg_enqueue(const char* str, size_t len)
 	dmesg_wake();
 }
 
+void dmesg_flush(void)
+{
+	spinlock_acquire(&log_lock);
+
+	while (log_head != log_tail) {
+		char c = log_buffer[log_tail];
+		log_tail = (log_tail + 1) % DMESG_BUFFER_SIZE;
+		spinlock_release(&log_lock);
+
+		// output
+		write_serial(c);
+		screen_putchar(c);
+
+		spinlock_acquire(&log_lock);
+	}
+
+	spinlock_release(&log_lock);
+}
+
+void dmesg_flush_raw(void)
+{
+	while (log_head != log_tail) {
+		char c = log_buffer[log_tail];
+		log_tail = (log_tail + 1) % DMESG_BUFFER_SIZE;
+
+		write_serial(c);
+		screen_putchar(c);
+	}
+}
+
 // TODO: Some sort of flush mechanism at the very lest flush to serial
 void dmesg_task_entry(void)
 {
 	while (1) {
-		spinlock_acquire(&log_lock);
-
-		while (log_head != log_tail) {
-			char c = log_buffer[log_tail];
-			log_tail = (log_tail + 1) % DMESG_BUFFER_SIZE;
-			spinlock_release(&log_lock);
-
-			// output
-			write_serial(c);
-			screen_putchar(c);
-
-			spinlock_acquire(&log_lock);
-		}
-
-		spinlock_release(&log_lock);
+		dmesg_flush();
 		dmesg_wait();
 	}
 }

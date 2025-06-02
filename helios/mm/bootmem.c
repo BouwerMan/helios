@@ -37,7 +37,7 @@
 
 #include <kernel/atomic.h>
 #include <kernel/helios.h>
-#include <kernel/sys.h>
+#include <kernel/panic.h>
 #include <limine.h>
 #include <mm/bootmem.h>
 #include <mm/page.h>

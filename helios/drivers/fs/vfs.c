@@ -24,8 +24,8 @@
 #include <drivers/fs/fat.h>
 #include <drivers/fs/vfs.h>
 #include <kernel/liballoc.h>
-#include <kernel/memory/slab.h>
-#include <kernel/sys.h>
+#include <kernel/panic.h>
+#include <mm/slab.h>
 
 #include <util/ht.h>
 #include <util/log.h>

@@ -22,10 +22,10 @@
 #include <string.h>
 
 #include <kernel/liballoc.h>
-#include <kernel/memory/slab.h>
-#include <kernel/sys.h>
+#include <kernel/panic.h>
 #include <kernel/tasks/scheduler.h>
 #include <mm/page_alloc.h>
+#include <mm/slab.h>
 #include <util/list.h>
 #include <util/log.h>
 

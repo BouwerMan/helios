@@ -25,13 +25,13 @@
 #include <kernel/dmesg.h>
 #include <kernel/helios.h>
 #include <kernel/liballoc.h>
-#include <kernel/memory/slab.h>
+#include <kernel/panic.h>
 #include <kernel/screen.h>
-#include <kernel/sys.h>
 #include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
 #include <limine.h>
 #include <mm/bootmem.h>
+#include <mm/slab.h>
 
 #include <mm/page_alloc.h>
 #include <util/log.h>
@@ -206,11 +206,14 @@ void kernel_main(void)
 	size_t slab_bytes = test_cache.slab_size_pages * PAGE_SIZE;
 	size_t mask = ~(slab_bytes - 1);
 	log_debug("Slab base for data: %lx", (uintptr_t)data & mask);
+	slab_dump_stats(&test_cache);
 	slab_free(&test_cache, data2);
 
 	slab_cache_destroy(&test_cache);
-	slab_alloc(&test_cache);
+	(void)slab_alloc(&test_cache);
+	slab_dump_stats(&test_cache);
 
+	// kassert(false == true && "This is a test assertion, it should fail");
 	// We're done, just hang...
 	log_debug("Sleeping for 1 second");
 	// TODO: sleep kinda borked again (can't really tell)

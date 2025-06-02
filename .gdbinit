@@ -3,7 +3,8 @@ target remote localhost:1234
 
 set print pretty on
 
-break read_dma
+break panic
+break __kassert_fail
 # break bootmem_free_all
 c
 

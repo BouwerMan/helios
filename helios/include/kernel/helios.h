@@ -8,6 +8,10 @@
 #include <limine.h>
 #include <util/list.h>
 
+/* Kernel Strings */
+#define KERNEL_NAME    "HELIOS"
+#define KERNEL_VERSION "0.0.0"
+
 /// Macros
 
 /**

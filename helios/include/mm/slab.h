@@ -22,18 +22,29 @@ enum slab_cache_flags {
 
 // TODO: locks and shit
 struct slab_cache {
+	// Metadata for the slab cache
 	size_t object_size;
 	size_t object_align;
 	size_t slab_size_pages;
 	size_t objects_per_slab;
 	size_t header_size;
 	enum slab_cache_flags flags;
+
+	// Free lists of slabs
 	struct list empty;
 	struct list partial;
 	struct list full;
 	struct list cache_node;
+
+	// Object lifecycle management
 	void (*constructor)(void*);
 	void (*destructor)(void*);
+
+	// Statistics
+	size_t total_slabs;   // Number of active slabs
+	size_t total_objects; // Total number of objects managed by all slabs
+	size_t used_objects;  // Currently allocated (live) objects
+
 	char name[MAX_CACHE_NAME_LEN];
 };
 
@@ -44,8 +55,11 @@ struct slab {
 	void** free_stack;
 };
 
-[[nodiscard]] int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_size, size_t object_align,
-				  void (*constructor)(void*), void (*destructor)(void*));
+[[nodiscard]]
+int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_size, size_t object_align,
+		    void (*constructor)(void*), void (*destructor)(void*));
+[[nodiscard, gnu::malloc]]
 void* slab_alloc(struct slab_cache* cache);
 void slab_free(struct slab_cache* cache, void* object);
 void slab_cache_destroy(struct slab_cache* cache);
+void slab_dump_stats(struct slab_cache* cache);

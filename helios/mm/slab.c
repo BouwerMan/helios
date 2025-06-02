@@ -21,19 +21,47 @@
 
 #include <string.h>
 
+#include <arch/x86_64/cache.h>
 #include <kernel/liballoc.h>
-#include <kernel/memory/slab.h>
+#include <kernel/panic.h>
 #include <mm/page_alloc.h>
+#include <mm/slab.h>
 #include <util/log.h>
 
-[[nodiscard]] static int slab_grow(struct slab_cache* cache);
+// TODO: Implmement redzone
+#define POISON_PATTERN	  0x5A
+#define POISON_BYTE_COUNT 16 // Number of bytes to verify at head/tail
+
+#if SLAB_DEBUG
+static void slab_assert_poison(const void* obj, size_t size)
+{
+	const uint8_t* byte_ptr = (const uint8_t*)obj;
+
+	// How many bytes to check at head and tail?
+	size_t check_len = POISON_BYTE_COUNT;
+	if (check_len * 2 > size) {
+		check_len = size / 2; // round down if not enough space
+	}
+
+	for (size_t i = 0; i < check_len; i++) {
+		kassert(byte_ptr[i] == POISON_PATTERN && "Use-before-init detected at start of object");
+		kassert(byte_ptr[size - 1 - i] == POISON_PATTERN && "Use-before-init detected at end of object");
+	}
+}
+#endif
+
+[[nodiscard]]
+static int slab_grow(struct slab_cache* cache);
+
 static void destroy_slab(struct slab* slab);
 
+[[nodiscard, gnu::malloc, gnu::always_inline]]
 static inline void* slab_alloc_pages(size_t pages)
 {
 	return (void*)get_free_pages(0, pages);
 }
 
+[[gnu::always_inline]]
 static inline void slab_free_pages(void* addr, size_t pages)
 {
 	free_pages(addr, pages);
@@ -52,11 +80,12 @@ static inline void slab_free_pages(void* addr, size_t pages)
  * @param cache         Pointer to an uninitialized slab_cache structure to set up.
  * @param name          Human-readable identifier for this cache (max length MAX_CACHE_NAME_LEN).
  * @param object_size   Desired size of each object; will be rounded up to object_align.
- * @param object_align  Alignment boundary for each object; must be power of two. Defaults to 16 if 0 is passed through.
+ * @param object_align  Alignment boundary for each object; must be power of two. Defaults to L1_CACHE_SIZE if 0 is passed through.
  * @param constructor   Optional callback invoked on each object when a new slab is populated.
  * @param destructor    Optional callback invoked on each object before it’s recycled or cache is destroyed.
  * @return              0 on success, or a negative error code on failure.
  */
+[[nodiscard]]
 int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_size, size_t object_align,
 		    void (*constructor)(void*), void (*destructor)(void*))
 {
@@ -65,8 +94,15 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
 		return -ENULLPTR;
 	}
 
-	// Ensure object alignment is a power of two, defaulting to max_align_t if zero
-	if (object_align == 0) object_align = alignof(max_align_t); // usually 16 on x86-64
+	if (object_align == 0) {
+		object_align = L1_CACHE_SIZE; // Default to L1 cache line size
+		log_debug("Using default object alignment: %lu", object_align);
+	} else {
+		// Clamp the alignment to a minimum of sizeof(void*).
+		// This is because freelist traversal breaks if the alignment is smaller than a pointer size.
+		object_align = MAX(object_align, sizeof(void*));
+	}
+
 	if (!IS_POWER_OF_TWO(object_align)) {
 		log_error("Object alignment is not a power of 2: %lu", object_align);
 		return -EALIGN;
@@ -96,6 +132,10 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
 	cache->constructor = constructor;
 	cache->destructor = destructor;
 
+	cache->total_slabs = 0;
+	cache->total_objects = 0;
+	cache->used_objects = 0;
+
 	// Copy the cache name and ensure null termination
 	strncpy(cache->name, name, MAX_CACHE_NAME_LEN);
 	cache->name[MAX_CACHE_NAME_LEN - 1] = '\0';
@@ -120,6 +160,7 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
  * @param cache	Pointer to the slab_cache from which to allocate.
  * @return	Pointer to the allocated object, or NULL if allocation fails.
  */
+[[nodiscard, gnu::malloc]]
 void* slab_alloc(struct slab_cache* cache)
 {
 	if (!cache || cache->flags == CACHE_UNINITIALIZED) {
@@ -153,11 +194,16 @@ void* slab_alloc(struct slab_cache* cache)
 			  cache->objects_per_slab);
 	}
 
+#if SLAB_DEBUG
+	slab_assert_poison(addr, cache->object_size);
+#endif
+
 	if (cache->constructor) cache->constructor(addr);
 
 	log_debug("Cache %s: allocated object %p from slab %p (free_top=%zu/%zu)", cache->name, addr, (void*)slab,
 		  slab->free_top, cache->objects_per_slab);
 
+	cache->used_objects++;
 	return addr;
 }
 
@@ -218,6 +264,12 @@ void slab_free(struct slab_cache* cache, void* object)
 			  slab->free_top, cache->objects_per_slab);
 		list_move(&slab->link, &cache->partial);
 	}
+
+	cache->used_objects--;
+
+#ifdef SLAB_DEBUG
+	memset(object, POISON_PATTERN, cache->object_size); // Fill with a pattern for debugging
+#endif
 
 	log_debug("Cache %s: freed object %p to slab %p (free_top=%zu/%zu)", cache->name, object, (void*)slab,
 		  slab->free_top, cache->objects_per_slab);
@@ -318,6 +370,9 @@ static void destroy_slab(struct slab* slab)
 	list_remove(&slab->link);
 	kfree(slab->free_stack);
 	slab_free_pages(base, cache->slab_size_pages);
+
+	cache->total_slabs--;
+	cache->total_objects -= cache->objects_per_slab;
 }
 
 /**
@@ -329,6 +384,7 @@ static void destroy_slab(struct slab* slab)
  * @param cache Pointer to the slab_cache to grow.
  * @return 0 on success, -EOOM if out of memory.
  */
+[[nodiscard]]
 static int slab_grow(struct slab_cache* cache)
 {
 	log_debug("Creating new slab for cache: %s", cache->name);
@@ -337,6 +393,10 @@ static int slab_grow(struct slab_cache* cache)
 		log_error("OOM growing slab for cache %s", cache->name);
 		return -EOOM;
 	}
+
+#ifdef SLAB_DEBUG
+	memset(base, POISON_PATTERN, cache->slab_size_pages * PAGE_SIZE); // Fill with a pattern for debugging
+#endif
 
 	struct slab* new_slab = (struct slab*)base;
 	new_slab->parent = cache;
@@ -360,5 +420,28 @@ static int slab_grow(struct slab_cache* cache)
 	list_append(&cache->empty, &new_slab->link);
 	log_debug("Initialized slab at %p", base);
 
+	cache->total_slabs++;
+	cache->total_objects += cache->objects_per_slab;
+
 	return 0;
+}
+
+void slab_dump_stats(struct slab_cache* cache)
+{
+	if (!cache || cache->flags == CACHE_UNINITIALIZED) {
+		log_error("Invalid or uninitialized cache");
+		return;
+	}
+
+	log_info("Slab Cache Stats:");
+	log_info("Name: %s", cache->name);
+	log_info("Object Size: %lu", cache->object_size);
+	log_info("Object Alignment: %lu", cache->object_align);
+	log_info("Slab Size (pages): %lu", cache->slab_size_pages);
+	log_info("Objects per Slab: %lu", cache->objects_per_slab);
+	log_info("Header Size: %lu", cache->header_size);
+
+	log_info("Total Slabs: %lu", cache->total_slabs);
+	log_info("Total Objects: %lu", cache->total_objects);
+	log_info("Used Objects: %lu", cache->used_objects);
 }

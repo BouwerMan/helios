@@ -19,8 +19,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <kernel/dmesg.h>
+#include <kernel/panic.h>
 #include <kernel/screen.h>
-#include <kernel/sys.h>
 
 #include <util/log.h>
 
@@ -28,7 +29,7 @@
 void panic(const char* message)
 {
 	__asm__ volatile("cli");
-	set_log_mode(LOG_DIRECT);
+	dmesg_flush_raw();
 	set_color(COLOR_RED, COLOR_BLACK);
 	log_error("KERNEL PANIC!\n%s", message);
 	for (;;)

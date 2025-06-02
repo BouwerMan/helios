@@ -29,7 +29,7 @@ export CWARN=-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Wcast-align \
 
 export CFLAGS=-Og -ggdb -pipe -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse3 -std=gnu23 $(CWARN)
 
-export GDEFINES=-D__KDEBUG__ -DLOG_LEVEL=0 -DENABLE_SERIAL_LOGGING
+export GDEFINES=-D__KDEBUG__ -DLOG_LEVEL=0 -DENABLE_SERIAL_LOGGING -DSLAB_DEBUG
 export TESTS=#-D__PMM_TEST__
 
 # Configure the cross-compiler to use the desired system root.

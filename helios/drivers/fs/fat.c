@@ -29,7 +29,7 @@
 #include <drivers/fs/fat.h>
 #include <drivers/fs/vfs.h>
 #include <kernel/liballoc.h>
-#include <kernel/sys.h>
+#include <kernel/panic.h>
 #include <kernel/timer.h>
 
 #include <util/log.h>

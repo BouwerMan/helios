@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 #if defined(__is_libk)
-#include <kernel/sys.h>
+#include <kernel/panic.h>
 #endif
 
 __attribute__((__noreturn__)) void abort(void)

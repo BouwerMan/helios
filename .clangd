@@ -5,6 +5,7 @@ CompileFlags:
     - "-nostdlibinc"
     - "-D__is_libk"
     - "-D__KDEBUG__"
+    - "-DSLAB_DEBUG"
     - "-DLIMINE_API_REVISION=3"
     - "--target=x86_64"
     - "-std=gnu23"

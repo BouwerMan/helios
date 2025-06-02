@@ -27,7 +27,7 @@
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
 #include <kernel/liballoc.h>
-#include <kernel/sys.h>
+#include <kernel/panic.h>
 #include <mm/page_alloc.h>
 
 // Disabling debug log messages
@@ -176,7 +176,7 @@ static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_
 	const uint16_t bmr_base = ctrl->bmr_base;
 
 	size_t pages = (sec_count * sec_size / PAGE_SIZE) + 1;
-	log_debug("Allocating dma buffer of %d pages", pages);
+	log_debug("Allocating dma buffer of %zu pages", pages);
 	// TODO: Make sure dma_buffer is < 4GB.
 	void* dma_buffer = (void*)get_free_pages(0, pages);
 	if (!dma_buffer) goto clean;
