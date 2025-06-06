@@ -30,6 +30,12 @@
 // FIXME: We never use anything other than BLOCK_FREE and BLOCK_ALLOCATED.
 // And we only check for BLOCK_FREE.
 
+#undef LOG_LEVEL
+#define LOG_LEVEL 1
+#define FORCE_LOG_REDEF
+#include <util/log.h>
+#undef FORCE_LOG_REDEF
+
 #include <stdint.h>
 #include <string.h>
 
@@ -39,12 +45,6 @@
 #include <mm/bootmem.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
-
-#undef LOG_LEVEL
-#define LOG_LEVEL 1
-#define FORCE_LOG_REDEF
-#include <util/log.h>
-#undef FORCE_LOG_REDEF
 
 struct buddy_allocator alr = { 0 };
 

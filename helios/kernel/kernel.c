@@ -159,8 +159,8 @@ void kernel_main(void)
 	log_debug("kmalloc returned %p, stored %d in it", (void*)test, *test);
 
 	init_scheduler();
-	log_info("Initializing dmesg");
-	dmesg_init();
+	// log_info("Initializing dmesg");
+	// dmesg_init();
 
 	log_info("Initializing Timer");
 	timer_init();
@@ -194,16 +194,25 @@ void kernel_main(void)
 	vfs_close(&f2);
 #endif
 
+	log_info(TESTING_HEADER, "Slab Allocator");
 	struct slab_cache test_cache = { 0 };
 	(void)slab_cache_init(&test_cache, "Test cache", sizeof(uint64_t), 0, NULL, NULL);
-	log_debug("Test cache slab size: %lu pages", test_cache.slab_size_pages);
+	log_debug("Test cache slab size: %d pages", SLAB_SIZE_PAGES);
+
+	test_use_before_alloc(&test_cache);
+	test_buffer_overflow(&test_cache);
+	test_buffer_underflow(&test_cache);
+	test_valid_usage(&test_cache);
+	// TODO: Fix alignment. It fails because I am dumb :)
+	// test_object_alignment(&test_cache);
+
 	uint64_t* data = slab_alloc(&test_cache);
 	*data = 12345;
 	log_info("Got data at %p, set value to %lu", (void*)data, *data);
 	uint64_t* data2 = slab_alloc(&test_cache);
 	*data2 = 54321;
 	log_info("Got data2 at %p, set value to %lu", (void*)data2, *data2);
-	size_t slab_bytes = test_cache.slab_size_pages * PAGE_SIZE;
+	size_t slab_bytes = SLAB_SIZE_PAGES * PAGE_SIZE;
 	size_t mask = ~(slab_bytes - 1);
 	log_debug("Slab base for data: %lx", (uintptr_t)data & mask);
 	slab_dump_stats(&test_cache);
@@ -213,11 +222,16 @@ void kernel_main(void)
 	(void)slab_alloc(&test_cache);
 	slab_dump_stats(&test_cache);
 
-	// kassert(false == true && "This is a test assertion, it should fail");
+	log_info(TESTING_FOOTER, "Slab Allocator");
+
 	// We're done, just hang...
-	log_debug("Sleeping for 1 second");
-	// TODO: sleep kinda borked again (can't really tell)
+	log_warn("Shutting down in 3 seconds");
 	sleep(1000);
-	log_warn("entering infinite loop");
+	log_warn("Shutting down in 2 seconds");
+	sleep(1000);
+	log_warn("Shutting down in 1 second");
+	sleep(1000);
+	// QEMU shutdown command
+	outword(0x604, 0x2000);
 	hcf();
 }

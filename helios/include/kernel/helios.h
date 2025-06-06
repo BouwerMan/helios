@@ -74,6 +74,20 @@
 #define BOCHS_BREAKPOINT (asm volatile("xchgw %bx, %bx"))
 #define QEMU_BREAKPOINT	 (__asm__ volatile("jmp $"))
 
+#define QEMU_SHUTDOWN outw(0x604, 0x2000)
+
+#define TESTING_HEADER                                                                        \
+	"\n\n*****************************************************************************\n" \
+	"BEGIN TEST: %s\n"                                                                    \
+	"Note: Error messages during this test are expected. Assertions indicate failure.\n"  \
+	"*****************************************************************************\n"
+
+#define TESTING_FOOTER                                                                        \
+	"\n\n*****************************************************************************\n" \
+	"END TEST: %s\n"                                                                      \
+	"Test completed successfully. All expected conditions were met.\n"                    \
+	"*****************************************************************************\n"
+
 static inline void halt()
 {
 	__asm__ volatile("hlt");

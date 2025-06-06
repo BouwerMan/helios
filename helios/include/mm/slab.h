@@ -23,9 +23,9 @@ enum slab_cache_flags {
 // TODO: locks and shit
 struct slab_cache {
 	// Metadata for the slab cache
-	size_t object_size;
+	size_t object_size; // Size of object allocated and referenced by the caller
+	size_t data_size;   // Size of the data area in the slab (object_size + debug data)
 	size_t object_align;
-	size_t slab_size_pages;
 	size_t objects_per_slab;
 	size_t header_size;
 	enum slab_cache_flags flags;
@@ -53,6 +53,10 @@ struct slab {
 	size_t free_top;
 	struct slab_cache* parent;
 	void** free_stack;
+
+#if SLAB_DEBUG
+	bool debug_error; // Mark this slab as poisoned/corrupted
+#endif
 };
 
 [[nodiscard]]
@@ -63,3 +67,10 @@ void* slab_alloc(struct slab_cache* cache);
 void slab_free(struct slab_cache* cache, void* object);
 void slab_cache_destroy(struct slab_cache* cache);
 void slab_dump_stats(struct slab_cache* cache);
+
+// TESTING FUNCTIONS
+void test_use_before_alloc(struct slab_cache* cache);
+void test_buffer_overflow(struct slab_cache* cache);
+void test_buffer_underflow(struct slab_cache* cache);
+void test_valid_usage(struct slab_cache* cache);
+void test_object_alignment(struct slab_cache* cache);

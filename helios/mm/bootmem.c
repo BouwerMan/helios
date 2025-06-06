@@ -31,6 +31,12 @@
 * 	So I don't actually have to "reserve" anything (though I may just set a flag in the struct page).
 */
 
+#undef LOG_LEVEL
+#define LOG_LEVEL 1
+#define FORCE_LOG_REDEF
+#include <util/log.h>
+#undef FORCE_LOG_REDEF
+
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -42,12 +48,6 @@
 #include <mm/bootmem.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
-
-#undef LOG_LEVEL
-#define LOG_LEVEL 1
-#define FORCE_LOG_REDEF
-#include <util/log.h>
-#undef FORCE_LOG_REDEF
 
 struct page* mem_map;
 
