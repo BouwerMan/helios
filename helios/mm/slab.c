@@ -19,6 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <kernel/spinlock.h>
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
@@ -50,45 +51,132 @@ static int _slab_grow(struct slab_cache* cache);
 
 static void _slab_destroy(struct slab* slab);
 
+static void _slab_quarantine(struct slab* slab);
+
+/**
+ * @brief Wrapper to allocate a contiguous block of pages for use in a slab.
+ *
+ * @param pages The number of contiguous pages to allocate.
+ * @return Pointer to the allocated memory, or NULL if allocation fails.
+ */
 [[nodiscard, gnu::malloc, gnu::always_inline]]
 static inline void* _slab_alloc_pages(size_t pages)
 {
 	return (void*)get_free_pages(0, pages);
 }
 
+/**
+ * @brief Wrapper to free a contiguous block of pages allocated for a slab.
+ *
+ * @param addr  Pointer to the starting address of the pages to free.
+ * @param pages The number of contiguous pages to free.
+ */
 [[gnu::always_inline]]
 static inline void _slab_free_pages(void* addr, size_t pages)
 {
 	free_pages(addr, pages);
 }
 
+/**
+ * @brief Retrieve the slab structure from an object pointer.
+ *
+ * This function calculates the base address of the slab that contains the
+ * given object. It uses address masking, which works because slabs are
+ * allocated in power-of-2 sizes.
+ *
+ * @param object Pointer to the object whose slab is to be determined.
+ * @return Pointer to the slab structure containing the object.
+ */
 [[gnu::always_inline]]
 static inline struct slab* _slab_from_object(const void* object)
 {
-	// Calculate the slab base address from the object pointer
-	// I am currently doing address masking, this works because I am only using 1 page slabs.
-	// If I use larger page sizes then I should set mask to ~(slab_bytes - 1) where
-	size_t slab_bytes = SLAB_SIZE_PAGES * PAGE_SIZE;
-	uint64_t mask = ~(slab_bytes - 1);
+	size_t slab_bytes = SLAB_SIZE_PAGES * PAGE_SIZE; // Total size of a slab in bytes
+	uint64_t mask = ~(slab_bytes - 1);		 // Mask to align the address to the slab base
 	return (struct slab*)((uintptr_t)object & mask);
+}
+
+/**
+ * @brief Relocates a slab to a new location within its cache.
+ *
+ * This function updates the slab's location within its parent cache by:
+ * 1. Adjusting the counters for the current and new locations.
+ * 2. Moving the slab to the appropriate list corresponding to the new location.
+ * 3. Updating the slab's location field.
+ * 4. Logging the relocation for debugging purposes.
+ *
+ * The function assumes that the slab and its parent cache are valid and
+ * properly initialized.
+ *
+ * @param slab Pointer to the slab to be relocated.
+ * @param location The new location to which the slab should be moved.
+ */
+static inline void _slab_relocate(struct slab* slab, enum _SLAB_LOCATION location)
+{
+	if (!slab) return;
+
+	struct slab_cache* cache = slab->parent;
+
+	size_t* counters[] = {
+		&cache->num_empty,
+		&cache->num_partial,
+		&cache->num_full,
+		&cache->num_quarantine,
+	};
+	struct list* lists[] = {
+		&cache->empty,
+		&cache->partial,
+		&cache->full,
+		&cache->quarantine,
+	};
+
+	// Decrement the counter for the current location
+	(*counters[slab->location])--;
+
+	// Increment the counter for the new location
+	(*counters[location])++;
+
+	// Move the slab to the new list
+	list_move(&slab->link, lists[location]);
+
+	log_debug("Cache %s: slab %p moved from %d to %d.", cache->name, (void*)slab, slab->location, location);
+
+	// Update the slab's location
+	slab->location = location;
 }
 
 #if SLAB_DEBUG
 // Pass through object_start - REDZONE_SIZE
-static void _dump_data(const void* data, size_t size)
+[[maybe_unused]]
+static void __dump_data(const void* data, size_t size)
 {
-// #define SLAB_DEBUG_VERBOSE
-#ifdef SLAB_DEBUG_VERBOSE
 	for (size_t i = 0; i < size; i++) {
 		printf("%hhx ", ((uint8_t*)data)[i]);
 	}
 	printf("\n");
-#else
-	(void)data;
-	(void)size;
-#endif
 }
 
+// #define SLAB_DEBUG_VERBOSE
+#ifdef SLAB_DEBUG_VERBOSE
+#define _dump_data(data, size) __dump_data(data, size)
+#else
+#define _dump_data(data, size) ((void)0)
+#endif
+
+/**
+ * @brief Check for memory poisoning in a slab object.
+ *
+ * This function verifies that the memory region of an object is properly
+ * poisoned with a predefined pattern. It checks both the head and tail of
+ * the object for the poison pattern to detect use-before-initialization
+ * or memory corruption.
+ *
+ * If a mismatch is detected, an error is logged, the slab is marked as
+ * corrupted, and debugging information is dumped.
+ *
+ * @param obj_start Pointer to the start of the object to check.
+ * @param size      Size of the object in bytes.
+ * @return true if the object is correctly poisoned, false otherwise.
+ */
 static bool _check_poison(const void* obj_start, size_t size)
 {
 	struct slab* slab;
@@ -120,9 +208,28 @@ static bool _check_poison(const void* obj_start, size_t size)
 	return true;
 }
 
+/**
+ * @brief Check for redzone violations in a slab object.
+ *
+ * This function verifies that the redzones surrounding an object are intact.
+ * Redzones are special memory regions placed before and after an object to
+ * detect buffer overflows and underflows. If a redzone violation is detected,
+ * an error is logged, debugging information is dumped, and the slab is marked
+ * as corrupted.
+ *
+ * The function performs the following checks:
+ * 1. Verifies the integrity of the redzone before the object (underflow check).
+ * 2. Verifies the integrity of the redzone after the object (overflow check).
+ * 3. Resets the redzone patterns if a violation is detected.
+ *
+ * @param obj_start Pointer to the start of the object to check.
+ * @param size      Size of the object in bytes.
+ * @return true if no redzone violations are detected, false otherwise.
+ */
 static bool _check_redzone(const void* obj_start, size_t size)
 {
 	struct slab* slab = _slab_from_object((void*)obj_start);
+
 	uint32_t* redzone_start = (uint32_t*)((uintptr_t)obj_start - REDZONE_SIZE);
 	if (*redzone_start != REDZONE_PATTERN) {
 		log_error("Underflow on freed object detected");
@@ -144,14 +251,13 @@ static bool _check_redzone(const void* obj_start, size_t size)
 #endif
 
 /**
- * @brief Initialize a slab cache for fixed‐size object allocations.
+ * @brief Initialize a slab cache for fixed-size object allocations.
  *
- * Sets up the metadata and free‐list structures needed to carve pages into
- * fixed-size objects. Verifies that the requested alignment is a power of two,
- * rounds the object size up to meet that alignment, computes how many objects
- * fit per slab, initializes the empty/partial/full slab lists, stores the
- * cache’s name, and registers optional constructor/destructor callbacks for
- * new or recycled objects.
+ * This function sets up the metadata and free-list structures needed to manage
+ * fixed-size object allocations. It ensures proper alignment, calculates the
+ * number of objects per slab, and initializes the slab cache's internal lists.
+ * Optional constructor and destructor callbacks can be registered for object
+ * initialization and cleanup.
  *
  * @param cache         Pointer to an uninitialized slab_cache structure to set up.
  * @param name          Human-readable identifier for this cache (max length MAX_CACHE_NAME_LEN).
@@ -192,12 +298,34 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
 	// Zero out cache just to make sure there is no garbage data there
 	memset(cache, 0, sizeof(struct slab_cache));
 
-	// Compute rounded object size and initialize cache metadata
-	const size_t rounded_size = ALIGN_UP(object_size, object_align);
-	cache->object_size = rounded_size;
+	spinlock_init(&cache->lock);
+	spinlock_acquire(&cache->lock);
 
-	// REDZONE_SIZE is 0 for non-debug builds, so data_size is just object_size
-	cache->data_size = cache->object_size + 2 * REDZONE_SIZE; // no need to ALIGN_UP
+	cache->object_size = object_size;
+
+	/**
+	 * We want each allocated object to be surrounded by redzones:
+	 *     [ head redzone ][ aligned object ][ tail redzone ]
+	 *
+	 * However, inserting a redzone *before* the object complicates alignment.
+	 * To ensure that the object itself is aligned to `object_align`, we do:
+	 *
+	 *     obj_start = ALIGN_UP(raw_ptr + REDZONE_SIZE, object_align);
+	 *
+	 * In the worst case, `raw_ptr + REDZONE_SIZE` is just shy of alignment,
+	 * so the ALIGN_UP call could push the object forward by as much as
+	 * (object_align - 1) bytes. To ensure that we always have enough space
+	 * for the object and both redzones — regardless of alignment offset —
+	 * we conservatively add `object_align` to the per-object stride.
+	 *
+	 * Therefore:
+	 *
+	 *     data_size = object_size + 2 * REDZONE_SIZE + object_align;
+	 *
+	 * This guarantees that each allocated region has enough space to
+	 * accommodate both redzones and a properly aligned object.
+	 */
+	cache->data_size = object_size + 2 * REDZONE_SIZE + object_align;
 
 	cache->object_align = object_align;
 	cache->header_size = ALIGN_UP(sizeof(struct slab), object_align);
@@ -206,7 +334,12 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
 	list_init(&cache->empty);
 	list_init(&cache->partial);
 	list_init(&cache->full);
+	list_init(&cache->quarantine);
 	list_append(&kernel.slab_caches, &cache->cache_node);
+	cache->num_empty = 0;
+	cache->num_partial = 0;
+	cache->num_full = 0;
+	cache->num_quarantine = 0;
 
 	cache->constructor = constructor;
 	cache->destructor = destructor;
@@ -221,22 +354,29 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
 
 	cache->flags = CACHE_INITIALIZED;
 
-	log_debug("Slab cache initialized: name=%s, object_size=%lu, object_align=%lu, "
-		  "slab_size_pages=%d, header_size=%lu, objects_per_slab=%lu",
-		  name, rounded_size, object_align, SLAB_SIZE_PAGES, cache->header_size, cache->objects_per_slab);
+	log_debug(
+		"Cache '%s' initialized: object_size=%zu, data_size=%zu, object_align=%zu, header_size=%zu, objects_per_slab=%zu",
+		cache->name, cache->object_size, cache->data_size, cache->object_align, cache->header_size,
+		cache->objects_per_slab);
+
+	spinlock_release(&cache->lock);
 	return 0;
 }
 
 /**
- * @brief Allocate one object from the slab cache.
+ * @brief Allocates an object from the specified slab cache.
  *
- * Attempts to grab a free object slot from a partially filled slab.  If no
- * partial slab is available, it will pull an empty slab (or carve a new one
- * from pages), move it into the partial list, pop the first free slot, update
- * the slab’s free‐count, and move the slab to the full list if now exhausted.
+ * This function attempts to allocate an object from a slab cache. It first tries
+ * to allocate from a partially filled slab. If no partially filled slabs are
+ * available, it attempts to allocate from an empty slab or grow the cache by
+ * creating a new slab. If all attempts fail, the function returns NULL.
  *
- * @param cache	Pointer to the slab_cache from which to allocate.
- * @return	Pointer to the allocated object, or NULL if allocation fails.
+ * The function ensures thread safety by acquiring a spinlock during the allocation
+ * process. If a constructor is defined for the cache, it is invoked on the allocated
+ * object before returning it to the caller.
+ *
+ * @param cache Pointer to the slab cache from which to allocate an object.
+ * @return Pointer to the allocated object, or NULL if allocation fails.
  */
 [[nodiscard, gnu::malloc]]
 void* slab_alloc(struct slab_cache* cache)
@@ -249,50 +389,63 @@ void* slab_alloc(struct slab_cache* cache)
 	struct slab* slab = NULL;
 	int res = 0;
 
+	spinlock_acquire(&cache->lock);
+
+retry:
+
 	// Attempt to allocate from a partially filled slab
 	if (!list_empty(&cache->partial)) {
+		log_debug("Cache %s: Allocating from a partial slab", cache->name);
 		slab = list_entry(cache->partial.next, struct slab, link);
 	} else if (!list_empty(&cache->empty) || (res = _slab_grow(cache)) >= 0) {
 		// Move the first empty slab to the partial list
 		slab = list_entry(cache->empty.next, struct slab, link);
-		list_move(&slab->link, &cache->partial);
-		log_debug("Cache %s: slab %p moved from empty to partial (free_top=%zu/%zu)", cache->name, (void*)slab,
-			  slab->free_top, cache->objects_per_slab);
+		_slab_relocate(slab, SLAB_PARTIAL);
 	} else {
 		log_error("Could not create more slabs, slab_grow returned: %d", res);
+		spinlock_release(&cache->lock);
 		return NULL;
 	}
 
 	void* obj_start = slab->free_stack[--slab->free_top];
 
 #ifdef SLAB_DEBUG
-	_check_poison(obj_start, cache->object_size);
+	bool quarantine = _check_poison(obj_start, cache->object_size);
+	if (!quarantine) {
+		_slab_quarantine(slab);
+		goto retry; // If the object is poisoned, retry allocation
+	}
 #endif
 
 	if (cache->constructor) cache->constructor(obj_start);
 
 	// Move the slab to the full list if it becomes exhausted
 	if (slab->free_top == 0) {
-		list_move(&slab->link, &cache->full);
-		log_debug("Cache %s: slab %p is now full (free_top=%zu/%zu)", cache->name, (void*)slab, slab->free_top,
-			  cache->objects_per_slab);
+		_slab_relocate(slab, SLAB_FULL);
 	}
 
 	log_debug("Cache %s: allocated object %p from slab %p (free_top=%zu/%zu)", cache->name, obj_start, (void*)slab,
 		  slab->free_top, cache->objects_per_slab);
 
 	cache->used_objects++;
+
+	spinlock_release(&cache->lock);
 	return obj_start;
 }
 
 /**
  * @brief Return an object back to its slab cache.
  *
- * Takes an object pointer previously returned by slab_alloc, identifies its
- * parent slab, optionally invokes the destructor, pushes the slot back onto
- * the slab’s free‐list, updates the slab’s free‐count, and moves the slab
- * between the full/partial/empty lists as its occupancy changes.  May free
- * completely empty slabs back to the page allocator per policy.
+ * This function deallocates an object previously allocated by `slab_alloc` and
+ * returns it to the appropriate slab in the cache. It identifies the parent slab,
+ * optionally invokes the destructor, updates the slab's free-list and free-count,
+ * and moves the slab between the full, partial, and empty lists as its occupancy
+ * changes. If a slab becomes completely empty, it may be freed back to the page
+ * allocator based on the cache's policy.
+ *
+ * The function ensures thread safety by acquiring a spinlock during the deallocation
+ * process. Debugging features, such as redzone checks and memory poisoning, are
+ * optionally enabled with the `SLAB_DEBUG` flag.
  *
  * @param cache  Pointer to the slab_cache managing the object.
  * @param object Pointer to the object to free; must have originated from this cache.
@@ -313,14 +466,18 @@ void slab_free(struct slab_cache* cache, void* object)
 		return;
 	}
 
+	spinlock_acquire(&cache->lock);
+
 	struct slab* slab = _slab_from_object(object);
 	if (slab->parent != cache) {
 		log_error("Somehow got the wrong slab (parent doesn't match the cache), good luck debugging this one");
+		spinlock_release(&cache->lock);
 		return;
 	}
 
 	if (slab->free_top >= cache->objects_per_slab) {
 		log_error("Free top overflow for slab %p in cache %s", (void*)slab, cache->name);
+		spinlock_release(&cache->lock);
 		return;
 	}
 
@@ -328,40 +485,54 @@ void slab_free(struct slab_cache* cache, void* object)
 
 	// If we are dubugging, we check for over or underflow into the redzone. Then we fill the object with the poison pattern.
 #ifdef SLAB_DEBUG
-	_check_redzone(object, cache->object_size);
+	bool quarantine = _check_redzone(object, cache->object_size);
 
-	memset(object, POISON_PATTERN,
-	       cache->object_size); // Fill with a pattern for debugging
+	if (!quarantine) {
+		_slab_quarantine(slab);
+		spinlock_release(&cache->lock);
+		return;
+	}
+
+	// Fill with a pattern for debugging
+	memset(object, POISON_PATTERN, cache->object_size);
 #endif
 
 	slab->free_stack[slab->free_top++] = object;
 
 	if (slab->free_top == cache->objects_per_slab) {
-		log_debug("Cache %s: slab %p is now empty (free_top=%zu/%zu)", cache->name, (void*)slab, slab->free_top,
-			  cache->objects_per_slab);
-		list_move(&slab->link, &cache->empty);
-		// TODO: If number of empty slabs is too high, destroy some of them
+		_slab_relocate(slab, SLAB_EMPTY);
+
+		if (cache->num_empty > MAX_EMPTY_SLABS) {
+			log_debug("Cache %s: too many empty slabs, freeing slab %p", cache->name, (void*)slab);
+			_slab_destroy(slab);
+
+			cache->num_empty--;
+			cache->total_slabs--;
+		}
 	} else if (slab->free_top == 1) {
-		log_debug("Cache %s: slab %p moved from full to partial (free_top=%zu/%zu)", cache->name, (void*)slab,
-			  slab->free_top, cache->objects_per_slab);
-		list_move(&slab->link, &cache->partial);
+		_slab_relocate(slab, SLAB_PARTIAL);
 	}
 
 	cache->used_objects--;
 
 	log_debug("Cache %s: freed object %p to slab %p (free_top=%zu/%zu)", cache->name, object, (void*)slab,
 		  slab->free_top, cache->objects_per_slab);
+
+	spinlock_release(&cache->lock);
 }
 
 /**
  * @brief Destroy a slab cache and release all its memory.
  *
- * Walks all slabs in empty, partial, and full lists, invoking the destructor
- * on any remaining live objects, returning each slab’s pages back to the
- * underlying physical memory allocator, and clearing the cache’s metadata so
- * it can be safely reinitialized or discarded.
+ * This function walks through all slabs in the empty, partial, and full lists,
+ * invoking the destructor on any remaining live objects. It returns each slab's
+ * pages back to the underlying physical memory allocator and clears the cache's
+ * metadata so it can be safely reinitialized or discarded.
  *
- * @param cache Pointer to the slab_cache to destroy.
+ * The function ensures thread safety by acquiring a spinlock during the destruction
+ * process. It also logs debug information about the destruction process.
+ *
+ * @param cache Pointer to the slab_cache to destroy. Must be a valid, initialized cache.
  */
 void slab_cache_destroy(struct slab_cache* cache)
 {
@@ -374,19 +545,25 @@ void slab_cache_destroy(struct slab_cache* cache)
 		return;
 	}
 
+	// Never release it because we are deleting everything anyways
+	spinlock_acquire(&cache->lock);
+
 	log_debug("Destroying cache %s", cache->name);
 
 	struct slab* slab;
+
 	// Full slabs
 	while (!list_empty(&cache->full)) {
 		slab = list_entry(cache->full.next, struct slab, link);
 		_slab_destroy(slab);
 	}
+
 	// Partial slabs
 	while (!list_empty(&cache->partial)) {
 		slab = list_entry(cache->partial.next, struct slab, link);
 		_slab_destroy(slab);
 	}
+
 	// Empty slabs
 	while (!list_empty(&cache->empty)) {
 		slab = list_entry(cache->empty.next, struct slab, link);
@@ -402,10 +579,18 @@ void slab_cache_destroy(struct slab_cache* cache)
 /**
  * @brief Destroy a single slab and release its memory.
  *
- * Frees all objects in the slab, invoking the destructor for each live object.
- * Releases the memory allocated for the slab and its metadata.
+ * This function frees all objects in the slab, invoking the destructor for each
+ * live object. It also releases the memory allocated for the slab and its metadata.
+ * The slab is removed from its parent cache's list, and the cache's metadata is
+ * updated to reflect the removal of the slab and its objects.
  *
- * @param slab Pointer to the slab to destroy.
+ * The function handles three cases:
+ * 1. Full slab: All objects are live, and the destructor is called on each object.
+ * 2. Empty slab: No live objects, so no destructors are invoked.
+ * 3. Partial slab: Some objects are live, and the destructor is called only on
+ *    non-free objects. A temporary bitmap is used to track free objects.
+ *
+ * @param slab Pointer to the slab to destroy. Must be a valid slab belonging to a cache.
  */
 static void _slab_destroy(struct slab* slab)
 {
@@ -413,13 +598,14 @@ static void _slab_destroy(struct slab* slab)
 	log_debug("Cache %s: Destroying slab %p", cache->name, (void*)slab);
 
 	void* base = (void*)slab;
+	uintptr_t data_base = (uintptr_t)base + cache->header_size;
 	size_t N = cache->objects_per_slab;
 
 	if (slab->free_top == 0) {
 		// Full slab, destructor called on all objects
 		for (size_t i = 0; i < N; i++) {
-			// REDZONE_SIZE is 0 for non-debug builds
-			void* obj = (void*)((uintptr_t)base + cache->header_size + (i * cache->data_size));
+			uintptr_t raw_ptr = data_base + i * cache->data_size;
+			void* obj = (void*)ALIGN_UP(raw_ptr + REDZONE_SIZE, cache->object_align);
 			if (cache->destructor) cache->destructor(obj);
 		}
 	} else if (slab->free_top == N) {
@@ -439,8 +625,8 @@ static void _slab_destroy(struct slab* slab)
 		// Now call destructor on each non free item
 		for (size_t i = 0; i < N; i++) {
 			if (!is_free[i]) {
-				// REDZONE_SIZE is 0 for non-debug builds
-				void* obj = (void*)((uintptr_t)base + cache->header_size + (i * cache->data_size));
+				uintptr_t raw_ptr = data_base + i * cache->data_size;
+				void* obj = (void*)ALIGN_UP(raw_ptr + REDZONE_SIZE, cache->object_align);
 				if (cache->destructor) cache->destructor(obj);
 			}
 		}
@@ -458,8 +644,13 @@ static void _slab_destroy(struct slab* slab)
 /**
  * @brief Grow the slab cache by allocating a new slab.
  *
- * Allocates memory for a new slab, initializes its metadata, and adds it to
- * the empty slab list of the cache.
+ * This function allocates memory for a new slab, initializes its metadata, and
+ * adds it to the empty slab list of the cache. It ensures that the slab is properly
+ * set up, including the allocation of a free stack for object management and the
+ * initialization of redzones for debugging (if enabled).
+ *
+ * The function handles memory allocation failures gracefully by cleaning up any
+ * partially initialized resources before returning an error.
  *
  * @param cache Pointer to the slab_cache to grow.
  * @return 0 on success, -EOOM if out of memory.
@@ -496,7 +687,11 @@ static int _slab_grow(struct slab_cache* cache)
 	// TODO: Try something like what the linux kernel does, where the free list is within the page,
 	// because currently the list is on the same order of magnitude as the actual slab (depending on object size).
 	for (size_t i = 0; i < cache->objects_per_slab; i++) {
-		uintptr_t obj_start = (uintptr_t)base + cache->header_size + i * cache->data_size + REDZONE_SIZE;
+		uintptr_t data_base = (uintptr_t)base + cache->header_size;
+		uintptr_t raw_ptr = data_base + i * cache->data_size;
+
+		// Align the object such that obj_start is aligned, with redzone before it
+		uintptr_t obj_start = ALIGN_UP(raw_ptr + REDZONE_SIZE, cache->object_align);
 #ifdef SLAB_DEBUG
 		uint32_t* redzone_head = (uint32_t*)(obj_start - REDZONE_SIZE);
 		*redzone_head = REDZONE_PATTERN; // Set the redzone at the start
@@ -506,21 +701,83 @@ static int _slab_grow(struct slab_cache* cache)
 #endif
 		new_slab->free_stack[i] = (void*)obj_start;
 	}
+
 	list_append(&cache->empty, &new_slab->link);
 	log_debug("Initialized slab at %p", base);
 
+	new_slab->location = SLAB_EMPTY;
+	cache->num_empty++;
 	cache->total_slabs++;
 	cache->total_objects += cache->objects_per_slab;
 
 	return 0;
 }
 
+static void _slab_quarantine(struct slab* slab)
+{
+	struct slab_cache* cache = slab->parent;
+	_slab_relocate(slab, SLAB_QUARANTINE);
+
+	cache->used_objects -= cache->objects_per_slab - slab->free_top;
+	cache->total_objects -= cache->objects_per_slab;
+
+	log_warn("Cache %s: slab %p moved to quarantine", cache->name, (void*)slab);
+}
+
+/**
+ * @brief Purge all corrupt slabs from the quarantine list of a slab cache.
+ *
+ * This function iterates through the quarantine list of a slab cache and destroys
+ * all slabs marked as corrupt. It updates the cache's metadata to reflect the
+ * removal of these slabs and logs detailed debug information during the process.
+ *
+ * The function performs the following steps:
+ * 1. Iterates through the quarantine list of the cache.
+ * 2. Destroys each slab in the quarantine list using `_slab_destroy`.
+ * 3. Updates the `num_quarantine` and `total_objects` counters in the cache.
+ * 4. Logs debug information about the purge process.
+ *
+ * @param cache Pointer to the slab_cache whose corrupt slabs are to be purged.
+ */
+void slab_cache_purge_corrupt(struct slab_cache* cache)
+{
+	log_debug("Starting purge of corrupt slabs in cache '%s'", cache->name);
+
+	struct slab* slab;
+	while (!list_empty(&cache->quarantine)) {
+		slab = list_entry(cache->quarantine.next, struct slab, link);
+		log_debug("Purging slab at %p from quarantine", (void*)slab);
+
+		_slab_destroy(slab);
+		cache->num_quarantine--;
+
+		// Manually re-add total_objects since we double subtracted during quarantine and destruction
+		cache->total_objects += cache->objects_per_slab;
+		log_debug("Updated cache '%s': num_quarantine=%zu, total_objects=%zu", cache->name,
+			  cache->num_quarantine, cache->total_objects);
+	}
+
+	log_debug("Completed purge of corrupt slabs in cache '%s'", cache->name);
+}
+
+/**
+ * @brief Dump statistics of a slab cache for debugging purposes.
+ *
+ * This function logs detailed information about the state of a slab cache,
+ * including its name, object size, alignment, slab size, and usage statistics.
+ * It ensures thread safety by acquiring a spinlock during the operation.
+ *
+ * @param cache Pointer to the slab_cache whose statistics are to be dumped.
+ *              If the cache is NULL or uninitialized, an error is logged.
+ */
 void slab_dump_stats(struct slab_cache* cache)
 {
 	if (!cache || cache->flags == CACHE_UNINITIALIZED) {
 		log_error("Invalid or uninitialized cache");
 		return;
 	}
+
+	spinlock_acquire(&cache->lock);
 
 	log_info("Slab Cache Stats:");
 	log_info("Name: %s", cache->name);
@@ -530,11 +787,34 @@ void slab_dump_stats(struct slab_cache* cache)
 	log_info("Objects per Slab: %lu", cache->objects_per_slab);
 	log_info("Header Size: %lu", cache->header_size);
 
+	log_info("Num Empty Slabs: %lu", cache->num_empty);
+	log_info("Num Partial Slabs: %lu", cache->num_partial);
+	log_info("Num Full Slabs: %lu", cache->num_full);
+	log_info("Num Quarantine Slabs: %lu", cache->num_quarantine);
+
 	log_info("Total Slabs: %lu", cache->total_slabs);
 	log_info("Total Objects: %lu", cache->total_objects);
 	log_info("Used Objects: %lu", cache->used_objects);
+
+	spinlock_release(&cache->lock);
 }
 
+/**
+ * @brief Test for use-before-initialization in a slab cache.
+ *
+ * This function simulates a use-before-initialization scenario by accessing
+ * an object from the slab cache before it is properly allocated. It ensures
+ * that the slab cache's debugging mechanisms detect and report the corruption.
+ *
+ * The test performs the following steps:
+ * 1. Ensures the cache has at least one slab by growing it if necessary.
+ * 2. Accesses an object from the free stack and writes to it before allocation.
+ * 3. Allocates the object using `slab_alloc` and reinserts it manually.
+ * 4. Verifies that the slab is marked as corrupted due to the use-before-init.
+ * 5. Resets the debug error flag for further tests.
+ *
+ * @param cache Pointer to the slab_cache to test.
+ */
 void test_use_before_alloc(struct slab_cache* cache)
 {
 	log_info("Testing use-before-init in slab cache");
@@ -557,6 +837,22 @@ void test_use_before_alloc(struct slab_cache* cache)
 	slab->debug_error = false; // Reset for further tests
 }
 
+/**
+ * @brief Test for buffer overflow detection in a slab cache.
+ *
+ * This function simulates a buffer overflow scenario by writing beyond the
+ * allocated object's boundary into the redzone. It ensures that the slab
+ * cache's debugging mechanisms detect and report the corruption.
+ *
+ * The test performs the following steps:
+ * 1. Allocates an object from the slab cache.
+ * 2. Writes past the end of the object into the redzone.
+ * 3. Frees the object, expecting the slab cache to detect the overflow.
+ * 4. Verifies that the slab is marked as corrupted due to the overflow.
+ * 5. Resets the debug error flag for further tests.
+ *
+ * @param cache Pointer to the slab_cache to test.
+ */
 void test_buffer_overflow(struct slab_cache* cache)
 {
 	log_info("Testing buffer overflow detection in slab cache");
@@ -564,7 +860,7 @@ void test_buffer_overflow(struct slab_cache* cache)
 	struct slab* slab = _slab_from_object(obj);
 
 	// Write past the end of the object (into redzone)
-	((uint8_t*)obj)[cache->data_size - REDZONE_SIZE - 1] = 0xAB;
+	((uint8_t*)obj)[cache->object_size] = 0xAB;
 
 	slab_free(cache, obj); // Should log "Overflow on freed object detected"
 
@@ -573,6 +869,22 @@ void test_buffer_overflow(struct slab_cache* cache)
 	slab->debug_error = false; // Reset for further tests
 }
 
+/**
+ * @brief Test for buffer underflow detection in a slab cache.
+ *
+ * This function simulates a buffer underflow scenario by writing before the
+ * allocated object's boundary into the redzone. It ensures that the slab
+ * cache's debugging mechanisms detect and report the corruption.
+ *
+ * The test performs the following steps:
+ * 1. Allocates an object from the slab cache.
+ * 2. Writes just before the start of the object into the redzone.
+ * 3. Frees the object, expecting the slab cache to detect the underflow.
+ * 4. Verifies that the slab is marked as corrupted due to the underflow.
+ * 5. Resets the debug error flag for further tests.
+ *
+ * @param cache Pointer to the slab_cache to test.
+ */
 void test_buffer_underflow(struct slab_cache* cache)
 {
 	log_info("Testing buffer underflow detection in slab cache");
@@ -589,6 +901,22 @@ void test_buffer_underflow(struct slab_cache* cache)
 	slab->debug_error = false; // Reset for further tests
 }
 
+/**
+ * @brief Test valid usage of a slab cache.
+ *
+ * This function verifies that the slab cache operates correctly under normal
+ * usage conditions. It allocates an object, performs valid operations on it,
+ * and then frees it. The test ensures that no warnings or errors are triggered
+ * and that the slab is not marked as corrupted.
+ *
+ * The test performs the following steps:
+ * 1. Allocates an object from the slab cache.
+ * 2. Writes to the object within its allocated bounds.
+ * 3. Frees the object back to the slab cache.
+ * 4. Verifies that the slab is not marked as corrupted.
+ *
+ * @param cache Pointer to the slab_cache to test.
+ */
 void test_valid_usage(struct slab_cache* cache)
 {
 	log_info("Testing valid usage of slab cache");
@@ -601,6 +929,23 @@ void test_valid_usage(struct slab_cache* cache)
 	log_info("Valid usage test passed.");
 }
 
+/**
+ * @brief Test object alignment in a slab cache.
+ *
+ * This function verifies that all objects allocated from the slab cache are
+ * properly aligned according to the cache's specified alignment. It allocates
+ * multiple objects, checks their alignment, and logs any misaligned objects.
+ * If a misalignment is detected, the function triggers an assertion failure.
+ *
+ * The test performs the following steps:
+ * 1. Allocates 32 objects from the slab cache.
+ * 2. Checks the alignment of each object's address.
+ * 3. Logs an error and asserts if any object is not properly aligned.
+ * 4. Frees each allocated object back to the slab cache.
+ * 5. Logs a success message if all objects are properly aligned.
+ *
+ * @param cache Pointer to the slab_cache to test.
+ */
 void test_object_alignment(struct slab_cache* cache)
 {
 	log_info("Testing object alignment in slab cache");

@@ -195,6 +195,7 @@ void kernel_main(void)
 #endif
 
 	log_info(TESTING_HEADER, "Slab Allocator");
+
 	struct slab_cache test_cache = { 0 };
 	(void)slab_cache_init(&test_cache, "Test cache", sizeof(uint64_t), 0, NULL, NULL);
 	log_debug("Test cache slab size: %d pages", SLAB_SIZE_PAGES);
@@ -203,8 +204,9 @@ void kernel_main(void)
 	test_buffer_overflow(&test_cache);
 	test_buffer_underflow(&test_cache);
 	test_valid_usage(&test_cache);
-	// TODO: Fix alignment. It fails because I am dumb :)
-	// test_object_alignment(&test_cache);
+	test_object_alignment(&test_cache);
+
+	slab_cache_purge_corrupt(&test_cache);
 
 	uint64_t* data = slab_alloc(&test_cache);
 	*data = 12345;
