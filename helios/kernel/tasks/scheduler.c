@@ -19,6 +19,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#undef LOG_LEVEL
+#define LOG_LEVEL 1
+#define FORCE_LOG_REDEF
+#include <util/log.h>
+#undef FORCE_LOG_REDEF
+
 #include <string.h>
 
 #include <kernel/liballoc.h>
@@ -27,7 +33,6 @@
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
 #include <util/list.h>
-#include <util/log.h>
 
 #include "../../arch/x86_64/interrupts/idt.h"
 
@@ -120,11 +125,12 @@ void check_reschedule(struct registers* regs)
 static int create_stack(struct task* task)
 {
 	// TODO: Allocate in userspace if needed
-	void* stack = (void*)get_free_pages(0, STACK_SIZE_PAGES);
+	void* stack = (void*)get_free_pages(AF_KERNEL, STACK_SIZE_PAGES);
+	log_debug("Allocated stack at %p", stack);
 	if (!stack) return -EOOM;
 	memset(stack, 0, STACK_SIZE_PAGES * PAGE_SIZE);
 
-	uintptr_t stack_top = (uintptr_t)stack;
+	uintptr_t stack_top = (uintptr_t)stack + STACK_SIZE_PAGES * PAGE_SIZE;
 
 	task->kernel_stack = stack_top;
 	task->regs = (struct registers*)(uintptr_t)(stack_top - sizeof(struct registers));

@@ -40,6 +40,7 @@ struct page {
 	struct list list;
 	atomic_t ref_count;  // Reference count for the page
 	unsigned long flags; // Flags for the page (e.g., dirty, accessed)
+
 	union {
 		unsigned long private;
 

@@ -165,7 +165,7 @@ void kernel_main(void)
 	log_info("Initializing Timer");
 	timer_init();
 
-#if 0
+#if 1
 	list_devices();
 	ctrl_init();
 	vfs_init(64);

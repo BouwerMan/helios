@@ -62,7 +62,7 @@ static void _slab_quarantine(struct slab* slab);
 [[nodiscard, gnu::malloc, gnu::always_inline]]
 static inline void* _slab_alloc_pages(size_t pages)
 {
-	return (void*)get_free_pages(0, pages);
+	return (void*)get_free_pages(AF_KERNEL, pages);
 }
 
 /**

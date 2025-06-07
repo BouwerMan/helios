@@ -104,7 +104,9 @@ static void default_exception_handler(struct registers* registers)
 	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
 	log_error("Fault addr: %lx", fault_addr);
 
-	__asm__ volatile("cli; hlt");
+	__asm__ volatile("cli");
+	outword(0x604, 0x2000);
+	__builtin_unreachable();
 }
 
 __attribute__((aligned(0x10))) static idt_entry_t idt[256]; // Create an array of IDT entries; aligned for performance

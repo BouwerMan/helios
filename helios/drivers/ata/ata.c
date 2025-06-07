@@ -19,17 +19,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// https://wiki.osdev.org/ATA_PIO_Mode#28_bit_PIO
-#include <limits.h>
-#include <string.h>
-
-#include <drivers/ata/ata.h>
-#include <drivers/ata/controller.h>
-#include <drivers/ata/device.h>
-#include <kernel/liballoc.h>
-#include <kernel/panic.h>
-#include <mm/page_alloc.h>
-
 // Disabling debug log messages
 #ifndef __ATA_DEBUG__
 #undef LOG_LEVEL
@@ -40,6 +29,17 @@
 #else
 #include <util/log.h>
 #endif
+
+// https://wiki.osdev.org/ATA_PIO_Mode#28_bit_PIO
+#include <limits.h>
+#include <string.h>
+
+#include <drivers/ata/ata.h>
+#include <drivers/ata/controller.h>
+#include <drivers/ata/device.h>
+#include <kernel/liballoc.h>
+#include <kernel/panic.h>
+#include <mm/page_alloc.h>
 
 static bool bmr_poll(sATADevice* device);
 static uint16_t get_command(sATADevice* device, uint16_t op);
@@ -178,7 +178,7 @@ static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_
 	size_t pages = (sec_count * sec_size / PAGE_SIZE) + 1;
 	log_debug("Allocating dma buffer of %zu pages", pages);
 	// TODO: Make sure dma_buffer is < 4GB.
-	void* dma_buffer = (void*)get_free_pages(0, pages);
+	void* dma_buffer = (void*)get_free_pages(AF_DMA, pages);
 	if (!dma_buffer) goto clean;
 
 	uint64_t full_addr = (uintptr_t)HHDM_TO_PHYS(dma_buffer);

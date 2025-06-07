@@ -39,6 +39,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <kernel/fast_lib.h>
 #include <kernel/helios.h>
 #include <kernel/kmath.h>
 #include <kernel/spinlock.h>
@@ -46,11 +47,22 @@
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 
-struct buddy_allocator alr = { 0 };
+struct buddy_allocator norm_alr = { 0 };
+struct buddy_allocator dma32_alr = { 0 };
+struct buddy_allocator dma_alr = { 0 };
+
+// NOTE: These must match the order of enum MEM_ZONE members
+
+/// Lookup table for buddy allocators based on memory zones
+static struct buddy_allocator* regions[] = {
+	&dma_alr,
+	&dma32_alr,
+	&norm_alr,
+};
 
 void buddy_dump_free_lists()
 {
-	struct buddy_allocator* allocator = &alr;
+	struct buddy_allocator* allocator = &norm_alr;
 	spinlock_acquire(&allocator->lock);
 
 	for (size_t order = allocator->min_order; order <= allocator->max_order; order++) {
@@ -74,43 +86,71 @@ void buddy_dump_free_lists()
 	spinlock_release(&allocator->lock);
 }
 
-void page_alloc_init()
+static void _allocator_init(struct buddy_allocator* allocator)
 {
-	spinlock_init(&alr.lock);
-	spinlock_acquire(&alr.lock);
+	spinlock_init(&allocator->lock);
+	spinlock_acquire(&allocator->lock);
 
 	for (size_t order = 0; order <= MAX_ORDER; order++) {
-		list_init(&alr.free_lists[order]);
+		list_init(&allocator->free_lists[order]);
 	}
-	alr.max_order = MAX_ORDER;
-	alr.min_order = 0;
+	allocator->max_order = MAX_ORDER;
+	allocator->min_order = 0;
 
-	spinlock_release(&alr.lock);
+	spinlock_release(&allocator->lock);
+}
+
+void page_alloc_init()
+{
+	_allocator_init(&dma_alr);
+	_allocator_init(&dma32_alr);
+	_allocator_init(&norm_alr);
 
 	bootmem_free_all();
 }
 
+/**
+ * @brief Determine the memory zone of a given page.
+ *
+ * @param pg Pointer to the page structure.
+ * @return An enum value representing the memory zone of the page.
+ */
+static inline enum MEM_ZONE _page_zone(struct page* pg)
+{
+	uintptr_t phys = page_to_phys(pg);
+
+	if (phys < ZONE_DMA_LIMIT) {
+		return MEM_ZONE_DMA;
+	} else if (phys >= ZONE_DMA32_BASE && phys < ZONE_DMA32_LIMIT) {
+		return MEM_ZONE_DMA32;
+	} else if (phys >= ZONE_NORMAL_BASE && phys < ZONE_NORMAL_LIMIT) {
+		return MEM_ZONE_NORMAL;
+	}
+
+	return MEM_ZONE_INVALID;
+}
+
 [[gnu::always_inline]]
-static inline pfn_t parent_pfn(pfn_t pfn, size_t order)
+static inline pfn_t _parent_pfn(pfn_t pfn, size_t order)
 {
 	return pfn & ~((1UL << (order + 1UL)) - 1UL);
 }
 
 [[gnu::always_inline]]
-static inline pfn_t left_child_pfn(pfn_t pfn, size_t order)
+static inline pfn_t _left_child_pfn(pfn_t pfn, size_t order)
 {
 	(void)order;
 	return pfn;
 }
 
 [[gnu::always_inline]]
-static inline pfn_t right_child_pfn(pfn_t pfn, size_t order)
+static inline pfn_t _right_child_pfn(pfn_t pfn, size_t order)
 {
 	return pfn + (1UL << (order - 1UL));
 }
 
 [[gnu::always_inline]]
-static inline pfn_t buddy_pfn(pfn_t pfn, size_t order)
+static inline pfn_t _buddy_pfn(pfn_t pfn, size_t order)
 {
 	return pfn ^ (1UL << order);
 }
@@ -129,8 +169,8 @@ static inline pfn_t buddy_pfn(pfn_t pfn, size_t order)
  *
  * @return A pointer to the page representing the allocated block at the target order.
  */
-static struct page* split_until_order(struct buddy_allocator* allocator, struct page* page, size_t current_order,
-				      size_t target_order)
+static struct page* _split_until_order(struct buddy_allocator* allocator, struct page* page, size_t current_order,
+				       size_t target_order)
 {
 	// Base case: if the current order matches the target, allocate the block
 	if (current_order == target_order) {
@@ -141,8 +181,8 @@ static struct page* split_until_order(struct buddy_allocator* allocator, struct 
 	}
 
 	pfn_t prnt_pfn = page_to_pfn(page);
-	pfn_t left_pfn = left_child_pfn(prnt_pfn, current_order);
-	pfn_t right_pfn = right_child_pfn(prnt_pfn, current_order);
+	pfn_t left_pfn = _left_child_pfn(prnt_pfn, current_order);
+	pfn_t right_pfn = _right_child_pfn(prnt_pfn, current_order);
 	log_debug("Splitting block: parent pfn: %zu, left pfn: %zu, right pfn: %zu", prnt_pfn, left_pfn, right_pfn);
 
 	// Split the block into two children
@@ -166,7 +206,7 @@ static struct page* split_until_order(struct buddy_allocator* allocator, struct 
 		  pfn_to_phys(left_pfn), right_pfn, pfn_to_phys(right_pfn));
 
 	// We always recurse with the left child
-	return split_until_order(allocator, left, left->order, target_order);
+	return _split_until_order(allocator, left, left->order, target_order);
 }
 
 /**
@@ -183,7 +223,7 @@ static struct page* split_until_order(struct buddy_allocator* allocator, struct 
  *
  * @return A pointer to the allocated page structure, or NULL if allocation fails.
  */
-struct page* __alloc_pages_core(struct buddy_allocator* allocator, flags_t flags, size_t order)
+static struct page* __alloc_pages_core(struct buddy_allocator* allocator, aflags_t flags, size_t order)
 {
 	(void)flags;
 	if (order >= allocator->max_order) {
@@ -224,7 +264,7 @@ struct page* __alloc_pages_core(struct buddy_allocator* allocator, flags_t flags
 		list_remove(&pg->list);
 
 		// Now we split recursively until we reach the desired order
-		struct page* split_block = split_until_order(allocator, pg, pg->order, order);
+		struct page* split_block = _split_until_order(allocator, pg, pg->order, order);
 
 		if (split_block) {
 			log_debug("Successfully allocated block at pfn: %lx (order %zu)", page_to_pfn(split_block),
@@ -238,11 +278,75 @@ struct page* __alloc_pages_core(struct buddy_allocator* allocator, flags_t flags
 	return NULL;
 }
 
-uintptr_t __get_free_pages(flags_t flags, size_t order)
+/**
+ * @brief Allocates a contiguous block of memory pages.
+ *
+ * @param flags Allocation flags specifying memory constraints.
+ * @param order Number of pages to allocate as a power of two (2^order).
+ *
+ * This function attempts to allocate a block of memory pages from the
+ * specified memory zone based on the provided flags. It iterates through
+ * memory zones starting from the one specified by the flags and attempts
+ * to allocate the requested pages. If successful, it returns a pointer
+ * to the allocated page structure; otherwise, it returns NULL.
+ *
+ * @return Pointer to the first page in the allocated block, or NULL on failure.
+ */
+[[nodiscard]]
+struct page* alloc_pages(aflags_t flags, size_t order)
+{
+	struct page* pg = NULL;
+
+	static const size_t flag_to_zone[] = {
+		[AF_DMA] = MEM_ZONE_DMA,
+		[AF_DMA32] = MEM_ZONE_DMA32,
+		[AF_NORMAL] = MEM_ZONE_NORMAL,
+	};
+
+	aflags_t zone_flags = flags & ZONE_MASK;
+	size_t region_index = (zone_flags < ARRAY_SIZE(flag_to_zone)) ? flag_to_zone[zone_flags] : MEM_ZONE_INVALID;
+	log_debug("zone_flags: %x, region_index: %zu, flag_to_zone[zone_flags]: %zu", zone_flags, region_index,
+		  flag_to_zone[zone_flags]);
+
+	if (region_index == MEM_ZONE_INVALID) {
+		log_error("Invalid allocation flags: %x", flags);
+		return NULL;
+	}
+
+	for (; region_index < MEM_NUM_ZONES; region_index--) {
+		log_debug("Trying to allocate from region: %zu", region_index);
+		pg = __alloc_pages_core(regions[region_index], flags, order);
+		if (pg) {
+			log_debug("Allocated page at %p with order: %zu", (void*)page_to_phys(pg), order);
+			break;
+		}
+	}
+
+	return pg;
+}
+
+/**
+ * @brief Allocates a contiguous block of pages and returns their virtual address.
+ *
+ * This function attempts to allocate a block of contiguous memory pages based on
+ * the specified allocation flags and order. The order determines the size of the
+ * allocation as a power of two (2^order). If the allocation fails, an error is
+ * logged, and the function returns 0.
+ *
+ * @param flags Allocation flags specifying memory constraints.
+ * @param order Number of pages to allocate as a power of two (2^order).
+ *
+ * @note The allocated pages are not zeroed. The caller is responsible for
+ *       initializing the memory if required.
+ *
+ * @return The virtual address of the first page in the allocated block, or 0
+ *         if the allocation fails.
+ */
+uintptr_t __get_free_pages(aflags_t flags, size_t order)
 {
 	struct page* pg = alloc_pages(flags, order);
 	if (!pg) {
-		log_error("Failed to allocate %zu pages with flags: %lx", 1UL << order, flags);
+		log_error("Failed to allocate %zu pages with flags: %x", 1UL << order, flags);
 		return 0;
 	}
 
@@ -250,7 +354,19 @@ uintptr_t __get_free_pages(flags_t flags, size_t order)
 	return PHYS_TO_HHDM(page_phys);
 }
 
-uintptr_t get_free_pages(flags_t flags, size_t pages)
+/**
+ * @brief Allocates a contiguous block of pages, zeros them, and returns their virtual address.
+ *
+ * This function allocates a block of contiguous memory pages based on the specified
+ * allocation flags and the number of pages requested. The allocated memory is zeroed
+ * before being returned to the caller. If the allocation fails, the function returns 0.
+ *
+ * @param flags Allocation flags specifying memory constraints.
+ * @param pages Number of pages to allocate.
+ *
+ * @return The virtual address of the first zeroed page, or 0 on failure.
+ */
+uintptr_t get_free_pages(aflags_t flags, size_t pages)
 {
 	size_t rounded_size = round_to_power_of_2(pages);
 	size_t order = (size_t)log2(rounded_size);
@@ -258,7 +374,7 @@ uintptr_t get_free_pages(flags_t flags, size_t pages)
 	if (!page_virt) return 0;
 
 	size_t region_size = PAGE_SIZE << order;
-	memset((void*)page_virt, 0, region_size);
+	__fast_memset64((uint64_t*)page_virt, 0, region_size / sizeof(uint64_t));
 
 	return page_virt;
 }
@@ -280,7 +396,7 @@ uintptr_t get_free_pages(flags_t flags, size_t pages)
  * 3. If coalescing is possible, remove both blocks from the free list,
  *    mark them as invalid, and recursively combine them into a parent block.
  */
-static void combine_blocks(struct buddy_allocator* allocator, struct page* page, size_t order)
+static void _combine_blocks(struct buddy_allocator* allocator, struct page* page, size_t order)
 {
 	// Mark the block as free and initialize its state
 	pfn_t init_pfn = page_to_pfn(page);
@@ -298,7 +414,7 @@ static void combine_blocks(struct buddy_allocator* allocator, struct page* page,
 	}
 
 	// Get the buddy
-	pfn_t bdy_pfn = buddy_pfn(init_pfn, order);
+	pfn_t bdy_pfn = _buddy_pfn(init_pfn, order);
 	struct page* buddy = &mem_map[bdy_pfn];
 
 	// Check if coalescing is possible
@@ -309,10 +425,10 @@ static void combine_blocks(struct buddy_allocator* allocator, struct page* page,
 		page->state = BLOCK_INVALID;
 		buddy->state = BLOCK_INVALID;
 
-		size_t prnt_pfn = parent_pfn(init_pfn, order);
+		size_t prnt_pfn = _parent_pfn(init_pfn, order);
 		struct page* parent = &mem_map[prnt_pfn];
 
-		combine_blocks(allocator, parent, order + 1);
+		_combine_blocks(allocator, parent, order + 1);
 	}
 }
 
@@ -327,17 +443,43 @@ static void combine_blocks(struct buddy_allocator* allocator, struct page* page,
  * the allocator's spinlock to ensure thread safety, combines adjacent free blocks
  * to maintain the buddy system's structure, and then releases the spinlock.
  */
-void __free_pages_core(struct buddy_allocator* allocator, struct page* page, size_t order)
+static void __free_pages_core(struct buddy_allocator* allocator, struct page* page, size_t order)
 {
 	spinlock_acquire(&allocator->lock);
 
-	combine_blocks(allocator, page, order);
+	_combine_blocks(allocator, page, order);
 
 	spinlock_release(&allocator->lock);
 }
 
 /**
+ * @brief Frees a block of contiguous pages.
+ *
+ * This function releases a previously allocated block of contiguous memory pages
+ * back to the memory allocator. The block is identified by the starting page and
+ * the order, which determines the size of the block as a power of two (2^order).
+ *
+ * @param page Pointer to the starting page of the block to be freed.
+ * @param order The order of the block to be freed (size is 2^order pages).
+ *
+ * @note If the page is null or belongs to an invalid memory zone, the function
+ *       logs an error and returns without performing any action.
+ */
+void __free_pages(struct page* page, size_t order)
+{
+	if (!page) return;
+	enum MEM_ZONE zone = _page_zone(page);
+	if (zone == MEM_ZONE_INVALID) {
+		log_error("Invalid page zone for page at %p", (void*)page);
+		return;
+	}
+
+	__free_pages_core(regions[zone], page, order);
+}
+
+/**
  * @brief Frees a specified number of pages starting at a given address.
+ *
  * @param addr The virtual address of the first page to free.
  * @param pages The number of pages to free.
  *
@@ -363,5 +505,6 @@ void free_pages(void* addr, size_t pages)
 	size_t rounded_size = round_to_power_of_2(pages);
 	size_t order = (size_t)log2(rounded_size);
 
+	log_debug("Freeing %zu pages at address %p (order: %zu)", pages, addr, order);
 	__free_pages(page, order);
 }

@@ -89,7 +89,7 @@ void ctrl_init()
 
 		if (ctrls[i].use_dma) {
 			// TODO: Make sure this is in low 4GB
-			ctrls[i].prdt = (void*)get_free_pages(0, 1);
+			ctrls[i].prdt = (void*)get_free_pages(AF_DMA, 1);
 			log_debug("prdt: %p", (void*)ctrls[i].prdt);
 			// TODO: clean up on alloc fail
 			uint64_t full_addr = (uintptr_t)HHDM_TO_PHYS(ctrls[i].prdt);

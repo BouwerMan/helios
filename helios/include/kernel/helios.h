@@ -59,6 +59,8 @@
 		_a < _b ? _a : _b;      \
 	})
 
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+
 /**
  * @brief Macro to indicate that the given expression is unlikely to be true.
  * @param expr The expression to evaluate.
