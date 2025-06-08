@@ -55,7 +55,7 @@ struct screen_info {
 	spinlock_t lock;
 };
 
-void screen_init(struct limine_framebuffer* fb, uint32_t fg_color, uint32_t bg_color);
+void screen_init(uint32_t fg_color, uint32_t bg_color);
 void screen_clear();
 void set_color(uint32_t fg, uint32_t bg);
 void screen_putstring(const char* s);

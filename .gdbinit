@@ -3,8 +3,8 @@ target remote localhost:1234
 
 set print pretty on
 
-# break switch.asm:73
-break alloc_pages
+break switch.asm:73
+# break alloc_pages
 # break bootmem_free_all
 c
 

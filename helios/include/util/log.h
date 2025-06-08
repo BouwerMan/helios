@@ -24,7 +24,7 @@ enum LOG_MODE {
 #undef log_info
 #undef log_warn
 #undef log_error
-#undef log_debug_long
+#undef log_init
 #endif
 // TODO: Make screen accept ANSI color codes
 
@@ -94,6 +94,23 @@ enum LOG_MODE {
 #define log_debug_long(msg) log_long_message("DEBUG", __FILE__, __LINE__, __func__, msg)
 #else
 #define log_debug_long(msg) ((void)0)
+#endif
+#endif
+
+// All macros below this point are just special flavors of log_info
+
+// Define or redefine log_info
+#if !defined(log_init) || defined(FORCE_LOG_REDEF)
+#if LOG_LEVEL <= LOG_LEVEL_INFO
+#define log_init(fmt, ...)                                                                                         \
+	do {                                                                                                       \
+		char __log_buf[LOG_BUFFER_SIZE];                                                                   \
+		snprintf(__log_buf, sizeof(__log_buf), "\x1b[1;32m[INIT]\x1b[0m  %s:%d:%s(): " fmt "\n", __FILE__, \
+			 __LINE__, __func__, ##__VA_ARGS__);                                                       \
+		log_output(__log_buf);                                                                             \
+	} while (0)
+#else
+#define log_info(fmt, ...) ((void)0)
 #endif
 #endif
 

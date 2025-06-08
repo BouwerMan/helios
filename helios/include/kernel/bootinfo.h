@@ -4,8 +4,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <limine.h>
-
 struct bootinfo_memmap_entry {
 	uint64_t base;
 	uint64_t length;
@@ -26,4 +24,5 @@ struct bootinfo {
 	} executable;
 };
 
-void bootinfo_init(struct limine_memmap_response* mmap);
+void bootinfo_init();
+void kernel_structure_init();

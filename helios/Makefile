@@ -18,15 +18,10 @@ LIBS:=$(LIBS) -nostdlib -L$(PWD)/libc/build -lk -lgcc
 
 ARCHDIR=arch/$(HOSTARCH)
 
-include $(ARCHDIR)/make.config
-
-DEFINES:=
-DEFINES+=-DLIMINE_API_REVISION=3
-DEFINES+=-D__KDEBUG__
-DEFINES+=-D__PMM_DEBUG__
+include $(ARCHDIR)/config.mk
+include ./config.mk
 
 CFLAGS:=$(CFLAGS) $(KERNEL_ARCH_CFLAGS)
-CPPFLAGS:=$(CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS)
 LDFLAGS:=$(LDFLAGS) $(KERNEL_ARCH_LDFLAGS)
 LIBS:=$(LIBS) $(KERNEL_ARCH_LIBS)
 
@@ -63,11 +58,7 @@ $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 $(BUILDDIR)/%.o: %.c
 	@echo "  CC      $@"
 	@mkdir -p $(@D)
-	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS) $(DEFINES) $(GDEFINES) $(TESTS)
-
-$(BUILDDIR)/%.o: %.s
-	@mkdir -p $(@D)
-	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
+	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CFLAGS_DEBUG) $(CFLAGS_TESTS)
 
 $(BUILDDIR)/%.o: %.asm
 	@echo "  AR      $@"

@@ -22,7 +22,7 @@ export LIBDIR=$(EXEC_PREFIX)/lib
 export INCLUDEDIR=$(PREFIX)/include
 
 export CWARN=-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Wcast-align \
-	-Wwrite-strings -Wmissing-prototypes -Wmissing-declarations \
+	-Wwrite-strings \
         -Wredundant-decls -Wnested-externs -Wno-long-long \
         -Wconversion -Wstrict-prototypes \
 	# -Wsuggest-attribute=pure -Wsuggest-attribute=const -Wno-error=suggest-attribute=pure -Wno-error=suggest-attribute=const
@@ -30,7 +30,6 @@ export CWARN=-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Wcast-align \
 export CFLAGS=-Og -ggdb -pipe -ffreestanding -mcmodel=kernel -mno-red-zone -mno-mmx -mno-sse -mno-sse3 -std=gnu23 $(CWARN)
 
 export GDEFINES=-D__KDEBUG__ -DLOG_LEVEL=0 -DENABLE_SERIAL_LOGGING -DSLAB_DEBUG
-export TESTS=#-D__PMM_TEST__
 
 # Configure the cross-compiler to use the desired system root.
 export SYSROOT="$(shell pwd)/sysroot"

@@ -18,7 +18,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <arch/x86_64/gdt/gdt.h>
 #include <drivers/ata/controller.h>
 #include <drivers/fs/vfs.h>
 #include <drivers/pci/pci.h>
@@ -41,39 +40,6 @@
 #define __STDC_WANT_LIB_EXT1__
 #include <string.h>
 
-// Set the base revision to 3, this is recommended as this is the latest
-// base revision described by the Limine boot protocol specification.
-// See specification for further info.
-
-__attribute__((used, section(".limine_requests"))) static volatile LIMINE_BASE_REVISION(3);
-
-// The Limine requests can be placed anywhere, but it is important that
-// the compiler does not optimise them away, so, usually, they should
-// be made volatile or equivalent, _and_ they should be accessed at least
-// once or marked as used with the "used" attribute as done here.
-
-__attribute__((used, section(".limine_requests"))) static volatile struct limine_framebuffer_request
-	framebuffer_request = { .id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0 };
-
-__attribute__((used, section(".limine_requests"))) static volatile struct limine_memmap_request memmap_request = {
-	.id = LIMINE_MEMMAP_REQUEST,
-	.revision = 0
-};
-
-// Halt and catch fire function.
-static void hcf(void)
-{
-	for (;;) {
-#if defined(__x86_64__)
-		__asm__("hlt");
-#elif defined(__aarch64__) || defined(__riscv)
-		asm("wfi");
-#elif defined(__loongarch64)
-		asm("idle 0");
-#endif
-	}
-}
-
 [[noreturn]]
 extern void __switch_to_new_stack(void* new_stack_top, void (*entrypoint)(void));
 
@@ -82,58 +48,10 @@ struct limine_framebuffer* framebuffer;
 struct kernel_context kernel = { 0 };
 
 /// Initializes the lists in the kernel_context struct
-static void init_kernel_structure()
+/// A lot of the entries actually get inited by other functions
+void init_kernel_structure()
 {
 	list_init(&kernel.slab_caches);
-}
-
-void kernel_main();
-
-// Doing some quirky stuff to get around clang and gcc errors for functions called from asm
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wmissing-prototypes"
-void kernel_init(void)
-{
-#pragma GCC diagnostic pop
-	// Ensure the bootloader actually understands our base revision (see spec).
-	if (LIMINE_BASE_REVISION_SUPPORTED == false) {
-		hcf();
-	}
-
-	// Ensure we got a framebuffer.
-	if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) {
-		hcf();
-	}
-
-	// Fetch the first framebuffer.
-	framebuffer = framebuffer_request.response->framebuffers[0];
-
-	init_kernel_structure();
-
-	init_serial();
-	write_serial_string("\n\nInitialized serial output, expect a lot of debug messages :)\n\n");
-	screen_init(framebuffer, COLOR_WHITE, COLOR_BLACK);
-
-	log_info("Initializing GDT");
-	gdt_init();
-	log_info("Initializing IDT");
-	idt_init();
-
-	log_info("Initializing memory management");
-	bootmem_init(memmap_request.response);
-
-	bootinfo_init(memmap_request.response);
-
-	page_alloc_init();
-
-	log_info("Initializing VMM");
-	vmm_init();
-
-	// Now we switch to new kernel stack and kernel_main
-
-	uintptr_t kernel_stack = get_free_pages(AF_KERNEL, 16);
-	__switch_to_new_stack((void*)(kernel_stack + 16 * PAGE_SIZE), kernel_main);
-	__builtin_unreachable();
 }
 
 void kernel_main()
@@ -223,7 +141,9 @@ void kernel_main()
 	sleep(1000);
 	log_warn("Shutting down in 1 second");
 	sleep(1000);
+
 	// QEMU shutdown command
 	outword(0x604, 0x2000);
-	hcf();
+	for (;;)
+		halt();
 }

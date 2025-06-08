@@ -42,8 +42,8 @@
 #include <string.h>
 
 #include <kernel/atomic.h>
-#include <kernel/bootinfo.h>
 #include <kernel/helios.h>
+#include <kernel/limine_requests.h>
 #include <kernel/panic.h>
 #include <limine.h>
 #include <mm/bootmem.h>
@@ -129,8 +129,9 @@ static inline size_t get_bit_offset(uintptr_t phys_addr)
  * 4. Marks usable pages as free in the bitmap.
  * 5. Sets up the memory map structure to track page states.
  */
-void bootmem_init(struct limine_memmap_response* mmap)
+void bootmem_init()
 {
+	struct limine_memmap_response* mmap = memmap_request.response;
 	log_debug("Reading Memory Map");
 	size_t total_len = 0; // Total length of usable memory.
 

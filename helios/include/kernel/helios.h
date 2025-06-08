@@ -91,6 +91,8 @@
 	"Test completed successfully. All expected conditions were met.\n"                    \
 	"*****************************************************************************\n"
 
+#define KERNEL_STACK_SIZE_PAGES 16 // 16 pages of stack, 64 KiB
+
 static inline void halt()
 {
 	__asm__ volatile("hlt");
@@ -117,3 +119,8 @@ struct kernel_context {
 };
 
 extern struct kernel_context kernel;
+
+// Both of these are located in kernel.c
+
+void init_kernel_structure();
+void kernel_main();

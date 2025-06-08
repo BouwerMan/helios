@@ -21,6 +21,8 @@
 
 #include <string.h>
 
+#include <kernel/helios.h>
+#include <kernel/limine_requests.h>
 #include <kernel/screen.h>
 #include <kernel/spinlock.h>
 #include <util/log.h>
@@ -46,9 +48,17 @@ static void screen_putchar_at(uint16_t c, size_t cx, size_t cy, uint32_t fg, uin
 static inline void draw_glyph_scanline(const uint8_t* glyph_row, PIXEL* dst, uint32_t fg, uint32_t bg);
 static inline void draw_glyph(uint8_t* glyph, size_t offset, uint32_t fg, uint32_t bg);
 
-void screen_init(struct limine_framebuffer* fb, uint32_t fg_color, uint32_t bg_color)
+void screen_init(uint32_t fg_color, uint32_t bg_color)
 {
 	// TODO: properly init psf, though the one im using currently isnt unicode
+
+	// Ensure we got a framebuffer.
+	if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) {
+		for (;;)
+			halt();
+	}
+
+	struct limine_framebuffer* fb = framebuffer_request.response->framebuffers[0];
 
 	sc.cx = 0;
 	sc.cy = 0;

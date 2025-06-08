@@ -31,30 +31,17 @@
 
 #include <kernel/bootinfo.h>
 #include <kernel/helios.h>
+#include <kernel/limine_requests.h>
 #include <kernel/panic.h>
 #include <limine.h>
 #include <mm/bootmem.h>
 #include <mm/page.h>
 
-__attribute__((used, section(".limine_requests"))) static volatile struct limine_hhdm_request hhdm_request = {
-	.id = LIMINE_HHDM_REQUEST,
-	.revision = 0
-};
-
-__attribute__((used, section(".limine_requests"))) static volatile struct limine_executable_address_request
-	exe_addr_req = { .id = LIMINE_EXECUTABLE_ADDRESS_REQUEST, .revision = 0 };
-
-// Finally, define the start and end markers for the Limine requests.
-// These can also be moved anywhere, to any .c file, as seen fit.
-
-__attribute__((used, section(".limine_requests_start"))) static volatile LIMINE_REQUESTS_START_MARKER;
-
-__attribute__((used, section(".limine_requests_end"))) static volatile LIMINE_REQUESTS_END_MARKER;
-
 #define MAX_MEMMAP_ENTRIES_PER_PAGE (PAGE_SIZE / sizeof(struct bootinfo_memmap_entry))
 
-void bootinfo_init(struct limine_memmap_response* mmap)
+void bootinfo_init()
 {
+	struct limine_memmap_response* mmap = memmap_request.response;
 	struct limine_hhdm_response* hhdm = hhdm_request.response;
 	struct limine_executable_address_response* exec_addr = exe_addr_req.response;
 	struct bootinfo* bootinfo = &kernel.bootinfo;

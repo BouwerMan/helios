@@ -3,11 +3,11 @@ KERNEL_ARCH_CPPFLAGS=
 KERNEL_ARCH_LDFLAGS=
 KERNEL_ARCH_LIBS=
 
-KERNEL_ARCH_OBJS= \
+KERNEL_ARCH_OBJS = \
 $(BUILDDIR)/$(ARCHDIR)/interrupts/idt.o \
 $(BUILDDIR)/$(ARCHDIR)/gdt/gdt.o \
 $(BUILDDIR)/$(ARCHDIR)/gdt/gdt_flush.o \
 $(BUILDDIR)/$(ARCHDIR)/interrupts/interrupts.o \
 $(BUILDDIR)/$(ARCHDIR)/mmu/vmm.o \
 $(BUILDDIR)/$(ARCHDIR)/mmu/switch_stack.o \
-
+$(BUILDDIR)/$(ARCHDIR)/entry.o \

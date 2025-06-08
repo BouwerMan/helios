@@ -10,7 +10,7 @@
  *
  * @param mmap Pointer to the Limine memory map response structure.
  */
-void bootmem_init(struct limine_memmap_response* mmap);
+void bootmem_init();
 
 /**
  * @brief Frees all pages managed by the boot allocator.
