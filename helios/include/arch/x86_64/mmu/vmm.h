@@ -67,8 +67,57 @@ static inline void vmm_load_cr3(uintptr_t pml4_phys_addr)
 	__asm__ volatile("mov %0, %%cr3" ::"r"(pml4_phys_addr) : "memory");
 }
 
+/**
+ * @brief Initializes the virtual memory manager (VMM).
+ */
 void vmm_init();
 uint64_t* vmm_create_address_space();
 
+/**
+ * @brief Walks the page table hierarchy to locate or create a page table entry.
+ *
+ * @param pml4   Pointer to the PML4 table.
+ * @param vaddr  The virtual address to resolve.
+ * @param create Whether to create missing entries in the hierarchy.
+ * @param flags  Flags to set for newly created entries.
+ *
+ * @return       A pointer to the page table entry corresponding to the given
+ *               virtual address, or NULL if the entry does not exist and
+ *               @create is false.
+ */
 uint64_t* walk_page_table(uint64_t* pml4, uintptr_t vaddr, bool create, flags_t flags);
+
+/**
+ * @brief Maps a virtual address to a physical address in the page table.
+ *
+ * @param pml4   Pointer to the PML4 table.
+ * @param vaddr  Virtual address to map.
+ * @param paddr  Physical address to map to.
+ * @param flags  Flags for the page table entry (e.g., PAGE_PRESENT, PAGE_WRITE).
+ *
+ * @return       0 on success, -1 on failure (e.g., misalignment or mapping issues).
+ */
 int map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags);
+
+/**
+ * @brief Unmaps a virtual address from the page table.
+ *
+ * @param pml4   Pointer to the PML4 table.
+ * @param vaddr  Virtual address to unmap.
+ *
+ * @return       0 on success, -1 on failure (e.g., misalignment).
+ *               Returns 0 if the page was already unmapped.
+ */
+int unmap_page(uint64_t* pml4, uintptr_t vaddr);
+
+/**
+ * @brief Prunes empty page tables recursively.
+ *
+ * @param pml4   Pointer to the PML4 table.
+ * @param vaddr  Virtual address to start pruning from.
+ *
+ * @return       0 on success.
+ */
+int prune_page_tables(uint64_t* pml4, uintptr_t vaddr);
+
+void vmm_test_prune_single_mapping(void);

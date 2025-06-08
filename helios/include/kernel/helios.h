@@ -82,7 +82,8 @@
 #define TESTING_HEADER                                                                        \
 	"\n\n*****************************************************************************\n" \
 	"BEGIN TEST: %s\n"                                                                    \
-	"Note: Error messages during this test are expected. Assertions indicate failure.\n"  \
+	"Note: Error messages during this test are expected.\n"                               \
+	"      Assertions indicate failure.\n"                                                \
 	"*****************************************************************************\n"
 
 #define TESTING_FOOTER                                                                        \

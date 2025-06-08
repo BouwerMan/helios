@@ -152,7 +152,7 @@ void __free_pages(struct page* page, size_t order);
 [[gnu::always_inline]]
 static inline void free_page(void* addr)
 {
-	free_pages(addr, 0);
+	free_pages(addr, 1);
 }
 
 /**
