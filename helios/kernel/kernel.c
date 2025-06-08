@@ -18,6 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <arch/x86_64/gdt/gdt.h>
 #include <drivers/ata/controller.h>
 #include <drivers/fs/vfs.h>
 #include <drivers/pci/pci.h>
@@ -31,15 +32,12 @@
 #include <kernel/timer.h>
 #include <limine.h>
 #include <mm/bootmem.h>
-#include <mm/slab.h>
-
 #include <mm/page_alloc.h>
+#include <mm/slab.h>
 #include <util/log.h>
 
 #define __STDC_WANT_LIB_EXT1__
 #include <string.h>
-
-#include "../arch/x86_64/gdt.h"
 
 // Set the base revision to 3, this is recommended as this is the latest
 // base revision described by the Limine boot protocol specification.
@@ -146,8 +144,7 @@ void kernel_main(void)
 	log_info("Initializing IDT");
 	idt_init();
 
-	log_debug("Time for funny new allocators");
-	log_debug("HHDM_OFFSET: %lx", hhdm_request.response->offset);
+	log_info("Initializing memory management");
 	bootmem_init(kernel.memmap);
 
 	page_alloc_init();

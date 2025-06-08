@@ -3,8 +3,13 @@
 
 #include <stdint.h>
 
-void gdt_set_gate(uint8_t index, uint64_t base, uint32_t limit, uint8_t access, uint8_t gran);
-void gdt_init();
+#define GDT_ENTRIES 7 /**< The number of entries in the Global Descriptor Table (GDT). */
+
+/**
+ * The offset in the GDT where the TSS is located. This is the 5th entry in the GDT, so 4 * 8 = 32 bytes,
+ * plus the first 8 bytes for the GDT pointer.
+ */
+#define TSS_OFFSET 0x28
 
 /* Defines a GDT entry. We say packed, because it prevents the
  *  compiler from doing things that it thinks is best: Prevent
@@ -24,3 +29,7 @@ struct gdt_ptr {
 	uint16_t limit;		  /**< The size of the GDT in bytes minus 1. */
 	struct gdt_entry* offset; /**< The memory address of the first GDT entry. */
 } __attribute__((packed));
+
+void gdt_init();
+void gdt_flush();
+void set_tss_rsp(uint64_t rsp0);

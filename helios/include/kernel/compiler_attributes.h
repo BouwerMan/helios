@@ -58,3 +58,7 @@
 #ifndef __section
 #define __section(x) __attribute__((section(x)))
 #endif
+
+#ifndef __packed
+#define __packed __attribute__((packed))
+#endif

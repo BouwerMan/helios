@@ -19,6 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <arch/x86_64/gdt/gdt.h>
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
@@ -107,6 +108,7 @@ void check_reschedule(struct registers* regs)
 		}
 
 		new->state = RUNNING;
+		set_tss_rsp(new->kernel_stack);
 
 		/* @ref Does not return */
 		__switch_to(new->regs);

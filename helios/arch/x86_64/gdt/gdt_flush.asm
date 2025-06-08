@@ -1,9 +1,9 @@
 bits 64
 
-global gdt_flush
-global tss_flush
+global __gdt_flush
+global __tss_flush
 
-gdt_flush:
+__gdt_flush:
     lgdt    [rdi]        ; Load the new GDT pointer
 
     mov     ax, 0x10      ; 0x10 is the offset in the GDT to our data segment
@@ -19,6 +19,6 @@ gdt_flush:
     push    rdi
     retfq
 
-tss_flush:
+__tss_flush:
     ltr     di
     ret
