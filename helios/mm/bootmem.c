@@ -42,6 +42,7 @@
 #include <string.h>
 
 #include <kernel/atomic.h>
+#include <kernel/bootinfo.h>
 #include <kernel/helios.h>
 #include <kernel/panic.h>
 #include <limine.h>
@@ -449,6 +450,48 @@ void bootmem_free_all(void)
 	}
 
 	boot_bitmap = NULL;
-
 	log_debug("Successfully decommissioned old bootmem allocator");
+}
+
+/**
+ * @brief Reclaims memory marked as bootloader reclaimable.
+ *
+ * This function iterates through the memory map entries provided by the bootloader
+ * and identifies regions marked as LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE. For each
+ * such region, it processes the memory pages within the range, clears the reserved
+ * flag, marks them as buddy pages, sets their state to BLOCK_FREE, and frees them
+ * for use by the system.
+ */
+void bootmem_reclaim_bootloader()
+{
+
+	struct bootinfo* bootinfo = &kernel.bootinfo;
+	if (!bootinfo->valid) {
+		log_error("Invalid bootinfo");
+		return;
+	}
+
+	size_t total_reclaimed = 0;
+
+	for (size_t i = 0; i < bootinfo->memmap_entry_count; i++) {
+		struct bootinfo_memmap_entry* entry = &bootinfo->memmap[i];
+		if (entry->type != LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE) continue;
+
+		uintptr_t start = entry->base;
+		uintptr_t end = entry->base + entry->length;
+		log_debug("Reclaimable range: start=0x%lx, end=0x%lx", start, end);
+		for (size_t phys = start; phys < end; phys += PAGE_SIZE) {
+			struct page* page = phys_to_page(phys);
+
+			clear_page_reserved(page);
+			set_page_buddy(page);
+			page->state = BLOCK_FREE;
+
+			__free_page(page);
+
+			total_reclaimed += PAGE_SIZE;
+		}
+	}
+
+	log_info("Reclaimed %zu KiB (%zu bytes) from the bootloader", total_reclaimed / 1024, total_reclaimed);
 }

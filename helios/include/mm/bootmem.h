@@ -20,6 +20,11 @@ void bootmem_init(struct limine_memmap_response* mmap);
  */
 void bootmem_free_all();
 
+/** 
+ * @brief Reclaims memory marked as bootloader reclaimable.
+ */
+void bootmem_reclaim_bootloader();
+
 /**
  * @brief Allocates a single page of physical memory.
  *

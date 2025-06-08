@@ -48,6 +48,12 @@ struct page {
 	};
 };
 
+[[gnu::always_inline]]
+static inline bool is_page_aligned(uintptr_t addr)
+{
+	return (addr & (PAGE_SIZE - 1)) == 0;
+}
+
 static inline uintptr_t align_up_page(uintptr_t addr)
 {
 	return (addr + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);

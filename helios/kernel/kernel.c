@@ -60,21 +60,6 @@ __attribute__((used, section(".limine_requests"))) static volatile struct limine
 	.revision = 0
 };
 
-__attribute__((used, section(".limine_requests"))) static volatile struct limine_hhdm_request hhdm_request = {
-	.id = LIMINE_HHDM_REQUEST,
-	.revision = 0
-};
-
-__attribute__((used, section(".limine_requests"))) static volatile struct limine_executable_address_request
-	exe_addr_req = { .id = LIMINE_EXECUTABLE_ADDRESS_REQUEST, .revision = 0 };
-
-// Finally, define the start and end markers for the Limine requests.
-// These can also be moved anywhere, to any .c file, as seen fit.
-
-__attribute__((used, section(".limine_requests_start"))) static volatile LIMINE_REQUESTS_START_MARKER;
-
-__attribute__((used, section(".limine_requests_end"))) static volatile LIMINE_REQUESTS_END_MARKER;
-
 // Halt and catch fire function.
 static void hcf(void)
 {
@@ -89,6 +74,9 @@ static void hcf(void)
 	}
 }
 
+[[noreturn]]
+extern void __switch_to_new_stack(void* new_stack_top, void (*entrypoint)(void));
+
 struct limine_framebuffer* framebuffer;
 
 struct kernel_context kernel = { 0 };
@@ -97,13 +85,14 @@ struct kernel_context kernel = { 0 };
 static void init_kernel_structure()
 {
 	list_init(&kernel.slab_caches);
-	kernel.memmap = memmap_request.response;
 }
+
+void kernel_main();
 
 // Doing some quirky stuff to get around clang and gcc errors for functions called from asm
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-prototypes"
-void kernel_main(void)
+void kernel_init(void)
 {
 #pragma GCC diagnostic pop
 	// Ensure the bootloader actually understands our base revision (see spec).
@@ -116,21 +105,6 @@ void kernel_main(void)
 		hcf();
 	}
 
-	// Ensure we got a memory map
-	if (memmap_request.response == NULL || memmap_request.response->entry_count < 1) {
-		hcf();
-	}
-
-	// Ensure we got a hhdm
-	if (hhdm_request.response == NULL) {
-		hcf();
-	}
-
-	// Ensure we get an executable address
-	if (exe_addr_req.response == NULL) {
-		hcf();
-	}
-
 	// Fetch the first framebuffer.
 	framebuffer = framebuffer_request.response->framebuffers[0];
 
@@ -139,7 +113,6 @@ void kernel_main(void)
 	init_serial();
 	write_serial_string("\n\nInitialized serial output, expect a lot of debug messages :)\n\n");
 	screen_init(framebuffer, COLOR_WHITE, COLOR_BLACK);
-	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
 
 	log_info("Initializing GDT");
 	gdt_init();
@@ -147,19 +120,33 @@ void kernel_main(void)
 	idt_init();
 
 	log_info("Initializing memory management");
-	bootmem_init(kernel.memmap);
+	bootmem_init(memmap_request.response);
+
+	bootinfo_init(memmap_request.response);
 
 	page_alloc_init();
+
+	log_info("Initializing VMM");
+	vmm_init();
+
+	// Now we switch to new kernel stack and kernel_main
+
+	uintptr_t kernel_stack = get_free_pages(AF_KERNEL, 16);
+	__switch_to_new_stack((void*)(kernel_stack + 16 * PAGE_SIZE), kernel_main);
+	__builtin_unreachable();
+}
+
+void kernel_main()
+{
+	log_info("Successfully got out of bootstrapping hell");
+	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
+	bootmem_reclaim_bootloader();
 
 	liballoc_init(); // Just initializes the liballoc spinlock
 	int* test = kmalloc(141);
 	*test = 513;
 
 	log_debug("kmalloc returned %p, stored %d in it", (void*)test, *test);
-
-	log_info("Initializing VMM");
-	vmm_init();
-	log_debug("VMM initialized, cr3: %lx", vmm_read_cr3());
 
 	init_scheduler();
 	log_info("Initializing dmesg");

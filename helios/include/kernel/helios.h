@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include <kernel/bootinfo.h>
 #include <kernel/compiler_attributes.h>
 #include <kernel/types.h>
 #include <limine.h>
@@ -107,9 +108,10 @@ struct kernel_context {
 	uint64_t* pml4;
 	struct gdt_ptr* gdt;
 	struct idtr* idtr;
-	struct limine_memmap_response* memmap; // Memmap from limine
 	struct scheduler_queue* squeue;
 	struct screen_info* screen;
+
+	struct bootinfo bootinfo;
 
 	struct list slab_caches;
 };
