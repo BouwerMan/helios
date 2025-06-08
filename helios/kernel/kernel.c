@@ -26,12 +26,14 @@
 #include <kernel/dmesg.h>
 #include <kernel/helios.h>
 #include <kernel/liballoc.h>
+#include <kernel/mmu/vmm.h>
 #include <kernel/panic.h>
 #include <kernel/screen.h>
 #include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
 #include <limine.h>
 #include <mm/bootmem.h>
+#include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
 #include <util/log.h>
@@ -155,9 +157,13 @@ void kernel_main(void)
 
 	log_debug("kmalloc returned %p, stored %d in it", (void*)test, *test);
 
+	log_info("Initializing VMM");
+	vmm_init();
+	log_debug("VMM initialized, cr3: %lx", vmm_read_cr3());
+
 	init_scheduler();
-	// log_info("Initializing dmesg");
-	// dmesg_init();
+	log_info("Initializing dmesg");
+	dmesg_init();
 
 	log_info("Initializing Timer");
 	timer_init();

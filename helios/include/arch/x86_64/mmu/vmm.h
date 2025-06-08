@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+#define PML4_SIZE_PAGES 1
+#define PML4_ENTRIES	512
+
+#define PAGE_PRESENT(page) ((page) & 0x1)
+
 /**
  * @brief Reads the value of the CR3 register.
  *
@@ -18,3 +23,5 @@ static inline uintptr_t vmm_read_cr3(void)
 	__asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
 	return cr3;
 }
+
+void vmm_init();

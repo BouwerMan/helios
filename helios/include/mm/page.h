@@ -6,10 +6,6 @@
 #include <kernel/types.h>
 #include <util/list.h>
 
-#if defined(__x86_64__)
-#include <arch/x86_64/page.h>
-#endif
-
 #define PAGE_SHIFT 12
 #define PAGE_SIZE  (1UL << PAGE_SHIFT)
 #define PAGE_MASK  (~(PAGE_SIZE - 1))

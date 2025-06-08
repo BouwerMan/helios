@@ -17,6 +17,11 @@ enum TASK_STATE {
 	IDLE,
 };
 
+enum TASK_TYPE {
+	KERNEL_TASK,
+	USER_TASK,
+};
+
 typedef void (*entry_func)(void);
 
 struct task {
@@ -24,6 +29,7 @@ struct task {
 	uintptr_t cr3;		// pml4
 	uintptr_t kernel_stack; // Not super sure abt this one
 	enum TASK_STATE state;
+	enum TASK_TYPE type;
 	uint8_t priority;
 	uint64_t PID;
 	volatile uint64_t sleep_ticks;

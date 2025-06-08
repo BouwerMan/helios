@@ -19,7 +19,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <arch/x86_64/gdt/gdt.h>
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
@@ -28,9 +27,12 @@
 
 #include <string.h>
 
+#include <arch/x86_64/gdt/gdt.h>
+#include <arch/x86_64/mmu/vmm.h>
 #include <kernel/liballoc.h>
 #include <kernel/panic.h>
 #include <kernel/tasks/scheduler.h>
+#include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
 #include <util/list.h>
@@ -124,13 +126,12 @@ void check_reschedule(struct registers* regs)
  * @param task Pointer to the task structure.
  * @return 0 on success, 1 on failure.
  */
-static int create_stack(struct task* task)
+static int create_kernel_stack(struct task* task)
 {
 	// TODO: Allocate in userspace if needed
 	void* stack = (void*)get_free_pages(AF_KERNEL, STACK_SIZE_PAGES);
 	log_debug("Allocated stack at %p", stack);
 	if (!stack) return -EOOM;
-	memset(stack, 0, STACK_SIZE_PAGES * PAGE_SIZE);
 
 	uintptr_t stack_top = (uintptr_t)stack + STACK_SIZE_PAGES * PAGE_SIZE;
 
@@ -219,7 +220,7 @@ struct task* new_task(entry_func entry)
 	if (task == NULL) return NULL;
 	memset(task, 0, sizeof(struct task));
 
-	create_stack(task);
+	create_kernel_stack(task);
 	task->PID = squeue.pid_i++;
 	task->cr3 = vmm_read_cr3();
 	task->parent = kernel_task;
@@ -229,6 +230,34 @@ struct task* new_task(entry_func entry)
 	}
 	task->state = READY;
 	task_add(task);
+
+	return task;
+}
+
+static int create_user_stack(struct task* task)
+{
+
+	create_kernel_stack(task);
+
+	void* stack = (void*)get_free_pages(AF_KERNEL, STACK_SIZE_PAGES);
+	task->regs->rsp = (uintptr_t)stack + STACK_SIZE_PAGES * PAGE_SIZE;
+	log_debug("Allocated user stack at %p", stack);
+
+	return 0;
+}
+
+struct task* new_user_task(entry_func entry)
+{
+	struct task* task = kmalloc(sizeof(struct task));
+	if (task == NULL) return NULL;
+	memset(task, 0, sizeof(struct task));
+
+	task->PID = squeue.pid_i++;
+	task->type = USER_TASK;
+
+	create_user_stack(task);
+
+	task->state = READY;
 
 	return task;
 }

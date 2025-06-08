@@ -1,5 +1,5 @@
 /**
- * @file arch/x86_64/gdt.c
+ * @file arch/x86_64/gdt/gdt.c
  *
  * Copyright (C) 2025  Dylan Parks
  *
