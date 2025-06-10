@@ -15,3 +15,6 @@ limine/
 *.d
 *.kernel
 build/
+tools/
+.gdbinit
+.cache/

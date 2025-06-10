@@ -1,10 +1,8 @@
 [default_config]
-version = "0.10.0"
-assembler = "nasm"
+assembler = "gas"
 instruction_set = "x86/x86-64"
 
 [default_config.opts]
-compiler = "nasm"
-compile_flags_txt = ["-felf64"]
+compiler = "as"
 diagnostics = true
 default_diagnostics = true

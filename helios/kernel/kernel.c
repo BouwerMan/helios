@@ -70,6 +70,7 @@ void kernel_main()
 	log_info("Initializing dmesg");
 	dmesg_init();
 
+	// GDB BREAKPOINT
 	log_info("Initializing Timer");
 	timer_init();
 

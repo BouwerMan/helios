@@ -1,16 +1,5 @@
-CFLAGS?=-O0 -g -std=gnu23
-CPPFLAGS?=
-LDFLAGS?=
-LIBS?=
-
-OSNAME?=HeliOS
-
 BUILDDIR=build
-KERNELDIR=kernel
-DRIVERDIR=drivers
-UTILDIR=util
-MMDIR=mm
-SRC_DIRS:=$(KERNELDIR) $(DRIVERDIR) $(UTILDIR) $(MMDIR)
+SRC_DIRS:=kernel drivers util mm
 
 CFLAGS:=$(CFLAGS) -Iinclude -I$(PWD)/libc/include
 LDFLAGS:=$(LDFLAGS)
@@ -45,11 +34,12 @@ $(OBJS) \
 $(LIBS) \
 
 .PHONY: all clean install install-kernel
-.SUFFIXES: .o .c .s .asm
+.SUFFIXES: .o .c .s .S .asm
 
 all: $(OSNAME).kernel
 
 $(OSNAME).kernel: $(OBJS) $(ARCHDIR)/linker.ld
+	@echo "Linking kernel..."
 	@$(CC) -T $(ARCHDIR)/linker.ld -o $(BUILDDIR)/$@ $(CFLAGS) $(LINK_LIST)
 
 $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
@@ -65,12 +55,23 @@ $(BUILDDIR)/%.o: %.asm
 	@mkdir -p $(@D)
 	@nasm -Wall -felf64 -g -F dwarf $< -o $@
 
+$(BUILDDIR)/%.o: %.S
+	@echo "  AR      $@"
+	@mkdir -p $(@D)
+	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CFLAGS_DEBUG) $(CFLAGS_TESTS)
+
+$(BUILDDIR)/%.o: %.s
+	@echo "  AR      $@"
+	@mkdir -p $(@D)
+	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CFLAGS_DEBUG) $(CFLAGS_TESTS)
+
 $(BUILDDIR)/%.o: %.psf
 	@mkdir -p $(@D)
 	@objcopy -O elf64-x86-64 -B i386 -I binary $< $@
 
 clean:
-	@rm -rvf $(BUILDDIR)
+	@echo "Cleaning build directory..."
+	@rm -rf $(BUILDDIR)
 
 install: install-kernel
 

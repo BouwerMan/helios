@@ -1,8 +1,3 @@
-CFLAGS?=-O2 -g -std=gnu17
-CPPFLAGS?=
-LDFLAGS?=
-LIBS?=
-
 BUILDDIR=build
 
 DESTDIR?=
@@ -83,7 +78,8 @@ $(BUILDDIR)/%.libk.o: %.c
 	@$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
 
 clean:
-	rm -rvf $(BUILDDIR)
+	@echo "Cleaning build directory..."
+	@rm -rf $(BUILDDIR)
 	
 install: install-headers install-libs
 
