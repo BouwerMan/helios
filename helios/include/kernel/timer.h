@@ -3,10 +3,13 @@
 
 #include <stdint.h>
 
-#include <arch/idt.h>
+#include <arch/regs.h>
 
-#define TIMER_HERTZ	    1000
-#define millis_to_ticks(ms) ((((uint64_t)(ms) * TIMER_HERTZ) + 999) / 1000)
+static constexpr int TIMER_HERTZ = 1000;
+static inline unsigned long millis_to_ticks(unsigned long ms)
+{
+	return (ms * TIMER_HERTZ + 999) / 1000;
+}
 
 #define BENCHMARK_START(label) uint64_t label##_start = rdtsc()
 

@@ -5,31 +5,32 @@
 #include <stdint.h>
 
 #include <arch/regs.h>
+#include <kernel/types.h>
 
-#define KERNEL_CS   0x08
-#define IDT_ENTRIES 256
+static constexpr int KERNEL_CS	 = 0x08;
+static constexpr int IDT_ENTRIES = 256;
 
-#define PIC1_COMMAND 0x20
-#define PIC1_DATA    0x21
-#define PIC2_COMMAND 0xA0
-#define PIC2_DATA    0xA1
-#define PIC_EOI	     0x20
+static constexpr u16 PIC1_COMMAND = 0x20;
+static constexpr u16 PIC1_DATA	  = 0x21;
+static constexpr u16 PIC2_COMMAND = 0xA0;
+static constexpr u16 PIC2_DATA	  = 0xA1;
+static constexpr u16 PIC_EOI	  = 0x20;
 
-#define ICW1_INIT 0x10
-#define ICW1_ICW4 0x01
-#define ICW4_8086 0x01
+static constexpr u16 ICW1_INIT = 0x10;
+static constexpr u16 ICW1_ICW4 = 0x01;
+static constexpr u16 ICW4_8086 = 0x01;
 
 enum IRQn {
-	IRQ0 = 32,
-	IRQ1 = 33,
-	IRQ2 = 34,
-	IRQ3 = 35,
-	IRQ4 = 36,
-	IRQ5 = 37,
-	IRQ6 = 38,
-	IRQ7 = 39,
-	IRQ8 = 40,
-	IRQ9 = 41,
+	IRQ0  = 32,
+	IRQ1  = 33,
+	IRQ2  = 34,
+	IRQ3  = 35,
+	IRQ4  = 36,
+	IRQ5  = 37,
+	IRQ6  = 38,
+	IRQ7  = 39,
+	IRQ8  = 40,
+	IRQ9  = 41,
 	IRQ10 = 42,
 	IRQ11 = 43,
 	IRQ12 = 44,

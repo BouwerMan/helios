@@ -6,17 +6,14 @@
 #include <kernel/types.h>
 #include <util/list.h>
 
-#define PAGE_SHIFT 12
-#define PAGE_SIZE  (1UL << PAGE_SHIFT)
-#define PAGE_MASK  (~(PAGE_SIZE - 1))
+static constexpr int PAGE_SHIFT = 12;
+static constexpr size_t PAGE_SIZE = (1UL << PAGE_SHIFT);
+static constexpr unsigned long PAGE_MASK = (~(PAGE_SIZE - 1));
 
-#define HHDM_OFFSET 0xffff800000000000UL
+static constexpr uintptr_t HHDM_OFFSET = 0xffff800000000000UL;
 
-#define PHYS_TO_HHDM(p) ((uintptr_t)(p) + HHDM_OFFSET)
-#define HHDM_TO_PHYS(p) ((uintptr_t)(p) - HHDM_OFFSET)
-
-#define PG_RESERVED (1UL << 0) // Is it reserved by an allocator?
-#define PG_BUDDY    (1UL << 1) // FIXME: Probably not right
+static constexpr flags_t PG_RESERVED = (1UL << 0);
+static constexpr flags_t PG_BUDDY = (1UL << 1);
 
 typedef size_t pfn_t;
 
@@ -47,6 +44,10 @@ struct page {
 		};
 	};
 };
+
+// TODO: Rework these into proper inline functions
+#define PHYS_TO_HHDM(p) ((uintptr_t)(p) + HHDM_OFFSET)
+#define HHDM_TO_PHYS(p) ((uintptr_t)(p) - HHDM_OFFSET)
 
 [[gnu::always_inline]]
 static inline bool is_page_aligned(uintptr_t addr)

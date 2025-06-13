@@ -6,29 +6,29 @@
 #include <kernel/panic.h>
 #include <kernel/types.h>
 
-#define PML4_SIZE_PAGES 1
-#define PML4_ENTRIES	512
+static constexpr int PML4_SIZE_PAGES = 1;
+static constexpr int PML4_ENTRIES    = 512;
 
-#define FLAGS_MASK	0xFFFULL
-#define PAGE_FRAME_MASK (~0xFFFULL)
-#define PAGE_PRESENT	(1ULL << 0)  // Page is present in memory
-#define PAGE_WRITE	(1ULL << 1)  // Writable
-#define PAGE_USER	(1ULL << 2)  // Accessible from user-mode
-#define PAGE_PWT	(1ULL << 3)  // Write-through caching enabled
-#define PAGE_PCD	(1ULL << 4)  // Disable caching
-#define PAGE_ACCESSED	(1ULL << 5)  // Set by CPU when page is read/written
-#define PAGE_DIRTY	(1ULL << 6)  // Set by CPU on write
-#define PAGE_HUGE	(1ULL << 7)  // 2 MiB or 1 GiB page (set only in PD or PDPT)
-#define PAGE_PAT	(1ULL << 7)  // Page Attribute Table (set in PTE)
-#define PAGE_GLOBAL	(1ULL << 8)  // Global page (ignores CR3 reload)
-#define PAGE_NO_EXECUTE (1ULL << 63) // Requires EFER.NXE to be set
+static constexpr u64 FLAGS_MASK	     = 0xFFF;
+static constexpr u64 PAGE_FRAME_MASK = ~FLAGS_MASK;
+static constexpr u64 PAGE_PRESENT    = 1ULL << 0;  // Page is present in memory
+static constexpr u64 PAGE_WRITE	     = 1ULL << 1;  // Writable
+static constexpr u64 PAGE_USER	     = 1ULL << 2;  // Accessible from user-mode
+static constexpr u64 PAGE_PWT	     = 1ULL << 3;  // Write-through caching enabled
+static constexpr u64 PAGE_PCD	     = 1ULL << 4;  // Disable caching
+static constexpr u64 PAGE_ACCESSED   = 1ULL << 5;  // Set by CPU when page is read/written
+static constexpr u64 PAGE_DIRTY	     = 1ULL << 6;  // Set by CPU on write
+static constexpr u64 PAGE_HUGE	     = 1ULL << 7;  // 2 MiB or 1 GiB page (set only in PD or PDPT)
+static constexpr u64 PAGE_PAT	     = 1ULL << 7;  // Page Attribute Table (set in PTE)
+static constexpr u64 PAGE_GLOBAL     = 1ULL << 8;  // Global page (ignores CR3 reload)
+static constexpr u64 PAGE_NO_EXECUTE = 1ULL << 63; // Requires EFER.NXE to be set
 
-#define CACHE_WRITE_BACK      (0)		    // PAT=0, PCD=0, PWT=0
-#define CACHE_WRITE_THROUGH   (PAGE_PWT)	    // PAT=0, PCD=0, PWT=1
-#define CACHE_UNCACHABLE      (PAGE_PCD | PAGE_PWT) // PAT=0, PCD=1, PWT=1
-#define CACHE_UNCACHABLE_ALT  (PAGE_PCD)	    // PAT=0, PCD=1, PWT=0
-#define CACHE_WRITE_COMBINING (PAGE_PAT | PAGE_PWT) // PAT=1, PCD=0, PWT=1
-#define CACHE_WRITE_PROTECTED (PAGE_PAT)	    // PAT=1, PCD=0, PWT=0
+static constexpr u64 CACHE_WRITE_BACK	   = 0;			  // PAT=0, PCD=0, PWT=0
+static constexpr u64 CACHE_WRITE_THROUGH   = PAGE_PWT;		  // PAT=0, PCD=0, PWT=1
+static constexpr u64 CACHE_UNCACHABLE	   = PAGE_PCD | PAGE_PWT; // PAT=0, PCD=1, PWT=1
+static constexpr u64 CACHE_UNCACHABLE_ALT  = PAGE_PCD;		  // PAT=0, PCD=1, PWT=0
+static constexpr u64 CACHE_WRITE_COMBINING = PAGE_PAT | PAGE_PWT; // PAT=1, PCD=0, PWT=1
+static constexpr u64 CACHE_WRITE_PROTECTED = PAGE_PAT;		  // PAT=1, PCD=0, PWT=0
 
 /**
  * @brief Reads the value of the CR3 register.

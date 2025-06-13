@@ -6,8 +6,8 @@
 
 #include <util/list.h>
 
-#define SCHEDULER_TIME 20 // ms per preemptive tick
-#define MAX_RESOURCES  20
+static constexpr int SCHEDULER_TIME = 20; // ms per preemptive tick
+static constexpr int MAX_RESOURCES  = 20;
 
 enum TASK_STATE {
 	INITIALIZED,

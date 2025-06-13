@@ -3,9 +3,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <kernel/types.h>
+
 enum {
-	BUS_COUNT = 8,
-	DEV_COUNT = 32,
+	BUS_COUNT  = 8,
+	DEV_COUNT  = 32,
 	FUNC_COUNT = 8,
 };
 
@@ -15,30 +17,30 @@ enum PCI_IOPORTS {
 };
 
 enum DEV_TYPE {
-	GENERIC = 0x0,
-	PCI_PCI_BRIDGE = 0x1,
+	GENERIC		= 0x0,
+	PCI_PCI_BRIDGE	= 0x1,
 	CARD_BUS_BRIDGE = 0x2,
 };
 
 // TODO: These offsets are kinda wacky if I am always reading dwords
 enum PCI_OFFSETS {
-	PCI_VENDOR_ID = 0x00,
-	PCI_DEVICE_ID = 0x02,
-	PCI_COMMAND = 0x04,
-	PCI_STATUS = 0x06,
+	PCI_VENDOR_ID	= 0x00,
+	PCI_DEVICE_ID	= 0x02,
+	PCI_COMMAND	= 0x04,
+	PCI_STATUS	= 0x06,
 	PCI_PROGRAMMING = 0x08,
-	PCI_CLASS = 0x0A,
-	PCI_TYPE = 0x0E,
+	PCI_CLASS	= 0x0A,
+	PCI_TYPE	= 0x0E,
 };
 
-#define VENDOR_INVALID 0xFFFF
+static constexpr u16 VENDOR_INVALID = 0xFFFF;
 
-#define BAR0 0x10
-#define BAR1 0x14
-#define BAR2 0x18
-#define BAR3 0x1C
-#define BAR4 0x20
-#define BAR5 0x24
+static constexpr u16 BAR0 = 0x10;
+static constexpr u16 BAR1 = 0x14;
+static constexpr u16 BAR2 = 0x18;
+static constexpr u16 BAR3 = 0x1C;
+static constexpr u16 BAR4 = 0x20;
+static constexpr u16 BAR5 = 0x24;
 
 typedef struct {
 	uint8_t bus;

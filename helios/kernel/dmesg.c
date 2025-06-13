@@ -28,14 +28,14 @@
 
 #include <util/log.h>
 
-#define DMESG_BUFFER_SIZE 0x10000
+static constexpr int DMESG_BUFFER_SIZE = 0x10000;
 
 char log_buffer[DMESG_BUFFER_SIZE];
 size_t log_head = 0; // Where new messages are added
 size_t log_tail = 0; // Where we consume from
 spinlock_t log_lock;
 
-struct task* dmesg_task = NULL;
+struct task* dmesg_task = nullptr;
 
 void dmesg_init()
 {
@@ -52,7 +52,7 @@ void dmesg_enqueue(const char* str, size_t len)
 
 	for (size_t i = 0; i < len; i++) {
 		log_buffer[log_head] = str[i];
-		log_head = (log_head + 1) % DMESG_BUFFER_SIZE;
+		log_head	     = (log_head + 1) % DMESG_BUFFER_SIZE;
 
 		if (log_head == log_tail) {
 			// optional: drop oldest char or pause until consumed
@@ -69,7 +69,7 @@ void dmesg_flush(void)
 	spinlock_acquire(&log_lock);
 
 	while (log_head != log_tail) {
-		char c = log_buffer[log_tail];
+		char c	 = log_buffer[log_tail];
 		log_tail = (log_tail + 1) % DMESG_BUFFER_SIZE;
 		spinlock_release(&log_lock);
 
@@ -86,7 +86,7 @@ void dmesg_flush(void)
 void dmesg_flush_raw(void)
 {
 	while (log_head != log_tail) {
-		char c = log_buffer[log_tail];
+		char c	 = log_buffer[log_tail];
 		log_tail = (log_tail + 1) % DMESG_BUFFER_SIZE;
 
 		write_serial(c);
@@ -115,6 +115,6 @@ void dmesg_wait()
 
 void dmesg_wake()
 {
-	data_ready = true;
+	data_ready	  = true;
 	dmesg_task->state = READY;
 }

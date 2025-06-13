@@ -2,6 +2,9 @@
 
 HeliOS is a small hobby operating system built for fun and learning. It boots via the Limine bootloader and targets 64‑bit x86 systems. The project is still young but already sports a few neat tricks.
 
+> [!NOTE]
+> The `main` branch holds "stable" code, while the `dev` branch is where active development happens. If you're looking for the latest features, check out `dev`.
+
 ## What it can do
 
 * Basic kernel console output
@@ -20,6 +23,9 @@ A custom cross‑compiler is required. You can build it automatically by running
 ```
 
 This downloads Binutils and GCC and installs them into `./tools`. Make sure you have the usual build tools (gcc, make, curl, etc.) available.
+
+> [!NOTE]
+> This project relies on C23 extensions, so you need a GCC version that supports it. The script mentioned above will download GCC 15.1.0 which is sufficient.
 
 ## Building and running HeliOS
 

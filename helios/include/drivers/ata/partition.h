@@ -3,13 +3,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <kernel/types.h>
+
 /* the number of partitions per disk */
 // static const size_t PARTITION_COUNT = 4;
-#define PARTITION_COUNT 4
+static constexpr int PARTITION_COUNT = 4;
 
 /* represents a partition (in memory) */
 typedef struct {
-	uint8_t present;
+	u8 present;
 	/* start sector */
 	size_t start;
 	/* sector count */

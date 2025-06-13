@@ -70,7 +70,7 @@ static void _map_memmap_entry(uint64_t* pml4, struct bootinfo_memmap_entry* entr
 	}
 
 	uintptr_t start = entry->base;
-	uintptr_t end = entry->base + entry->length;
+	uintptr_t end	= entry->base + entry->length;
 	log_debug("Mapping [%lx-%lx), type: %lu", start, end, entry->type);
 	for (size_t phys = start; phys < end; phys += PAGE_SIZE) {
 		map_page(pml4, PHYS_TO_HHDM(phys), phys, flags);
@@ -137,10 +137,15 @@ static inline void invalidate(uintptr_t vaddr)
 	__asm__ volatile("invlpg (%0)" ::"r"(vaddr) : "memory");
 }
 
-#define VADDR_PML4_INDEX(vaddr) (((uintptr_t)(vaddr) >> 39) & 0x1FF)
-#define VADDR_PDPT_INDEX(vaddr) (((uintptr_t)(vaddr) >> 30) & 0x1FF)
-#define VADDR_PD_INDEX(vaddr)	(((uintptr_t)(vaddr) >> 21) & 0x1FF)
-#define VADDR_PT_INDEX(vaddr)	(((uintptr_t)(vaddr) >> 12) & 0x1FF)
+static inline size_t _page_table_index(uptr vaddr, int shift)
+{
+	return (vaddr >> shift) & 0x1FF;
+}
+
+#define _pml4_index(vaddr) _page_table_index(vaddr, 39)
+#define _pdpt_index(vaddr) _page_table_index(vaddr, 30)
+#define _pd_index(vaddr)   _page_table_index(vaddr, 21)
+#define _pt_index(vaddr)   _page_table_index(vaddr, 12)
 
 /**
  * @brief Walks the page table hierarchy to locate or create a page table entry.
@@ -169,31 +174,31 @@ uint64_t* walk_page_table(uint64_t* pml4, uintptr_t vaddr, bool create, flags_t 
 	flags &= FLAGS_MASK;
 
 	// Get the PML4 index for the virtual address
-	uint64_t pml4_i = VADDR_PML4_INDEX(vaddr);
+	uint64_t pml4_i = _pml4_index(vaddr);
 	if ((pml4[pml4_i] & PAGE_PRESENT) == 0) {
 		if (!create) return NULL;
 		pml4[pml4_i] = HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
 	}
 
 	// Get the PDPT from the PML4 entry
-	uint64_t* pdpt = (uint64_t*)PHYS_TO_HHDM(pml4[pml4_i] & ~FLAGS_MASK); // Mask off flags
-	uint64_t pdpt_i = VADDR_PDPT_INDEX(vaddr);
+	uint64_t* pdpt	= (uint64_t*)PHYS_TO_HHDM(pml4[pml4_i] & ~FLAGS_MASK); // Mask off flags
+	uint64_t pdpt_i = _pdpt_index(vaddr);
 	if ((pdpt[pdpt_i] & PAGE_PRESENT) == 0) {
 		if (!create) return NULL;
 		pdpt[pdpt_i] = HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
 	}
 
 	// Get the PD from the PDPT entry
-	uint64_t* pd = (uint64_t*)PHYS_TO_HHDM(pdpt[pdpt_i] & ~FLAGS_MASK); // Mask off flags
-	uint64_t pd_i = VADDR_PD_INDEX(vaddr);
+	uint64_t* pd  = (uint64_t*)PHYS_TO_HHDM(pdpt[pdpt_i] & ~FLAGS_MASK); // Mask off flags
+	uint64_t pd_i = _pd_index(vaddr);
 	if ((pd[pd_i] & PAGE_PRESENT) == 0) {
 		if (!create) return NULL;
 		pd[pd_i] = HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
 	}
 
 	// Get the PT from the PD entry
-	uint64_t* pt = (uint64_t*)PHYS_TO_HHDM(pd[pd_i] & ~FLAGS_MASK);
-	uint64_t pt_i = VADDR_PT_INDEX(vaddr);
+	uint64_t* pt  = (uint64_t*)PHYS_TO_HHDM(pd[pd_i] & ~FLAGS_MASK);
+	uint64_t pt_i = _pt_index(vaddr);
 
 	// Return the pointer to the page table entry
 	return pt + pt_i;
@@ -246,13 +251,13 @@ static size_t _get_index(int level, uintptr_t vaddr)
 {
 	switch (level) {
 	case 0:
-		return VADDR_PML4_INDEX(vaddr);
+		return _pml4_index(vaddr);
 	case 1:
-		return VADDR_PDPT_INDEX(vaddr);
+		return _pdpt_index(vaddr);
 	case 2:
-		return VADDR_PD_INDEX(vaddr);
+		return _pd_index(vaddr);
 	case 3:
-		return VADDR_PT_INDEX(vaddr);
+		return _pt_index(vaddr);
 	default:
 		return (size_t)-1; // Invalid level
 	}
@@ -294,7 +299,7 @@ static bool _is_table_empty(uint64_t* table)
  */
 static bool _prune_page_table_recursive(uint64_t* table, int level, uintptr_t vaddr)
 {
-	size_t index = _get_index(level, vaddr);
+	size_t index	= _get_index(level, vaddr);
 	uintptr_t entry = table[index];
 
 	// If the entry is not present, return early

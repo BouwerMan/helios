@@ -37,6 +37,7 @@
 #include <util/log.h>
 #undef FORCE_LOG_REDEF
 
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -52,7 +53,7 @@
 
 struct page* mem_map;
 
-pfn_t max_pfn = 0;
+pfn_t max_pfn	    = 0;
 const pfn_t min_pfn = 0; // Always 0
 static size_t free_page_count;
 static size_t total_page_count;
@@ -61,8 +62,9 @@ static size_t total_page_count;
 static size_t map_elems;
 static size_t bitmap_size;
 static uintptr_t boot_bitmap_phys;
-uint64_t* boot_bitmap = NULL;
-#define BITSET_WIDTH (sizeof(uint64_t) * UINT8_WIDTH)
+uint64_t* boot_bitmap = nullptr;
+
+static constexpr int BITSET_WIDTH = (sizeof(*boot_bitmap) * CHAR_BIT);
 
 /**
  * @brief Calculates the physical address from word and bit offsets.
@@ -154,7 +156,7 @@ void bootmem_init()
 	log_debug("Highest address: 0x%lx, Total memory length: %zx", pfn_to_phys(max_pfn + 1), total_len);
 
 	bitmap_size = CEIL_DIV(max_pfn - min_pfn, (pfn_t)8);
-	map_elems = bitmap_size / sizeof(boot_bitmap[0]);
+	map_elems   = bitmap_size / sizeof(boot_bitmap[0]);
 	log_debug("min_pfn: %lu, max_pfn: %lu, mapsize: %zu, map_elems: %zu", min_pfn, max_pfn, bitmap_size, map_elems);
 
 	// Second pass: Find a suitable location for the bitmap.
@@ -192,7 +194,7 @@ void bootmem_init()
 		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
 
 		uint64_t start = entry->base;
-		uint64_t end = entry->base + entry->length;
+		uint64_t end   = entry->base + entry->length;
 
 		for (uint64_t addr = start; addr < end; addr += PAGE_SIZE) {
 			// Skip pages that overlap with the bitmap itself.
@@ -209,9 +211,9 @@ void bootmem_init()
 	// TODO: Invert mem_map and bitmap init order, that way when we free the bitmap we have less fragmentation
 
 	// Setup the mem_map
-	total_page_count = max_pfn - min_pfn;
+	total_page_count    = max_pfn - min_pfn;
 	size_t mem_map_size = total_page_count * sizeof(struct page);
-	size_t req_pages = CEIL_DIV(mem_map_size, PAGE_SIZE);
+	size_t req_pages    = CEIL_DIV(mem_map_size, PAGE_SIZE);
 
 	log_debug("mem_map_size: %zu, req_pages: %zu", mem_map_size, req_pages);
 	mem_map = (void*)PHYS_TO_HHDM(bootmem_alloc_contiguous(req_pages));
@@ -224,7 +226,7 @@ void bootmem_init()
 	for (pfn_t pfn = 0; pfn < max_pfn; pfn++) {
 		uintptr_t paddr = pfn_to_phys(pfn);
 		struct page* pg = &mem_map[pfn];
-		pg->flags = 0;
+		pg->flags	= 0;
 		if (bootmem_page_is_used(paddr)) {
 			set_page_reserved(pg);
 			atomic_set(&pg->ref_count, 1);
@@ -285,9 +287,9 @@ void bootmem_free_page(void* addr)
 
 	if (!addr) return;
 
-	uint64_t phys_addr = (uint64_t)addr;
+	uint64_t phys_addr   = (uint64_t)addr;
 	uint64_t word_offset = get_word_offset(phys_addr);
-	uint64_t bit_offset = get_bit_offset(phys_addr);
+	uint64_t bit_offset  = get_bit_offset(phys_addr);
 	boot_bitmap[word_offset] &= ~(1ULL << bit_offset);
 	free_page_count++;
 }
@@ -317,10 +319,10 @@ void* bootmem_alloc_contiguous(size_t count)
 	}
 
 	size_t cont_start = SIZE_MAX;
-	size_t cont_len = 0;
+	size_t cont_len	  = 0;
 	for (size_t i = 0; i < total_page_count; i++) {
 		uint64_t word_offset = i / BITSET_WIDTH;
-		uint64_t bit_offset = i % BITSET_WIDTH;
+		uint64_t bit_offset  = i % BITSET_WIDTH;
 
 		if ((boot_bitmap[word_offset] & (1ULL << bit_offset)) == 0) {
 			if (cont_start == SIZE_MAX) cont_start = i;
@@ -329,7 +331,7 @@ void* bootmem_alloc_contiguous(size_t count)
 			if (cont_len >= count) goto allocate_page;
 		} else {
 			cont_start = SIZE_MAX;
-			cont_len = 0;
+			cont_len   = 0;
 		}
 	}
 	log_warn("No valid contiguous range found for %zu pages", count);
@@ -338,7 +340,7 @@ void* bootmem_alloc_contiguous(size_t count)
 allocate_page:
 	for (size_t i = cont_start; i < cont_start + count; i++) {
 		uint64_t word_offset = i / BITSET_WIDTH;
-		uint64_t bit_offset = i % BITSET_WIDTH;
+		uint64_t bit_offset  = i % BITSET_WIDTH;
 		boot_bitmap[word_offset] |= (1ULL << bit_offset);
 	}
 	free_page_count -= count;
@@ -371,7 +373,7 @@ void bootmem_free_contiguous(void* addr, size_t count)
 	uint64_t end_index = page_index + count;
 	for (; page_index < end_index; page_index++) {
 		uint64_t word_offset = page_index / BITSET_WIDTH;
-		uint64_t bit_offset = page_index % BITSET_WIDTH;
+		uint64_t bit_offset  = page_index % BITSET_WIDTH;
 		boot_bitmap[word_offset] &= ~(1ULL << bit_offset);
 	}
 	free_page_count += count;
@@ -396,7 +398,7 @@ bool bootmem_page_is_used(uintptr_t phys_addr)
 	}
 
 	uintptr_t word_offset = get_word_offset(phys_addr);
-	uintptr_t bit_offset = get_bit_offset(phys_addr);
+	uintptr_t bit_offset  = get_bit_offset(phys_addr);
 
 	return ((boot_bitmap[word_offset] & (1ULL << bit_offset)) != 0);
 }
@@ -440,7 +442,7 @@ void bootmem_free_all(void)
 
 	// Free the memory used by the boot allocator bitmap.
 	for (uintptr_t phys = boot_bitmap_phys; phys < boot_bitmap_phys + bitmap_size; phys += PAGE_SIZE) {
-		pfn_t pfn = phys_to_pfn(phys);
+		pfn_t pfn	  = phys_to_pfn(phys);
 		struct page* page = &mem_map[pfn];
 
 		clear_page_reserved(page);
@@ -479,7 +481,7 @@ void bootmem_reclaim_bootloader()
 		if (entry->type != LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE) continue;
 
 		uintptr_t start = entry->base;
-		uintptr_t end = entry->base + entry->length;
+		uintptr_t end	= entry->base + entry->length;
 		log_debug("Reclaimable range: start=0x%lx, end=0x%lx", start, end);
 		for (size_t phys = start; phys < end; phys += PAGE_SIZE) {
 			struct page* page = phys_to_page(phys);

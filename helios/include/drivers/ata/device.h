@@ -3,46 +3,46 @@
 #include <drivers/ata/controller.h>
 
 enum {
-	OP_READ = 0,
-	OP_WRITE = 1,
+	OP_READ	  = 0,
+	OP_WRITE  = 1,
 	OP_PACKET = 2,
 };
 
 enum {
-	COMMAND_IDENTIFY = 0xEC,
+	COMMAND_IDENTIFY	= 0xEC,
 	COMMAND_IDENTIFY_PACKET = 0xA1,
-	COMMAND_READ_SEC = 0x20,
-	COMMAND_READ_SEC_EXT = 0x24,
-	COMMAND_WRITE_SEC = 0x30,
-	COMMAND_WRITE_SEC_EXT = 0x34,
-	COMMAND_READ_DMA = 0xC8,
-	COMMAND_READ_DMA_EXT = 0x25,
-	COMMAND_WRITE_DMA = 0xCA,
-	COMMAND_WRITE_DMA_EXT = 0x35,
-	COMMAND_PACKET = 0xA0,
-	COMMAND_ATAPI_RESET = 0x8,
-	COMMAND_CACHE_FLUSH = 0xE7,
+	COMMAND_READ_SEC	= 0x20,
+	COMMAND_READ_SEC_EXT	= 0x24,
+	COMMAND_WRITE_SEC	= 0x30,
+	COMMAND_WRITE_SEC_EXT	= 0x34,
+	COMMAND_READ_DMA	= 0xC8,
+	COMMAND_READ_DMA_EXT	= 0x25,
+	COMMAND_WRITE_DMA	= 0xCA,
+	COMMAND_WRITE_DMA_EXT	= 0x35,
+	COMMAND_PACKET		= 0xA0,
+	COMMAND_ATAPI_RESET	= 0x8,
+	COMMAND_CACHE_FLUSH	= 0xE7,
 };
 
 enum {
-	SCSI_CMD_READ_SECTORS = 0x28,
+	SCSI_CMD_READ_SECTORS	  = 0x28,
 	SCSI_CMD_READ_SECTORS_EXT = 0xA8,
-	SCSI_CMD_READ_CAPACITY = 0x25,
+	SCSI_CMD_READ_CAPACITY	  = 0x25,
 };
 
 /* io-ports, offsets from base */
 enum {
-	ATA_REG_DATA = 0x0,
-	ATA_REG_ERROR = 0x1,
-	ATA_REG_FEATURES = 0x1,
+	ATA_REG_DATA	     = 0x0,
+	ATA_REG_ERROR	     = 0x1,
+	ATA_REG_FEATURES     = 0x1,
 	ATA_REG_SECTOR_COUNT = 0x2,
-	ATA_REG_ADDRESS1 = 0x3,
-	ATA_REG_ADDRESS2 = 0x4,
-	ATA_REG_ADDRESS3 = 0x5,
+	ATA_REG_ADDRESS1     = 0x3,
+	ATA_REG_ADDRESS2     = 0x4,
+	ATA_REG_ADDRESS3     = 0x5,
 	ATA_REG_DRIVE_SELECT = 0x6,
-	ATA_REG_COMMAND = 0x7,
-	ATA_REG_STATUS = 0x7,
-	ATA_REG_CONTROL = 0x206,
+	ATA_REG_COMMAND	     = 0x7,
+	ATA_REG_STATUS	     = 0x7,
+	ATA_REG_CONTROL	     = 0x206,
 };
 
 enum {
@@ -72,42 +72,42 @@ enum {
 };
 
 enum DEVICE_INFO_DATA {
-	ATA_INFO_CAPABILITY = 49,
-	ATA_INFO_SECTORS_LOW = 60,
+	ATA_INFO_CAPABILITY   = 49,
+	ATA_INFO_SECTORS_LOW  = 60,
 	ATA_INFO_SECTORS_HIGH = 61,
 };
 
-#define DMA_TRANSFER_TIMEOUT   3000 /* ms */
-#define DMA_TRANSFER_SLEEPTIME 20   /* ms */
+static constexpr int DMA_TRANSFER_TIMEOUT   = 3000; /* ms */
+static constexpr int DMA_TRANSFER_SLEEPTIME = 20;   /* ms */
 
-#define PIO_TRANSFER_TIMEOUT   3000 /* ms */
-#define PIO_TRANSFER_SLEEPTIME 0    /* ms */
+static constexpr int PIO_TRANSFER_TIMEOUT   = 3000; /* ms */
+static constexpr int PIO_TRANSFER_SLEEPTIME = 0;    /* ms */
 
-#define ATAPI_TRANSFER_TIMEOUT	 3000 /* ms */
-#define ATAPI_TRANSFER_SLEEPTIME 20   /* ms */
+static constexpr int ATAPI_TRANSFER_TIMEOUT   = 3000; /* ms */
+static constexpr int ATAPI_TRANSFER_SLEEPTIME = 20;   /* ms */
 
-#define ATAPI_WAIT_TIMEOUT 5000 /* ms */
-#define ATA_WAIT_TIMEOUT   500	/* ms */
-#define ATA_WAIT_SLEEPTIME 20	/* ms */
+static constexpr int ATAPI_WAIT_TIMEOUT = 5000; /* ms */
+static constexpr int ATA_WAIT_TIMEOUT	= 500;	/* ms */
+static constexpr int ATA_WAIT_SLEEPTIME = 20;	/* ms */
 
-#define IRQ_POLL_INTERVAL 20   /* ms */
-#define IRQ_TIMEOUT	  5000 /* ms */
+static constexpr int IRQ_POLL_INTERVAL = 20;   /* ms */
+static constexpr int IRQ_TIMEOUT       = 5000; /* ms */
 
 /* port-bases */
-#define ATA_REG_BASE_PRIMARY   0x1F0
-#define ATA_REG_BASE_SECONDARY 0x170
+static constexpr u16 ATA_REG_BASE_PRIMARY   = 0x1F0;
+static constexpr u16 ATA_REG_BASE_SECONDARY = 0x170;
 
-#define DRIVE_MASTER 0xA0
-#define DRIVE_SLAVE  0xB0
+static constexpr int DRIVE_MASTER = 0xA0;
+static constexpr int DRIVE_SLAVE  = 0xB0;
 
-#define SLAVE_BIT 0x1
+static constexpr int SLAVE_BIT = 0x1;
 
-#define ATAPI_SEC_SIZE 2048
-#define ATA_SEC_SIZE   512
+static constexpr int ATAPI_SEC_SIZE = 2048;
+static constexpr int ATA_SEC_SIZE   = 512;
 
 /* the LBA-flag for the device-register */
-#define DEVICE_LBA  0x40
-#define LBA_SUPPORT (1 << 9)
+static constexpr int DEVICE_LBA	 = 0x40;
+static constexpr int LBA_SUPPORT = (1 << 9);
 
 void device_init(sATADevice* device);
 bool device_poll(sATADevice* device);

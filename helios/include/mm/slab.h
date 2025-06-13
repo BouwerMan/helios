@@ -10,14 +10,14 @@
 
 // TODO: Try using a free list stored in the freed object's slab slice similar to the linux kernel
 
-#define MAX_CACHE_NAME_LEN 32
+static constexpr int MAX_CACHE_NAME_LEN = 32;
 
 // NOTE: SLAB_SIZE_PAGES must be a power of 2.
-#define SLAB_SIZE_PAGES 16
+static constexpr int SLAB_SIZE_PAGES = 16;
 _Static_assert(IS_POWER_OF_TWO(SLAB_SIZE_PAGES) == true, "SLAB_SIZE_PAGES must be power of 2");
 
 // Maximum number of free slabs that a cache can have before it starts destroying them.
-#define MAX_EMPTY_SLABS 8
+static constexpr int MAX_EMPTY_SLABS = 8;
 
 enum slab_cache_flags {
 	CACHE_UNINITIALIZED = 0,

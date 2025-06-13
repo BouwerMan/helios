@@ -48,7 +48,13 @@ struct task* idle_task;
 
 [[noreturn]] extern void __switch_to(struct registers* new);
 
-#define preempt_enabled() (preempt_count == 0)
+/**
+ * Checks whether preemption is enabled by checking the preemption counter.
+ */
+static bool is_preempt_enabled()
+{
+	return preempt_count == 0;
+}
 
 /**
  * Enables task preemption by decrementing the preemption counter.
@@ -94,7 +100,7 @@ struct scheduler_queue* get_scheduler_queue()
  */
 void check_reschedule(struct registers* regs)
 {
-	if (need_reschedule && preempt_enabled()) {
+	if (need_reschedule && is_preempt_enabled()) {
 		need_reschedule = false;
 
 		// TODO: I'm doing some weird shit here, make this cleaner
@@ -135,15 +141,15 @@ static int create_kernel_stack(struct task* task)
 	uintptr_t stack_top = (uintptr_t)stack + STACK_SIZE_PAGES * PAGE_SIZE;
 
 	task->kernel_stack = stack_top;
-	task->regs = (struct registers*)(uintptr_t)(stack_top - sizeof(struct registers));
+	task->regs	   = (struct registers*)(uintptr_t)(stack_top - sizeof(struct registers));
 	// Simulate interrupt frame
-	task->regs->ss = 0x10; // optional for ring 0
-	task->regs->rsp = stack_top;
+	task->regs->ss	   = 0x10; // optional for ring 0
+	task->regs->rsp	   = stack_top;
 	task->regs->rflags = 0x202;
-	task->regs->cs = 0x08; // kernel code segment
+	task->regs->cs	   = 0x08; // kernel code segment
 
 	// Other important registers, all other registers set to 0
-	task->regs->ds = 0x10;
+	task->regs->ds		 = 0x10;
 	task->regs->saved_rflags = 0x202;
 
 	log_debug("Created stack for task %lu, kernel_stack: %lx, regs addr: %p", task->PID, task->kernel_stack,
@@ -194,13 +200,13 @@ void init_scheduler(void)
 		panic("Scheduler tasks cache init failure");
 	}
 
-	idle_task = new_task((entry_func)idle_task_entry);
-	idle_task->cr3 = vmm_read_cr3();
+	idle_task	  = new_task((entry_func)idle_task_entry);
+	idle_task->cr3	  = vmm_read_cr3();
 	idle_task->parent = kernel_task;
-	idle_task->state = IDLE;
+	idle_task->state  = IDLE;
 
-	kernel_task = new_task(NULL);
-	kernel_task->cr3 = vmm_read_cr3();
+	kernel_task	    = new_task(NULL);
+	kernel_task->cr3    = vmm_read_cr3();
 	kernel_task->parent = kernel_task;
 	squeue.current_task = kernel_task;
 	log_debug("Probably inited the scheduler");
@@ -220,11 +226,11 @@ struct task* new_task(entry_func entry)
 	memset(task, 0, sizeof(struct task));
 
 	create_kernel_stack(task);
-	task->PID = squeue.pid_i++;
-	task->cr3 = vmm_read_cr3();
+	task->PID    = squeue.pid_i++;
+	task->cr3    = vmm_read_cr3();
 	task->parent = kernel_task;
 	if (entry) {
-		task->entry = entry;
+		task->entry	= entry;
 		task->regs->rip = (uintptr_t)entry;
 	}
 	task->state = READY;
@@ -238,7 +244,7 @@ static int create_user_stack(struct task* task)
 
 	create_kernel_stack(task);
 
-	void* stack = (void*)get_free_pages(AF_KERNEL, STACK_SIZE_PAGES);
+	void* stack	= (void*)get_free_pages(AF_KERNEL, STACK_SIZE_PAGES);
 	task->regs->rsp = (uintptr_t)stack + STACK_SIZE_PAGES * PAGE_SIZE;
 	log_debug("Allocated user stack at %p", stack);
 
@@ -251,7 +257,7 @@ struct task* new_user_task(entry_func entry)
 	if (task == NULL) return NULL;
 	memset(task, 0, sizeof(struct task));
 
-	task->PID = squeue.pid_i++;
+	task->PID  = squeue.pid_i++;
 	task->type = USER_TASK;
 
 	create_user_stack(task);
@@ -321,7 +327,7 @@ void yield_blocked()
 void waitqueue_sleep(struct waitqueue* wqueue)
 {
 	struct task* t = get_current_task();
-	t->state = BLOCKED;
+	t->state       = BLOCKED;
 	list_append(&wqueue->list, &t->list);
 	yield();
 }

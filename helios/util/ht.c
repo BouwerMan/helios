@@ -26,8 +26,10 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <kernel/liballoc.h>
 #include <string.h>
+
+#include <kernel/liballoc.h>
+#include <kernel/types.h>
 #include <util/ht.h>
 #include <util/log.h>
 
@@ -37,16 +39,14 @@
 
 // Default operations to use, caller can overload these if desired
 struct ht_ops default_ops = {
-	.hash = hash_key,
-	.compare = compare_key,
+	.hash	    = hash_key,
+	.compare    = compare_key,
 	.destructor = NULL,
 };
 
 static const char* ht_set_entry(struct ht_entry* entries, size_t capacity, const void* key, void* value,
 				size_t* plength, struct ht_ops* ops);
 static bool ht_expand(struct ht* table);
-
-#define INITIAL_CAPACITY 16 // Initial capacity of any hash tables created
 
 /**
  * ht_create - Creates a new hash table.
@@ -67,10 +67,10 @@ struct ht* ht_create(size_t hash_size)
 	struct ht* table = kmalloc(sizeof(struct ht));
 	if (table == NULL) return NULL;
 
-	table->length = 0;
+	table->length	= 0;
 	table->capacity = hash_size;
-	table->entries = kcalloc(table->capacity, sizeof(struct ht_entry));
-	table->ops = &default_ops;
+	table->entries	= kcalloc(table->capacity, sizeof(struct ht_entry));
+	table->ops	= &default_ops;
 	if (table->entries == NULL) {
 		kfree(table);
 		return NULL;
@@ -118,7 +118,7 @@ void* ht_get(struct ht* table, const void* key)
 	// AND hash with capacity-1 to ensure it's within entries array.
 	// Equivalent to hash % capacity (maybe faster???)
 	uint32_t hash = table->ops->hash(key);
-	size_t index = (size_t)(hash & (uint32_t)(table->capacity - 1));
+	size_t index  = (size_t)(hash & (uint32_t)(table->capacity - 1));
 
 	while (table->entries[index].key != NULL) {
 		if (table->ops->compare(key, table->entries[index].key)) {
@@ -222,16 +222,16 @@ bool ht_next(struct ht_iter* it)
 		if (table->entries[i].key != NULL) {
 			// FOUND next non-empty item. update iterator key and value
 			struct ht_entry entry = table->entries[i];
-			it->key = entry.key;
-			it->value = entry.value;
+			it->key		      = entry.key;
+			it->value	      = entry.value;
 			return true;
 		}
 	}
 	return false;
 }
 
-#define FNV_PRIME  0x01000193 ///< The FNV prime constant.
-#define FNV_OFFSET 0x811c9dc5 ///< The FNV offset basis constant.
+static constexpr u64 FNV_PRIME	= 0x01000193; ///< The FNV prime constant.
+static constexpr u64 FNV_OFFSET = 0x811c9dc5; ///< The FNV offset basis constant.
 
 // https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
 /**
@@ -287,7 +287,7 @@ static const char* ht_set_entry(struct ht_entry* entries, size_t capacity, const
 				size_t* plength, struct ht_ops* ops)
 {
 	uint32_t hash = ops->hash(key);
-	size_t index = (size_t)(hash & (uint32_t)(capacity - 1));
+	size_t index  = (size_t)(hash & (uint32_t)(capacity - 1));
 
 	// Looping until empty entry
 	while (entries[index].key != NULL) {
@@ -306,7 +306,7 @@ static const char* ht_set_entry(struct ht_entry* entries, size_t capacity, const
 		if (key == NULL) return NULL;
 		(*plength)++;
 	}
-	entries[index].key = key;
+	entries[index].key   = key;
 	entries[index].value = value;
 	return key;
 }
@@ -342,7 +342,7 @@ static bool ht_expand(struct ht* table)
 	// Free old entries and update table details
 	// Don't need destructor here because we keep a reference in new table
 	kfree(table->entries);
-	table->entries = new_entries;
+	table->entries	= new_entries;
 	table->capacity = new_capacity;
 	return true;
 }

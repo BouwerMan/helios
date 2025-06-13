@@ -3,13 +3,13 @@
 
 #include <stdint.h>
 
-#define GDT_ENTRIES 7 /**< The number of entries in the Global Descriptor Table (GDT). */
+static constexpr int GDT_ENTRIES = 7; /**< The number of entries in the Global Descriptor Table (GDT). */
 
 /**
  * The offset in the GDT where the TSS is located. This is the 5th entry in the GDT, so 4 * 8 = 32 bytes,
  * plus the first 8 bytes for the GDT pointer.
  */
-#define TSS_OFFSET 0x28
+static constexpr int TSS_OFFSET = 0x28;
 
 /* Defines a GDT entry. We say packed, because it prevents the
  *  compiler from doing things that it thinks is best: Prevent

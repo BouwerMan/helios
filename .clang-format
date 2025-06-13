@@ -16,7 +16,7 @@ AlignTrailingComments: true
 AlignAfterOpenBracket: Align
 PointerAlignment: Left
 
-AlignConsecutiveAssignments: false
+AlignConsecutiveAssignments: true
 AlignConsecutiveDeclarations: false
 AlignEscapedNewlines: Left
 AlignOperands: true

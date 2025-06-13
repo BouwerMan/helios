@@ -5,19 +5,20 @@
 #include <stdint.h>
 
 #include <kernel/spinlock.h>
+#include <kernel/types.h>
 #include <limine.h>
 
-#define CHAR_SPACING 0
+static constexpr int CHAR_SPACING = 0;
 
 enum COLORS {
 	COLOR_WHITE = 0x00FFFFFF,
 	COLOR_BLACK = 0x00000000,
-	COLOR_RED = 0x00FF0000,
+	COLOR_RED   = 0x00FF0000,
 	COLOR_GREEN = 0x0000FF00,
-	COLOR_BLUE = 0x000000FF,
+	COLOR_BLUE  = 0x000000FF,
 };
 
-#define PSF1_FONT_MAGIC 0x0436
+static constexpr u16 PSF1_FONT_MAGIC = 0x0436;
 
 typedef struct {
 	uint16_t magic;	       // Magic bytes for identification.
@@ -25,7 +26,7 @@ typedef struct {
 	uint8_t characterSize; // PSF character size.
 } PSF1_Header;
 
-#define PSF_FONT_MAGIC 0x864ab572
+static constexpr u32 PSF_FONT_MAGIC = 0x864ab572;
 
 typedef struct {
 	uint32_t magic;		/* magic bytes to identify PSF */
@@ -38,7 +39,7 @@ typedef struct {
 	uint32_t width;		/* width in pixels */
 } PSF_font;
 
-#define PIXEL uint32_t /* pixel pointer */
+typedef u32 PIXEL; /* pixel pointer */
 
 struct screen_info {
 	size_t cx;	   // Cursor position x

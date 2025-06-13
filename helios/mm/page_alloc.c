@@ -46,17 +46,17 @@
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 
-struct buddy_allocator norm_alr = { 0 };
+struct buddy_allocator norm_alr	 = { 0 };
 struct buddy_allocator dma32_alr = { 0 };
-struct buddy_allocator dma_alr = { 0 };
+struct buddy_allocator dma_alr	 = { 0 };
 
 // NOTE: These must match the order of enum MEM_ZONE members
 
 /// Lookup table for buddy allocators based on memory zones
 static struct buddy_allocator* regions[] = {
-	&dma_alr,
-	&dma32_alr,
-	&norm_alr,
+	[MEM_ZONE_DMA]	  = &dma_alr,
+	[MEM_ZONE_DMA32]  = &dma32_alr,
+	[MEM_ZONE_NORMAL] = &norm_alr,
 };
 
 void buddy_dump_free_lists()
@@ -76,7 +76,7 @@ void buddy_dump_free_lists()
 		struct page* pg = NULL;
 		list_for_each_entry(pg, head, list)
 		{
-			pfn_t pfn = page_to_pfn(pg);
+			pfn_t pfn      = page_to_pfn(pg);
 			uintptr_t phys = pfn_to_phys(pfn);
 			log_info("  -> pfn: 0x%lx, phys: 0x%lx", pfn, phys);
 		}
@@ -179,13 +179,13 @@ static struct page* _split_until_order(struct buddy_allocator* allocator, struct
 		return page;
 	}
 
-	pfn_t prnt_pfn = page_to_pfn(page);
-	pfn_t left_pfn = _left_child_pfn(prnt_pfn, current_order);
+	pfn_t prnt_pfn	= page_to_pfn(page);
+	pfn_t left_pfn	= _left_child_pfn(prnt_pfn, current_order);
 	pfn_t right_pfn = _right_child_pfn(prnt_pfn, current_order);
 	log_debug("Splitting block: parent pfn: %zu, left pfn: %zu, right pfn: %zu", prnt_pfn, left_pfn, right_pfn);
 
 	// Split the block into two children
-	struct page* left = &mem_map[left_pfn];
+	struct page* left  = &mem_map[left_pfn];
 	struct page* right = &mem_map[right_pfn];
 
 	// Update states and orders
@@ -297,8 +297,8 @@ struct page* alloc_pages(aflags_t flags, size_t order)
 	struct page* pg = NULL;
 
 	static const size_t flag_to_zone[] = {
-		[AF_DMA] = MEM_ZONE_DMA,
-		[AF_DMA32] = MEM_ZONE_DMA32,
+		[AF_DMA]    = MEM_ZONE_DMA,
+		[AF_DMA32]  = MEM_ZONE_DMA32,
 		[AF_NORMAL] = MEM_ZONE_NORMAL,
 	};
 
@@ -368,7 +368,7 @@ uintptr_t __get_free_pages(aflags_t flags, size_t order)
 uintptr_t get_free_pages(aflags_t flags, size_t pages)
 {
 	size_t rounded_size = round_to_power_of_2(pages);
-	size_t order = (size_t)log2(rounded_size);
+	size_t order	    = (size_t)log2(rounded_size);
 	uintptr_t page_virt = __get_free_pages(flags, order);
 	if (!page_virt) return 0;
 
@@ -413,7 +413,7 @@ static void _combine_blocks(struct buddy_allocator* allocator, struct page* page
 	}
 
 	// Get the buddy
-	pfn_t bdy_pfn = _buddy_pfn(init_pfn, order);
+	pfn_t bdy_pfn	   = _buddy_pfn(init_pfn, order);
 	struct page* buddy = &mem_map[bdy_pfn];
 
 	// Check if coalescing is possible
@@ -421,10 +421,10 @@ static void _combine_blocks(struct buddy_allocator* allocator, struct page* page
 		// Remove both blocks from the free lists and mark them as invalid
 		list_remove(&page->list);
 		list_remove(&buddy->list);
-		page->state = BLOCK_INVALID;
+		page->state  = BLOCK_INVALID;
 		buddy->state = BLOCK_INVALID;
 
-		size_t prnt_pfn = _parent_pfn(init_pfn, order);
+		size_t prnt_pfn	    = _parent_pfn(init_pfn, order);
 		struct page* parent = &mem_map[prnt_pfn];
 
 		_combine_blocks(allocator, parent, order + 1);
@@ -499,10 +499,10 @@ void free_pages(void* addr, size_t pages)
 	}
 
 	uintptr_t page_virt = HHDM_TO_PHYS((uintptr_t)addr);
-	struct page* page = &mem_map[phys_to_pfn(page_virt)];
+	struct page* page   = &mem_map[phys_to_pfn(page_virt)];
 
 	size_t rounded_size = round_to_power_of_2(pages);
-	size_t order = (size_t)log2(rounded_size);
+	size_t order	    = (size_t)log2(rounded_size);
 
 	log_debug("Freeing %zu pages at address %p (order: %zu)", pages, addr, order);
 	__free_pages(page, order);

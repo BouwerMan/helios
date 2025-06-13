@@ -88,15 +88,6 @@ enum LOG_MODE {
 #endif
 #endif
 
-// Define or redefine log_debug_long
-#if !defined(log_debug_long) || defined(FORCE_LOG_REDEF)
-#if LOG_LEVEL <= LOG_LEVEL_DEBUG
-#define log_debug_long(msg) log_long_message("DEBUG", __FILE__, __LINE__, __func__, msg)
-#else
-#define log_debug_long(msg) ((void)0)
-#endif
-#endif
-
 // All macros below this point are just special flavors of log_info
 
 // Define or redefine log_info

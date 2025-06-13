@@ -1,14 +1,18 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#define ZONE_DMA_BASE  0x0
-#define ZONE_DMA_LIMIT 0xffffffULL
+#include <stdint.h>
 
-#define ZONE_DMA32_BASE	 0x1000000ULL
-#define ZONE_DMA32_LIMIT 0xffffffffULL
+#include <kernel/types.h>
 
-#define ZONE_NORMAL_BASE  0x100000000ULL
-#define ZONE_NORMAL_LIMIT UINTPTR_MAX
+static constexpr uptr ZONE_DMA_BASE  = 0x0;
+static constexpr uptr ZONE_DMA_LIMIT = 0xffffff;
+
+static constexpr uptr ZONE_DMA32_BASE  = 0x1000000;
+static constexpr uptr ZONE_DMA32_LIMIT = 0xffffffff;
+
+static constexpr uptr ZONE_NORMAL_BASE	= 0x100000000;
+static constexpr uptr ZONE_NORMAL_LIMIT = UINTPTR_MAX;
 
 enum MEM_ZONE {
 	MEM_ZONE_DMA,	 // For devices that require DMA

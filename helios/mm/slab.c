@@ -35,13 +35,15 @@
 #include <mm/slab.h>
 
 #ifdef SLAB_DEBUG
-#define POISON_PATTERN	  0x5A
-#define POISON_BYTE_COUNT 16 // Number of bytes to verify at head/tail
-#define REDZONE_SIZE	  4  // 4 bytes at head and tail (so it is technically cross platform :))
-#define REDZONE_PATTERN	  0xDEADBEEF
+static constexpr int POISON_PATTERN = 0x5A;
+static constexpr int POISON_BYTE_COUNT = 16; // Number of bytes to verify at head/tail
+static constexpr int REDZONE_SIZE = 4;	     // 4 bytes at head and tail (so it is technically cross platform :))
+static constexpr long REDZONE_PATTERN = 0xDEADBEEF;
 #else
-#define POISON_BYTE_COUNT 0
-#define REDZONE_SIZE	  0
+static constexpr int POISON_PATTERN = 0;
+static constexpr int POISON_BYTE_COUNT = 0; // Number of bytes to verify at head/tail
+static constexpr int REDZONE_SIZE = 0;	    // 4 bytes at head and tail (so it is technically cross platform :))
+static constexpr long REDZONE_PATTERN = 0;
 #endif
 
 // NOTE: All functions that deal with objects take in object start (not data_start which is object_start - REDZONE_SIZE)

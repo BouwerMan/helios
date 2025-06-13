@@ -16,7 +16,7 @@
 #include <mm/zones.h>
 #include <util/list.h>
 
-#define MAX_ORDER 10 // 2^10 pages (1024 pages), or 4MiB blocks
+static constexpr int MAX_ORDER = 10; // 2^10 pages (1024 pages), or 4MiB blocks
 
 struct buddy_allocator {
 	struct list free_lists[MAX_ORDER + 1]; // One for each order
