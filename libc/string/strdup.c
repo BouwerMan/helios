@@ -1,5 +1,9 @@
-#include <kernel/liballoc.h>
+#include <libc_config.h>
 #include <string.h>
+
+#if defined(__is_libk)
+#include <kernel/liballoc.h>
+#endif
 
 /**
  * @brief Duplicates a string by allocating memory and copying its content.
@@ -18,12 +22,11 @@
  */
 char* strdup(const char* src)
 {
-    if (src == NULL) return NULL;
+	if (src == NULL) return NULL;
 
-    size_t len = strlen(src);
-    // TODO: Replace with more generic malloc or similar
-    char* new = kmalloc(len + 1);
-    if (new == NULL) return NULL;
+	size_t len = strlen(src);
+	char* new = LIBC_MALLOC(len + 1);
+	if (new == NULL) return NULL;
 
-    return strcpy(new, src);
+	return strcpy(new, src);
 }

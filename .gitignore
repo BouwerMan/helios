@@ -10,3 +10,12 @@ mnt/
 limine/
 *.o
 *.txt
+
+*.o
+*.d
+*.kernel
+build/
+tools/
+.gdbinit
+.cache/
+compile_commands.json

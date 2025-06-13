@@ -1,28 +1,45 @@
-
 # HELIOS
 
-HeliOS is a hobby operating system project aimed at learning and exploring low-level systems programming. The project is currently in its early stages, but it already includes several key features and components.
+HeliOS is a small hobby operating system built for fun and learning. It boots via the Limine bootloader and targets 64‑bit x86 systems. The project is still young but already sports a few neat tricks.
 
-## Features
+## What it can do
 
-- [X] Kernel printing
-- [X] Global Descriptor Table (GDT)
-- [X] Interrupt Descriptor Table (IDT)
-- [X] Interrupt handling
-- [X] Physical Page Manager
-- [X] Virtual Page Manager
-- [X] Paging with kernel loaded at `0xC0000000`
-- [X] ATA PIO Driver
-- [ ] FAT Driver (Work in progress)
+* Basic kernel console output
+* GDT/IDT setup with interrupt handling
+* Physical and virtual memory managers (buddy + slab)
+* Simple task scheduler
+* ATA PIO storage driver
+* Early FAT support through a rudimentary VFS
 
-## Getting Started
+## Building the toolchain
 
-### Prerequisites
+A custom cross‑compiler is required. You can build it automatically by running:
 
-To build and run HeliOS, you will need:
+```bash
+./scripts/install_cross.sh
+```
 
-- A GCC cross-compiler targeting `i686-elf`. Follow [this tutorial](https://wiki.osdev.org/GCC_Cross-Compiler) to set it up.
-- QEMU or another x86 emulator for testing.
+This downloads Binutils and GCC and installs them into `./tools`. Make sure you have the usual build tools (gcc, make, curl, etc.) available.
+
+## Building and running HeliOS
+
+Once the toolchain is installed, building an ISO image is as simple as:
+
+```bash
+make iso
+```
+
+You can boot the resulting image with:
+
+```bash
+make qemu
+```
+
+Feel free to peek at the Makefile for more targets.
+
+## Contributing
+
+Pull requests are very welcome! If you spot a bug or have an improvement in mind, open an issue or PR and let's chat.
 
 ## License
 

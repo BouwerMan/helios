@@ -1,6 +1,6 @@
 #include <ctype.h>
-char toupper(char c)
+int toupper(int c)
 {
-    if (c >= 97) return c - 32;
-    return c;
+	if ((unsigned char)c >= 97) return (unsigned char)c - 32;
+	return (unsigned char)c;
 }

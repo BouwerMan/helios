@@ -1,8 +1,3 @@
-CFLAGS?=-O2 -g -std=gnu17
-CPPFLAGS?=
-LDFLAGS?=
-LIBS?=
-
 BUILDDIR=build
 
 DESTDIR?=
@@ -11,9 +6,9 @@ EXEC_PREFIX?=$(PREFIX)
 INCLUDEDIR?=$(PREFIX)/include
 LIBDIR?=$(EXEC_PREFIX)/lib
 
-CFLAGS:=$(CFLAGS) -ffreestanding -Wall -Wextra
+CFLAGS:=$(CFLAGS) -ffreestanding -Wall -Wextra -pedantic -Werror
 CPPFLAGS:=$(CPPFLAGS) -D__is_libc -Iinclude
-LIBK_CFLAGS:=$(CFLAGS)
+LIBK_CFLAGS:=$(CFLAGS) -I$(PWD)/helios/include
 LIBK_CPPFLAGS:=$(CPPFLAGS) -D__is_libk
 
 ARCHDIR=arch/$(HOSTARCH)
@@ -25,27 +20,20 @@ CPPFLAGS:=$(CPPFLAGS) $(ARCH_CPPFLAGS)
 LIBK_CFLAGS:=$(LIBK_CFLAGS) $(KERNEL_ARCH_CFLAGS)
 LIBK_CPPFLAGS:=$(LIBK_CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS)
 
+SRC_DIRS:=ctype stdio stdlib string
+
+# 1) collect & sort
+C_SRCS   = $(shell find $(SRC_DIRS) -type f -name '*.c')
+ASM_SRCS = $(shell find $(SRC_DIRS) -type f -name '*.asm')
+
+# 2) map to object paths
+C_OBJS   = $(patsubst %.c,$(BUILDDIR)/%.o,$(C_SRCS))
+ASM_OBJS = $(patsubst %.asm,$(BUILDDIR)/%.o,$(ASM_SRCS))
+
 FREEOBJS=\
 $(ARCH_FREEOBJS) \
-$(BUILDDIR)/string/strlen.o \
-$(BUILDDIR)/string/strcmp.o \
-$(BUILDDIR)/string/strtok.o \
-$(BUILDDIR)/string/strchr.o \
-$(BUILDDIR)/string/strcpy.o \
-$(BUILDDIR)/string/strdup.o \
-$(BUILDDIR)/string/strcat.o \
-$(BUILDDIR)/string/memset.o \
-$(BUILDDIR)/string/memcpy.o \
-$(BUILDDIR)/string/memmove.o \
-$(BUILDDIR)/string/memcmp.o \
-$(BUILDDIR)/stdio/printf.o \
-$(BUILDDIR)/stdio/putchar.o \
-$(BUILDDIR)/stdio/puts.o \
-$(BUILDDIR)/stdlib/abort.o \
-$(BUILDDIR)/ctype/toupper.o \
-#string/memcmp.o \
-#string/memcpy.o \
-#string/memmove.o \
+$(C_OBJS) \
+$(ASM_OBJS)
 
 HOSTEDOBJS=\
 $(ARCH_HOSTEDOBJS) \
@@ -65,40 +53,46 @@ BINARIES=libk.a
 all: $(BINARIES)
 
 libc.a: $(OBJS)
-	$(AR) rcs $@ $(OBJS)
+	@$(AR) rcs $@ $(OBJS)
 
 libk.a: $(LIBK_OBJS)
-	$(AR) rcs $(BUILDDIR)/$@ $(LIBK_OBJS)
+	@$(AR) rcs $(BUILDDIR)/$@ $(LIBK_OBJS)
 
 $(BUILDDIR)/%.o: %.c
-	$(CC) -MD -c $< -o $(BUILDDIR)/$@ $(CFLAGS) $(CPPFLAGS)
+	@echo "  CC      $@"
+	@mkdir -p $(@D)
+	@$(CC) -MD -c $< -o $(BUILDDIR)/$@ $(CFLAGS) $(CPPFLAGS)
 
 .c.S:
-	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
+	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
 
 $(BUILDDIR)/%.o: %.asm
+	@echo "  AR      $@"
 	@mkdir -p $(@D)
-	nasm -felf32 $< -o $@
+	@nasm -felf32 $< -o $@
 
 $(BUILDDIR)/%.libk.o: %.c
+	@echo "  CC      $@"
 	@mkdir -p $(@D)
-	$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
+	@$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
 
 .S.libk.o:
-	$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
+	@$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
 
 clean:
-	rm -rvf $(BUILDDIR)
+	@echo "Cleaning build directory..."
+	@rm -rf $(BUILDDIR)
 	
 install: install-headers install-libs
 
 install-headers:
-	mkdir -p $(DESTDIR)$(INCLUDEDIR)
-	cp -R --preserve=timestamps include/. $(DESTDIR)$(INCLUDEDIR)/.
+	@mkdir -p $(DESTDIR)$(INCLUDEDIR)
+	@cp -R --preserve=timestamps include/. $(DESTDIR)$(INCLUDEDIR)/.
 
+# TODO: Maybe don't install libk
 install-libs: $(BINARIES)
-	mkdir -p $(DESTDIR)$(LIBDIR)
-	cp $(BUILDDIR)/$(BINARIES) $(DESTDIR)$(LIBDIR)
+	@mkdir -p $(DESTDIR)$(LIBDIR)
+	@cp $(BUILDDIR)/$(BINARIES) $(DESTDIR)$(LIBDIR)
 
 -include $(OBJS:.o=.d)
 -include $(LIBK_OBJS:.o=.d)
