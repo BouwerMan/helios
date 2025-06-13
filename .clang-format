@@ -29,8 +29,8 @@ AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: false
-BinPackArguments: true
 BinPackParameters: true
+BinPackArguments: true
 
 BreakBeforeBinaryOperators: None
 BreakBeforeInheritanceComma: false
