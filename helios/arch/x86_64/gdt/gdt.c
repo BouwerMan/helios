@@ -21,7 +21,7 @@
 
 #include <string.h>
 
-#include <arch/x86_64/gdt/gdt.h>
+#include <arch/gdt/gdt.h>
 
 #include "tss.h"
 

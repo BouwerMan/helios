@@ -2,5 +2,5 @@
 #pragma once
 
 #if defined(__x86_64__)
-#include <arch/x86_64/mmu/vmm.h>
+#include <arch/mmu/vmm.h>
 #endif

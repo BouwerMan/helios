@@ -19,9 +19,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <arch/ports.h>
 #include <drivers/serial.h>
-
-#include "../arch/x86_64/ports.h"
 
 /**
  * @brief Initializes the serial port for communication.

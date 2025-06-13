@@ -19,7 +19,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <kernel/spinlock.h>
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
@@ -28,9 +27,10 @@
 
 #include <string.h>
 
-#include <arch/x86_64/cache.h>
+#include <arch/cache.h>
 #include <kernel/liballoc.h>
 #include <kernel/panic.h>
+#include <kernel/spinlock.h>
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
 

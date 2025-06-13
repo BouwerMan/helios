@@ -4,6 +4,8 @@
 #pragma once
 #include <stdint.h>
 
+#include <arch/regs.h>
+
 #define KERNEL_CS   0x08
 #define IDT_ENTRIES 256
 
@@ -55,16 +57,6 @@ struct xmm_reg {
 	uint64_t low;
 	uint64_t high;
 };
-
-struct registers {
-	uint64_t ds;
-	// struct xmm_reg xmm[16]; // had to remove these, probably dont have them enabled
-	uint64_t rdi, rsi, rbp, useless, rbx, rdx, rcx, rax;
-	uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
-	uint64_t saved_rflags;
-	uint64_t int_no, err_code;
-	uint64_t rip, cs, rflags, rsp, ss;
-} __attribute__((packed));
 
 // IDT
 void idt_set_descriptor(uint8_t vector, uint64_t isr, uint8_t flags);

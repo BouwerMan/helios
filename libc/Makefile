@@ -60,6 +60,7 @@ libk.a: $(LIBK_OBJS)
 
 $(BUILDDIR)/%.o: %.c
 	@echo "  CC      $@"
+	@mkdir -p $(@D)
 	@$(CC) -MD -c $< -o $(BUILDDIR)/$@ $(CFLAGS) $(CPPFLAGS)
 
 .c.S:
@@ -71,6 +72,7 @@ $(BUILDDIR)/%.o: %.asm
 	@nasm -felf32 $< -o $@
 
 $(BUILDDIR)/%.libk.o: %.c
+	@echo "  CC      $@"
 	@mkdir -p $(@D)
 	@$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
 

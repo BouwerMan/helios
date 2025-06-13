@@ -4,10 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <arch/ports.h>
 #include <drivers/ata/partition.h>
 #include <drivers/pci/pci.h>
-
-#include "../arch/x86_64/ports.h"
 
 enum {
 	DEVICE_PRIMARY = 0,

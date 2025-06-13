@@ -19,11 +19,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <arch/ports.h>
 #include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
 #include <util/log.h>
-
-#include "../arch/x86_64/ports.h"
 
 // Some IBM employee had a very fun time when designing this fucker.
 #define PIT_CLK 1193180ULL

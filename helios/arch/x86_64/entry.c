@@ -19,9 +19,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "interrupts/idt.h"
-#include <arch/x86_64/gdt/gdt.h>
-#include <arch/x86_64/mmu/vmm.h>
+#include <arch/gdt/gdt.h>
+#include <arch/idt.h>
+#include <arch/mmu/vmm.h>
 #include <drivers/serial.h>
 #include <kernel/bootinfo.h>
 #include <kernel/helios.h>

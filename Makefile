@@ -19,7 +19,7 @@ export BOOTDIR=/boot
 export LIBDIR=$(EXEC_PREFIX)/lib
 export INCLUDEDIR=$(EXEC_PREFIX)/include
 
-export CWARN=-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Wcast-align \
+export CWARN=-Wall -Wextra -pedantic -Wshadow -Wpointer-arith \
 	-Wwrite-strings \
         -Wredundant-decls -Wnested-externs -Wno-long-long \
         -Wconversion -Wstrict-prototypes \

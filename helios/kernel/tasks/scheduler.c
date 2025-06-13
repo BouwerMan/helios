@@ -27,8 +27,9 @@
 
 #include <string.h>
 
-#include <arch/x86_64/gdt/gdt.h>
-#include <arch/x86_64/mmu/vmm.h>
+#include <arch/gdt/gdt.h>
+#include <arch/mmu/vmm.h>
+#include <arch/regs.h>
 #include <kernel/liballoc.h>
 #include <kernel/panic.h>
 #include <kernel/tasks/scheduler.h>
@@ -36,8 +37,6 @@
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
 #include <util/list.h>
-
-#include "../../arch/x86_64/interrupts/idt.h"
 
 volatile bool need_reschedule = false;
 // If > 0, preempt is disabled

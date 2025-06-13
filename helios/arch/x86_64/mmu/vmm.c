@@ -31,9 +31,9 @@
 */
 
 #include <stdint.h>
+#include <string.h>
 
-#include <arch/x86_64/memcpy.h>
-#include <arch/x86_64/mmu/vmm.h>
+#include <arch/mmu/vmm.h>
 #include <kernel/bootinfo.h>
 #include <kernel/helios.h>
 #include <kernel/panic.h>
@@ -122,7 +122,7 @@ uint64_t* vmm_create_address_space()
 		panic("Out of memory");
 	}
 
-	__fast_memcpy(pml4, kernel.pml4, PAGE_SIZE);
+	memcpy(pml4, kernel.pml4, PAGE_SIZE);
 
 	return pml4;
 }

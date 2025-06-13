@@ -21,12 +21,11 @@
 
 // https://wiki.osdev.org/PCI
 // https://www.pcilookup.com/
+#include <arch/ports.h>
 #include <drivers/pci/pci.h>
 #include <kernel/liballoc.h>
 
 #include <util/log.h>
-
-#include "../arch/x86_64/ports.h"
 
 // TODO: Dynamiclly allocate
 pci_device_t* devices[32];

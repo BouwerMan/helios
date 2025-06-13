@@ -39,7 +39,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <kernel/fast_lib.h>
 #include <kernel/helios.h>
 #include <kernel/kmath.h>
 #include <kernel/spinlock.h>
@@ -374,7 +373,7 @@ uintptr_t get_free_pages(aflags_t flags, size_t pages)
 	if (!page_virt) return 0;
 
 	size_t region_size = PAGE_SIZE << order;
-	__fast_memset64((uint64_t*)page_virt, 0, region_size / sizeof(uint64_t));
+	memset64((uint64_t*)page_virt, 0, region_size / sizeof(uint64_t));
 
 	return page_virt;
 }

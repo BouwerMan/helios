@@ -23,10 +23,9 @@
 
 #include <kernel/screen.h>
 
+#include <arch/idt.h>
+#include <arch/ports.h>
 #include <util/log.h>
-
-#include "../ports.h"
-#include "idt.h"
 
 /* To print the message which defines every exception */
 const char* exception_messages[] = {

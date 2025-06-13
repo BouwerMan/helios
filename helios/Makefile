@@ -1,11 +1,11 @@
 BUILDDIR=build
 SRC_DIRS:=kernel drivers util mm
 
-CFLAGS:=$(CFLAGS) -Iinclude -I$(PWD)/libc/include
+ARCHDIR=arch/$(HOSTARCH)
+
+CFLAGS:=$(CFLAGS) -I$(ARCHDIR)/include  -Iinclude -I$(PWD)/libc/include
 LDFLAGS:=$(LDFLAGS)
 LIBS:=$(LIBS) -nostdlib -L$(PWD)/libc/build -lk -lgcc
-
-ARCHDIR=arch/$(HOSTARCH)
 
 include $(ARCHDIR)/config.mk
 include ./config.mk
@@ -71,6 +71,7 @@ $(BUILDDIR)/%.o: %.psf
 
 clean:
 	@echo "Cleaning build directory..."
+	# @rm $(OBJS)
 	@rm -rf $(BUILDDIR)
 
 install: install-kernel
