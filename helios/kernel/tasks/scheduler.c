@@ -28,6 +28,7 @@
 #include <string.h>
 
 #include <arch/gdt/gdt.h>
+#include <arch/idt.h>
 #include <arch/mmu/vmm.h>
 #include <arch/regs.h>
 #include <kernel/liballoc.h>
@@ -46,7 +47,8 @@ struct scheduler_queue squeue = { 0 };
 struct task* kernel_task;
 struct task* idle_task;
 
-[[noreturn]] extern void __switch_to(struct registers* new);
+[[noreturn]]
+extern void __switch_to(struct task* next);
 
 /**
  * Checks whether preemption is enabled by checking the preemption counter.
@@ -98,29 +100,30 @@ struct scheduler_queue* get_scheduler_queue()
  *
  * @param regs Pointer to the current task's register state.
  */
-void check_reschedule(struct registers* regs)
+void schedule(struct registers* regs)
 {
-	if (need_reschedule && is_preempt_enabled()) {
-		need_reschedule = false;
+	if (!need_reschedule || !is_preempt_enabled()) return;
 
-		// TODO: I'm doing some weird shit here, make this cleaner
-		// TODO: Load new cr3
-		squeue.current_task->regs = regs;
-		if (squeue.current_task->state != BLOCKED) squeue.current_task->state = READY;
+	need_reschedule = false;
 
-		struct task* new = scheduler_pick_next();
-		if (new == NULL) {
-			squeue.current_task->state = RUNNING;
-			return;
-		}
+	// TODO: I'm doing some weird shit here, make this cleaner
+	struct task* prev = squeue.current_task;
+	prev->regs	  = regs;
+	if (prev->state != BLOCKED) prev->state = READY;
 
-		new->state = RUNNING;
-		set_tss_rsp(new->kernel_stack);
-
-		/* @ref Does not return */
-		__switch_to(new->regs);
-		__builtin_unreachable();
+	struct task* new = scheduler_pick_next();
+	if (new == NULL) {
+		prev->state = RUNNING;
+		return;
 	}
+
+	new->state = RUNNING;
+	// FIXME: Pretty sure this should point to after the registers struct
+	set_tss_rsp(new->kernel_stack);
+
+	/* @ref Does not return */
+	__switch_to(new);
+	__builtin_unreachable();
 }
 
 #define STACK_SIZE_PAGES 1
@@ -146,7 +149,7 @@ static int create_kernel_stack(struct task* task)
 	task->regs->ss	   = 0x10; // optional for ring 0
 	task->regs->rsp	   = stack_top;
 	task->regs->rflags = 0x202;
-	task->regs->cs	   = 0x08; // kernel code segment
+	task->regs->cs	   = KERNEL_CS; // kernel code segment
 
 	// Other important registers, all other registers set to 0
 	task->regs->ds		 = 0x10;

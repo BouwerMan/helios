@@ -3,6 +3,12 @@
 
 #include <stdint.h>
 
+struct interrupt_context {
+	uint64_t int_no, err_code;
+	uint64_t rip, cs, rflags, rsp, ss;
+};
+
+// TODO: Turn this into full cpu context and split interrupt context
 struct registers {
 	uint64_t ds;
 	// struct xmm_reg xmm[16]; // had to remove these, probably dont have them enabled

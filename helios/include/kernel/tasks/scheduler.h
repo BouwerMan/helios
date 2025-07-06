@@ -24,8 +24,9 @@ enum TASK_TYPE {
 
 typedef void (*entry_func)(void);
 
+// Any changes to this structure needs to be reflected in switch.asm
 struct task {
-	struct registers* regs;
+	struct registers* regs; // Full CPU context, this address is loaded into rsp on switch
 	uintptr_t cr3;		// pml4
 	uintptr_t kernel_stack; // Not super sure abt this one
 	enum TASK_STATE state;
@@ -53,7 +54,7 @@ struct waitqueue {
 
 void task_add(struct task* task);
 struct task* new_task(entry_func entry);
-void check_reschedule(struct registers* regs);
+void schedule(struct registers* regs);
 void init_scheduler(void);
 struct task* scheduler_pick_next();
 void scheduler_tick();

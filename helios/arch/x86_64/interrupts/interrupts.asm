@@ -4,7 +4,7 @@
 [bits 64]
 
 extern interrupt_handler
-extern check_reschedule
+extern schedule
 
 global __set_idt
 __set_idt:
@@ -13,101 +13,101 @@ __set_idt:
     ret
 
 %macro PUSHALL 0
-    pushfq
-    push    r15
-    push    r14
-    push    r13
-    push    r12
-    push    r11
-    push    r10
-    push    r9
-    push    r8
+	pushfq
+	push r15
+	push r14
+	push r13
+	push r12
+	push r11
+	push r10
+	push r9
+	push r8
 
-    push    rax
-    push    rcx
-    push    rdx
-    push    rbx
-    push    rsp
-    push    rbp
-    push    rsi
-    push    rdi
+	push rax
+	push rcx
+	push rdx
+	push rbx
+	push rsp
+	push rbp
+	push rsi
+	push rdi
 
-    ; Don't have xmm registers enabled, uncomment once enabled
-    ; sub     rsp, 256
-    ; movdqa  [rsp + 15 * 16], xmm15
-    ; movdqa  [rsp + 14 * 16], xmm14
-    ; movdqa  [rsp + 13 * 16], xmm13
-    ; movdqa  [rsp + 12 * 16], xmm12
-    ; movdqa  [rsp + 11 * 16], xmm11
-    ; movdqa  [rsp + 10 * 16], xmm10
-    ; movdqa  [rsp + 9 * 16], xmm9
-    ; movdqa  [rsp + 8 * 16], xmm8
-    ; movdqa  [rsp + 7 * 16], xmm7
-    ; movdqa  [rsp + 6 * 16], xmm6
-    ; movdqa  [rsp + 5 * 16], xmm5
-    ; movdqa  [rsp + 4 * 16], xmm4
-    ; movdqa  [rsp + 3 * 16], xmm3
-    ; movdqa  [rsp + 2 * 16], xmm2
-    ; movdqa  [rsp + 1 * 16], xmm1
-    ; movdqa  [rsp + 0 * 16], xmm0
+	;Don't have xmm registers enabled, uncomment once enabled
+	;sub     rsp, 256
+	;movdqa  [rsp + 15 * 16], xmm15
+	;movdqa  [rsp + 14 * 16], xmm14
+	;movdqa  [rsp + 13 * 16], xmm13
+	;movdqa  [rsp + 12 * 16], xmm12
+	;movdqa  [rsp + 11 * 16], xmm11
+	;movdqa  [rsp + 10 * 16], xmm10
+	;movdqa  [rsp + 9 * 16], xmm9
+	;movdqa  [rsp + 8 * 16], xmm8
+	;movdqa  [rsp + 7 * 16], xmm7
+	;movdqa  [rsp + 6 * 16], xmm6
+	;movdqa  [rsp + 5 * 16], xmm5
+	;movdqa  [rsp + 4 * 16], xmm4
+	;movdqa  [rsp + 3 * 16], xmm3
+	;movdqa  [rsp + 2 * 16], xmm2
+	;movdqa  [rsp + 1 * 16], xmm1
+	;movdqa  [rsp + 0 * 16], xmm0
 
-    xor     rax, rax
-    mov     ax, ds              ; Lower 16-bits of rax = ds.
-    push    rax                 ; save the data segment descriptor
+	xor rax, rax
+	mov ax, ds ; Lower 16-bits of rax = ds.
+	push rax ; save the data segment descriptor
 
-    mov     ax, 0x10            ; load the kernel data segment descriptor
-    mov     ds, ax
-    mov     es, ax
-    mov     fs, ax
-    mov     gs, ax
+	mov ax, 0x10 ; load the kernel data segment descriptor
+	mov ds, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
 %endmacro
 
 %macro POPALL 0
-    pop     rbx                      ; reload the original data segment descriptor
-    mov     ds, bx
-    mov     es, bx
-    mov     fs, bx
-    mov     gs, bx
+	pop rbx ; reload the original data segment descriptor
+	mov ds, bx
+	mov es, bx
+	mov fs, bx
+	mov gs, bx
 
-    ; movdqa  xmm15, [rsp + 15 * 16]
-    ; movdqa  xmm14, [rsp + 14 * 16]
-    ; movdqa  xmm13, [rsp + 13 * 16]
-    ; movdqa  xmm12, [rsp + 12 * 16]
-    ; movdqa  xmm12, [rsp + 11 * 16]
-    ; movdqa  xmm10, [rsp + 10 * 16]
-    ; movdqa  xmm9, [rsp + 9 * 16]
-    ; movdqa  xmm8, [rsp + 8 * 16]
-    ; movdqa  xmm7, [rsp + 7 * 16]
-    ; movdqa  xmm6, [rsp + 6 * 16]
-    ; movdqa  xmm5, [rsp + 5 * 16]
-    ; movdqa  xmm4, [rsp + 4 * 16]
-    ; movdqa  xmm3, [rsp + 3 * 16]
-    ; movdqa  xmm2, [rsp + 2 * 16]
-    ; movdqa  xmm1, [rsp + 1 * 16]
-    ; movdqa  xmm0, [rsp + 0 * 16]
-    ; add     rsp, 256
+	; movdqa  xmm15, [rsp + 15 * 16]
+	; movdqa  xmm14, [rsp + 14 * 16]
+	; movdqa  xmm13, [rsp + 13 * 16]
+	; movdqa  xmm12, [rsp + 12 * 16]
+	; movdqa  xmm12, [rsp + 11 * 16]
+	; movdqa  xmm10, [rsp + 10 * 16]
+	; movdqa  xmm9, [rsp + 9 * 16]
+	; movdqa  xmm8, [rsp + 8 * 16]
+	; movdqa  xmm7, [rsp + 7 * 16]
+	; movdqa  xmm6, [rsp + 6 * 16]
+	; movdqa  xmm5, [rsp + 5 * 16]
+	; movdqa  xmm4, [rsp + 4 * 16]
+	; movdqa  xmm3, [rsp + 3 * 16]
+	; movdqa  xmm2, [rsp + 2 * 16]
+	; movdqa  xmm1, [rsp + 1 * 16]
+	; movdqa  xmm0, [rsp + 0 * 16]
+	; add     rsp, 256
 
-    pop     rdi
-    pop     rsi
-    pop     rbp
-    add     rsp, 8 ; skip rsp
-    pop     rbx
-    pop     rdx
-    pop     rcx
-    pop     rax
+	pop rdi
+	pop rsi
+	pop rbp
+	add rsp, 8 ; skip rsp
+	pop rbx
+	pop rdx
+	pop rcx
+	pop rax
 
-    pop     r8
-    pop     r9
-    pop     r10
-    pop     r11
-    pop     r12
-    pop     r13
-    pop     r14
-    pop     r15
-    popfq
+	pop r8
+	pop r9
+	pop r10
+	pop r11
+	pop r12
+	pop r13
+	pop r14
+	pop r15
+	popfq
 
 	; Cleanup irq & error code from stack
-    add     rsp, 0x10
+	add rsp, 0x10
 %endmacro
 
 ; Info on page 282 of AMD64 volume 2
@@ -132,9 +132,19 @@ interrupt_common_stub:
 	call interrupt_handler
 
 	mov rdi, r15 ; restore rdi to point to the struct registers
-	call check_reschedule
+	; schedule will jmp to interrupt_return if a switch is performed
+	; otherwise r15 will still have a valid struct registers in it
+	cld
+	call schedule
 
-	mov rsp, r15 ; restore rsp from r15
+	; If we make it here
+	mov rdi, r15 ; put struct register into rdi for interrupt_return
+	
+; rdi: struct registers to pop from
+global interrupt_return
+interrupt_return:
+	mov rsp, rdi ; put struct registers into rsp then we can POPALL and iretq
+
 	POPALL
 
 	swapgs_if_necessary
@@ -206,26 +216,23 @@ global isr128
 %macro ISR_NOERR 1
 isr%1:
 	cli
-	push    0
-	push    %1
-	;jmp     isr_common_stub
+	push 0
+	push %1
 	jmp interrupt_common_stub
 %endmacro
 
 %macro ISR_ERR 1
 isr%1:
 	cli
-	push    %1
-	;jmp     isr_common_stub
+	push %1
 	jmp interrupt_common_stub
 %endmacro
 
 %macro IRQ 1
 irq%1:
 	cli
-	push    0
-	push    (%1 + 32)
-	;jmp     irq_common_stub
+	push 0
+	push (%1 + 32)
 	jmp interrupt_common_stub
 %endmacro
 
