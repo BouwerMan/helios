@@ -3,12 +3,10 @@
 ; asmsyntax=nasm
 [bits 64]
 
-extern isr_handler
-extern irq_handler
+extern interrupt_handler
 extern check_reschedule
 
 global __set_idt
-
 __set_idt:
     mov     rax, rdi
     lidt    [rax]
@@ -120,51 +118,28 @@ __set_idt:
 %%skip:
 %endmacro
 
-isr_common_stub:
+interrupt_common_stub:
 	swapgs_if_necessary
+
 	PUSHALL
 
-    mov     rdi, rsp
-    mov     r15, rsp ; save rsp in r15 so we can use scratch space
-    sub     rsp, 0x28
+	mov rdi, rsp ; this points to the struct registers
+	mov r15, rsp ; save rsp in r15
 
-    cld
-    call    isr_handler
-    ; do NOT clean up scratch space yet
+	; ABI requirements
+	and rsp, -16 ; align stack to 16 bytes
+	cld
+	call interrupt_handler
 
-    ; Pass struct registers* (still in r15) to check_reschedule()
-    mov     rdi, r15
-    call    check_reschedule
+	mov rdi, r15 ; restore rdi to point to the struct registers
+	call check_reschedule
 
-    add     rsp, 0x28      ; now clean up scratch space
-    POPALL
+	mov rsp, r15 ; restore rsp from r15
+	POPALL
 
-    swapgs_if_necessary
-    sti
-    iretq
-
-irq_common_stub:
-    swapgs_if_necessary
-    PUSHALL
-
-    mov     rdi, rsp
-    mov     r15, rsp ; save rsp in r15 so we can use scratch space
-    sub     rsp, 0x28
-
-    cld
-    call    irq_handler
-    ; do NOT clean up scratch space yet
-
-    ; Pass struct registers* (still in r15) to check_reschedule()
-    mov     rdi, r15
-    call    check_reschedule
-
-    add     rsp, 0x28      ; now clean up scratch space
-    POPALL
-
-    swapgs_if_necessary
-    sti
-    iretq
+	swapgs_if_necessary
+	sti
+	iretq
 
 ; We don't get information about which interrupt was caller
 ; when the handler is run, so we will need to have a different handler
@@ -230,25 +205,28 @@ global isr128
 
 %macro ISR_NOERR 1
 isr%1:
-    cli
-    push    0
-    push    %1
-    jmp     isr_common_stub
+	cli
+	push    0
+	push    %1
+	;jmp     isr_common_stub
+	jmp interrupt_common_stub
 %endmacro
 
 %macro ISR_ERR 1
 isr%1:
-    cli
-    push    %1
-    jmp     isr_common_stub
+	cli
+	push    %1
+	;jmp     isr_common_stub
+	jmp interrupt_common_stub
 %endmacro
 
 %macro IRQ 1
 irq%1:
-    cli
+	cli
 	push    0
 	push    (%1 + 32)
-	jmp     irq_common_stub
+	;jmp     irq_common_stub
+	jmp interrupt_common_stub
 %endmacro
 
 ; 0: Divide By Zero Exception

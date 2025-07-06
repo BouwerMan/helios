@@ -129,13 +129,13 @@ void idt_set_descriptor(uint8_t vector, uint64_t isr, uint8_t flags)
 {
 	idt_entry_t* descriptor = &idt[vector];
 
-	descriptor->isr_low = isr & 0xFFFF;
-	descriptor->kernel_cs = KERNEL_CS;
-	descriptor->ist = 0;
+	descriptor->isr_low    = isr & 0xFFFF;
+	descriptor->kernel_cs  = KERNEL_CS;
+	descriptor->ist	       = 0;
 	descriptor->attributes = flags;
-	descriptor->isr_mid = (isr >> 16) & 0xFFFF;
-	descriptor->isr_high = (uint32_t)(isr >> 32) & 0xFFFFFFFF;
-	descriptor->reserved = 0;
+	descriptor->isr_mid    = (isr >> 16) & 0xFFFF;
+	descriptor->isr_high   = (uint32_t)(isr >> 32) & 0xFFFFFFFF;
+	descriptor->reserved   = 0;
 }
 
 /**
@@ -156,7 +156,7 @@ void idt_set_descriptor(uint8_t vector, uint64_t isr, uint8_t flags)
  */
 void idt_init()
 {
-	idtr.base = (uintptr_t)&idt[0];
+	idtr.base  = (uintptr_t)&idt[0];
 	idtr.limit = (uint16_t)sizeof(idt_entry_t) * IDT_ENTRIES - 1;
 
 	/* Clear out the entire IDT, initializing it to zeros */
@@ -297,34 +297,43 @@ void isr_init()
 }
 
 /**
- * @brief Handles exceptions and invokes the appropriate interrupt service
- * routine (ISR).
+ * @brief A unified handler for all CPU exceptions and hardware interrupt requests (IRQs).
  *
- * This function is called whenever an exception occurs. It checks if the
- * exception number is within the range of 0 to 31. If a custom handler is
- * registered for the exception, it invokes the handler. Otherwise, it displays
- * an error message and halts the system in an infinite loop.
+ * This function serves as the central dispatch point for all interrupts. It determines
+ * the nature of the interrupt based on its number and takes appropriate action.
  *
- * @param r A pointer to the `struct registers` containing the state of the CPU
- *          at the time of the exception.
+ * @param r A pointer to the `struct registers` containing the CPU state saved
+ * at the time the interrupt occurred.
+ *
+ * @note Unhandled hardware IRQs are silently ignored, but they are still
+ * acknowledged with an EOI to prevent the system from locking up.
  */
-void isr_handler(struct registers* r)
+void interrupt_handler(struct registers* r)
 {
-	/* Is this a fault whose number is from 0 to 31? */
-	if (r->int_no < 32) {
-		void (*handler)(struct registers* r);
-		handler = interrupt_handlers[r->int_no];
-		/* Display the description for the Exception that occurred.
-     *  In this tutorial, we will simply halt the system using an
-     *  infinite loop */
-		if (handler) {
-			screen_clear();
-			handler(r);
-		} else {
-			log_error("%s\n%s", (char*)exception_messages[r->int_no], "Exception. System Halted!");
-			for (;;)
-				;
+	void (*handler)(struct registers* r) = interrupt_handlers[r->int_no];
+
+	if (handler) {
+		handler(r);
+	} else if (r->int_no < 32) {
+		// If the interrupt is an exception, log the error and halt
+		log_error("%s\n%s", (char*)exception_messages[r->int_no], "Exception. System Halted!");
+		for (;;)
+			;
+	}
+
+	// End of interrupt stuff:
+	// IRQs are typically mapped to interrupts 32 and up.
+	if (r->int_no >= 32) {
+		/** If the IDT entry that was invoked was greater than 40
+		 * (meaning IRQ8 - 15), then we need to send an EOI to
+		 * the slave controller */
+		if (r->int_no >= 40) {
+			outb(PIC2_COMMAND, PIC_EOI);
 		}
+
+		/* In either case, we need to send an EOI to the master
+		 * interrupt controller too */
+		outb(PIC1_COMMAND, PIC_EOI);
 	}
 }
 
@@ -361,45 +370,6 @@ void irq_init(void)
 	idt_set_descriptor(IRQ13, (uint64_t)irq13, 0x8E);
 	idt_set_descriptor(IRQ14, (uint64_t)irq14, 0x8E);
 	idt_set_descriptor(IRQ15, (uint64_t)irq15, 0x8E);
-}
-
-/**
- * @brief Handles hardware interrupt requests (IRQs).
- *
- * This function is invoked for all IRQs. It checks if a custom handler is
- * registered for the specific IRQ and executes it if available. After handling
- * the IRQ, it sends an End of Interrupt (EOI) signal to the appropriate
- * interrupt controller(s) to indicate that the interrupt has been serviced.
- *
- * @param r A pointer to the `struct registers` containing the state of the CPU
- *          at the time of the interrupt.
- *
- * @note If the interrupt originates from IRQ8-IRQ15 (slave controller), an EOI
- *       must be sent to both the slave and master controllers. For IRQ0-IRQ7
- *       (master controller), only the master controller requires an EOI.
- */
-void irq_handler(struct registers* r)
-{
-	/* This is a blank function pointer */
-	void (*handler)(struct registers* r);
-
-	/* Find out if we have a custom handler to run for this IRQ, and then finally, run it */
-	handler = interrupt_handlers[r->int_no];
-
-	if (handler) {
-		handler(r);
-	}
-
-	/* If the IDT entry that was invoked was greater than 40
-   *  (meaning IRQ8 - 15), then we need to send an EOI to
-   *  the slave controller */
-	if (r->int_no >= 40) {
-		outb(PIC2_COMMAND, PIC_EOI);
-	}
-
-	/* In either case, we need to send an EOI to the master
-   *  interrupt controller too */
-	outb(PIC1_COMMAND, PIC_EOI);
 }
 
 void IRQ_set_mask(uint8_t IRQline)

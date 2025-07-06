@@ -1,3 +1,4 @@
+; asmsyntax=nasm
 ; @file kernel/tasks/switch.asm
 ;
 ; Copyright (C) 2025  Dylan Parks
