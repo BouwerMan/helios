@@ -21,6 +21,7 @@
 
 #include <string.h>
 
+#include <kernel/dmesg.h>
 #include <kernel/screen.h>
 
 #include <arch/idt.h>
@@ -87,6 +88,7 @@ static const char* exception_messages[] = {
 static void default_exception_handler(struct registers* registers)
 {
 	set_log_mode(LOG_DIRECT);
+	dmesg_flush_raw();
 	log_error("Recieved interrupt #%lx with error code %lx on the default handler!", registers->int_no,
 		  registers->err_code);
 	log_error("Exception: %s", exception_messages[registers->int_no]);

@@ -16,5 +16,7 @@ int puts(const char* string)
 // TODO: Proper libc puts
 int puts(const char* string)
 {
+	(void)string;
+	return 0;
 }
 #endif

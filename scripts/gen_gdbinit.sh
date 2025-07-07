@@ -19,7 +19,7 @@ set print pretty on
 EOL
 
 # Find all relevant source files in one command
-source_files=$(find helios libc -type f \( -name "*.c" -o -name "*.h" -o -name "*.S" \))
+source_files=$(find helios libc userspace -type f \( -name "*.c" -o -name "*.h" -o -name "*.asm" \))
 
 # Add breakpoints for each file containing "GDB BREAKPOINT"
 for file in $source_files; do

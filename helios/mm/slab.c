@@ -25,25 +25,25 @@
 #include <util/log.h>
 #undef FORCE_LOG_REDEF
 
+#include <stdlib.h>
 #include <string.h>
 
 #include <arch/cache.h>
-#include <kernel/liballoc.h>
 #include <kernel/panic.h>
 #include <kernel/spinlock.h>
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
 
 #ifdef SLAB_DEBUG
-static constexpr int POISON_PATTERN = 0x5A;
+static constexpr int POISON_PATTERN    = 0x5A;
 static constexpr int POISON_BYTE_COUNT = 16; // Number of bytes to verify at head/tail
-static constexpr int REDZONE_SIZE = 4;	     // 4 bytes at head and tail (so it is technically cross platform :))
-static constexpr long REDZONE_PATTERN = 0xDEADBEEF;
+static constexpr int REDZONE_SIZE      = 4;  // 4 bytes at head and tail (so it is technically cross platform :))
+static constexpr long REDZONE_PATTERN  = 0xDEADBEEF;
 #else
-static constexpr int POISON_PATTERN = 0;
+static constexpr int POISON_PATTERN    = 0;
 static constexpr int POISON_BYTE_COUNT = 0; // Number of bytes to verify at head/tail
-static constexpr int REDZONE_SIZE = 0;	    // 4 bytes at head and tail (so it is technically cross platform :))
-static constexpr long REDZONE_PATTERN = 0;
+static constexpr int REDZONE_SIZE      = 0; // 4 bytes at head and tail (so it is technically cross platform :))
+static constexpr long REDZONE_PATTERN  = 0;
 #endif
 
 // NOTE: All functions that deal with objects take in object start (not data_start which is object_start - REDZONE_SIZE)
@@ -93,7 +93,7 @@ static inline void _slab_free_pages(void* addr, size_t pages)
 static inline struct slab* _slab_from_object(const void* object)
 {
 	size_t slab_bytes = SLAB_SIZE_PAGES * PAGE_SIZE; // Total size of a slab in bytes
-	uint64_t mask = ~(slab_bytes - 1);		 // Mask to align the address to the slab base
+	uint64_t mask	  = ~(slab_bytes - 1);		 // Mask to align the address to the slab base
 	return (struct slab*)((uintptr_t)object & mask);
 }
 
@@ -194,14 +194,14 @@ static bool _check_poison(const void* obj_start, size_t size)
 		if (byte_ptr[i] != POISON_PATTERN) {
 			log_error("Use-before-init detected at start of object at byte %zu", i);
 			_dump_data(obj_start, size);
-			slab = _slab_from_object(obj_start);
+			slab		  = _slab_from_object(obj_start);
 			slab->debug_error = true;
 			return false;
 		}
 		if (byte_ptr[size - 1 - i] != POISON_PATTERN) {
 			log_error("Use-before-init detected at end of object at byte %zu", size - 1 - i);
 			_dump_data(obj_start, size);
-			slab = _slab_from_object(obj_start);
+			slab		  = _slab_from_object(obj_start);
 			slab->debug_error = true;
 			return false;
 		}
@@ -236,16 +236,16 @@ static bool _check_redzone(const void* obj_start, size_t size)
 	if (*redzone_start != REDZONE_PATTERN) {
 		log_error("Underflow on freed object detected");
 		_dump_data((void*)((uintptr_t)obj_start - REDZONE_SIZE), slab->parent->data_size);
-		*redzone_start = REDZONE_PATTERN; // Reset the redzone at the start
-		slab->debug_error = true;	  // Mark slab as corrupted
+		*redzone_start	  = REDZONE_PATTERN; // Reset the redzone at the start
+		slab->debug_error = true;	     // Mark slab as corrupted
 	}
 
 	uint32_t* redzone_end = (uint32_t*)((uintptr_t)obj_start + size);
 	if (*redzone_end != REDZONE_PATTERN) {
 		log_error("Overflow on freed object detected");
 		_dump_data((void*)((uintptr_t)obj_start - REDZONE_SIZE), slab->parent->data_size);
-		*redzone_end = REDZONE_PATTERN; // Reset the redzone at the end
-		slab->debug_error = true;	// Mark slab as corrupted
+		*redzone_end	  = REDZONE_PATTERN; // Reset the redzone at the end
+		slab->debug_error = true;	     // Mark slab as corrupted
 	}
 
 	return !slab->debug_error; // Return true if no errors found
@@ -329,8 +329,8 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
 	 */
 	cache->data_size = object_size + 2 * REDZONE_SIZE + object_align;
 
-	cache->object_align = object_align;
-	cache->header_size = ALIGN_UP(sizeof(struct slab), object_align);
+	cache->object_align	= object_align;
+	cache->header_size	= ALIGN_UP(sizeof(struct slab), object_align);
 	cache->objects_per_slab = (SLAB_SIZE_PAGES * PAGE_SIZE - cache->header_size) / cache->data_size;
 
 	list_init(&cache->empty);
@@ -338,17 +338,17 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
 	list_init(&cache->full);
 	list_init(&cache->quarantine);
 	list_append(&kernel.slab_caches, &cache->cache_node);
-	cache->num_empty = 0;
-	cache->num_partial = 0;
-	cache->num_full = 0;
+	cache->num_empty      = 0;
+	cache->num_partial    = 0;
+	cache->num_full	      = 0;
 	cache->num_quarantine = 0;
 
 	cache->constructor = constructor;
-	cache->destructor = destructor;
+	cache->destructor  = destructor;
 
-	cache->total_slabs = 0;
+	cache->total_slabs   = 0;
 	cache->total_objects = 0;
-	cache->used_objects = 0;
+	cache->used_objects  = 0;
 
 	// Copy the cache name and ensure null termination
 	strncpy(cache->name, name, MAX_CACHE_NAME_LEN);
@@ -389,7 +389,7 @@ void* slab_alloc(struct slab_cache* cache)
 	}
 
 	struct slab* slab = NULL;
-	int res = 0;
+	int res		  = 0;
 
 	spinlock_acquire(&cache->lock);
 
@@ -599,15 +599,15 @@ static void _slab_destroy(struct slab* slab)
 	struct slab_cache* cache = slab->parent;
 	log_debug("Cache %s: Destroying slab %p", cache->name, (void*)slab);
 
-	void* base = (void*)slab;
+	void* base	    = (void*)slab;
 	uintptr_t data_base = (uintptr_t)base + cache->header_size;
-	size_t N = cache->objects_per_slab;
+	size_t N	    = cache->objects_per_slab;
 
 	if (slab->free_top == 0) {
 		// Full slab, destructor called on all objects
 		for (size_t i = 0; i < N; i++) {
 			uintptr_t raw_ptr = data_base + i * cache->data_size;
-			void* obj = (void*)ALIGN_UP(raw_ptr + REDZONE_SIZE, cache->object_align);
+			void* obj	  = (void*)ALIGN_UP(raw_ptr + REDZONE_SIZE, cache->object_align);
 			if (cache->destructor) cache->destructor(obj);
 		}
 	} else if (slab->free_top == N) {
@@ -621,14 +621,14 @@ static void _slab_destroy(struct slab* slab)
 		// mark every free object
 		for (size_t i = 0; i < slab->free_top; i++) {
 			uintptr_t ptr = (uintptr_t)slab->free_stack[i];
-			size_t idx = (ptr - (uintptr_t)base - cache->header_size) / cache->data_size;
-			is_free[idx] = true;
+			size_t idx    = (ptr - (uintptr_t)base - cache->header_size) / cache->data_size;
+			is_free[idx]  = true;
 		}
 		// Now call destructor on each non free item
 		for (size_t i = 0; i < N; i++) {
 			if (!is_free[i]) {
 				uintptr_t raw_ptr = data_base + i * cache->data_size;
-				void* obj = (void*)ALIGN_UP(raw_ptr + REDZONE_SIZE, cache->object_align);
+				void* obj	  = (void*)ALIGN_UP(raw_ptr + REDZONE_SIZE, cache->object_align);
 				if (cache->destructor) cache->destructor(obj);
 			}
 		}
@@ -673,7 +673,7 @@ static int _slab_grow(struct slab_cache* cache)
 
 	struct slab* new_slab = (struct slab*)base;
 	memset(new_slab, 0, sizeof(struct slab)); // Zero out the slab metadata
-	new_slab->parent = cache;
+	new_slab->parent     = cache;
 	new_slab->free_stack = kmalloc(cache->objects_per_slab * sizeof(void*));
 	if (!new_slab->free_stack) {
 		log_error("OOM growing slab for cache %s", cache->name);
@@ -690,16 +690,16 @@ static int _slab_grow(struct slab_cache* cache)
 	// because currently the list is on the same order of magnitude as the actual slab (depending on object size).
 	for (size_t i = 0; i < cache->objects_per_slab; i++) {
 		uintptr_t data_base = (uintptr_t)base + cache->header_size;
-		uintptr_t raw_ptr = data_base + i * cache->data_size;
+		uintptr_t raw_ptr   = data_base + i * cache->data_size;
 
 		// Align the object such that obj_start is aligned, with redzone before it
 		uintptr_t obj_start = ALIGN_UP(raw_ptr + REDZONE_SIZE, cache->object_align);
 #ifdef SLAB_DEBUG
 		uint32_t* redzone_head = (uint32_t*)(obj_start - REDZONE_SIZE);
-		*redzone_head = REDZONE_PATTERN; // Set the redzone at the start
+		*redzone_head	       = REDZONE_PATTERN; // Set the redzone at the start
 
 		uint32_t* redzone_tail = (uint32_t*)(obj_start + cache->object_size);
-		*redzone_tail = REDZONE_PATTERN; // Set the redzone at the end
+		*redzone_tail	       = REDZONE_PATTERN; // Set the redzone at the end
 #endif
 		new_slab->free_stack[i] = (void*)obj_start;
 	}
@@ -829,7 +829,7 @@ void test_use_before_alloc(struct slab_cache* cache)
 
 	// simulate use-before-init:
 	((uint8_t*)poisoned_obj)[0] = 0xAA;
-	void* obj = slab_alloc(cache);
+	void* obj		    = slab_alloc(cache);
 
 	// reinsert manually for test
 	slab_free(cache, obj);
@@ -858,7 +858,7 @@ void test_use_before_alloc(struct slab_cache* cache)
 void test_buffer_overflow(struct slab_cache* cache)
 {
 	log_info("Testing buffer overflow detection in slab cache");
-	void* obj = slab_alloc(cache);
+	void* obj	  = slab_alloc(cache);
 	struct slab* slab = _slab_from_object(obj);
 
 	// Write past the end of the object (into redzone)
@@ -890,7 +890,7 @@ void test_buffer_overflow(struct slab_cache* cache)
 void test_buffer_underflow(struct slab_cache* cache)
 {
 	log_info("Testing buffer underflow detection in slab cache");
-	void* obj = slab_alloc(cache);
+	void* obj	  = slab_alloc(cache);
 	struct slab* slab = _slab_from_object(obj);
 
 	// Write just before the object (into the redzone)
@@ -922,7 +922,7 @@ void test_buffer_underflow(struct slab_cache* cache)
 void test_valid_usage(struct slab_cache* cache)
 {
 	log_info("Testing valid usage of slab cache");
-	void* obj = slab_alloc(cache);
+	void* obj	  = slab_alloc(cache);
 	struct slab* slab = _slab_from_object(obj);
 	memset(obj, 0, cache->object_size); // Legal usage
 
@@ -953,7 +953,7 @@ void test_object_alignment(struct slab_cache* cache)
 	log_info("Testing object alignment in slab cache");
 
 	for (size_t i = 0; i < 32; i++) {
-		void* obj = slab_alloc(cache);
+		void* obj      = slab_alloc(cache);
 		uintptr_t addr = (uintptr_t)obj;
 
 		if (addr % cache->object_align != 0) {

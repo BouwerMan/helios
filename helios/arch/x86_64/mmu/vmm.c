@@ -33,8 +33,11 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <arch/idt.h>
 #include <arch/mmu/vmm.h>
+#include <arch/regs.h>
 #include <kernel/bootinfo.h>
+#include <kernel/dmesg.h>
 #include <kernel/helios.h>
 #include <kernel/panic.h>
 #include <mm/page.h>
@@ -82,6 +85,8 @@ static void _map_memmap_entry(uint64_t* pml4, struct bootinfo_memmap_entry* entr
 	}
 }
 
+void page_fault(struct registers* r);
+
 /**
  * @brief Initializes the virtual memory manager (VMM).
  *
@@ -99,6 +104,8 @@ static void _map_memmap_entry(uint64_t* pml4, struct bootinfo_memmap_entry* entr
  */
 void vmm_init()
 {
+	install_isr_handler(PAGE_FAULT, page_fault);
+
 	// Init new address space, then copy from limine
 	struct bootinfo* bootinfo = &kernel.bootinfo;
 	if (!bootinfo->valid) panic("bootinfo marked not valid");
@@ -167,6 +174,9 @@ static inline size_t _page_table_index(uptr vaddr, int shift)
  */
 uint64_t* walk_page_table(uint64_t* pml4, uintptr_t vaddr, bool create, flags_t flags)
 {
+	if ((flags & PAGE_PRESENT) == 0) {
+		log_warn("walk_page_table creating an entry WITHOUT PAGE_PRESENT! flags: 0x%lx", flags);
+	}
 	// Ensure the virtual address is canonical
 	if ((vaddr >> 48) != 0 && (vaddr >> 48) != 0xFFFF) return NULL;
 
@@ -233,6 +243,8 @@ int map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
 	}
 
 	*pte = paddr | flags;
+	// TEMP
+	if (vaddr < 0x500000) log_info("pte: %p, pte value: %lx", (void*)pte, *pte);
 	return 0;
 }
 
@@ -427,4 +439,89 @@ void vmm_test_prune_single_mapping(void)
 	// 6. Cleanup
 	free_page((void*)PHYS_TO_HHDM(paddr));
 	_free_page_table(pml4);
+}
+
+void log_page_table_walk(uint64_t* pml4, uintptr_t vaddr)
+{
+	size_t pml4_i = _pml4_index(vaddr);
+	size_t pdpt_i = _pdpt_index(vaddr);
+	size_t pd_i   = _pd_index(vaddr);
+	size_t pt_i   = _pt_index(vaddr);
+
+	uint64_t pml4e = pml4[pml4_i];
+	log_info("PML4E [%03lx] = 0x%016lx", pml4_i, pml4e);
+
+	if (!(pml4e & PAGE_PRESENT)) {
+		log_warn("  PML4E not present!");
+		return;
+	}
+
+	uint64_t* pdpt = (uint64_t*)PHYS_TO_HHDM(pml4e & PAGE_FRAME_MASK);
+	uint64_t pdpte = pdpt[pdpt_i];
+	log_info(" PDPT [%03lx] = 0x%016lx", pdpt_i, pdpte);
+
+	if (!(pdpte & PAGE_PRESENT)) {
+		log_warn("  PDPT entry not present!");
+		return;
+	}
+
+	uint64_t* pd = (uint64_t*)PHYS_TO_HHDM(pdpte & PAGE_FRAME_MASK);
+	uint64_t pde = pd[pd_i];
+	log_info("  PD  [%03lx] = 0x%016lx", pd_i, pde);
+
+	if (!(pde & PAGE_PRESENT)) {
+		log_warn("  PD entry not present!");
+		return;
+	}
+	if (pde & PAGE_HUGE) {
+		log_info("  PD entry is a huge (2MiB) page.");
+		return;
+	}
+
+	uint64_t* pt = (uint64_t*)PHYS_TO_HHDM(pde & PAGE_FRAME_MASK);
+	uint64_t pte = pt[pt_i];
+	log_info("   PT  [%03lx] = 0x%016lx", pt_i, pte);
+
+	if (!(pte & PAGE_PRESENT)) {
+		log_warn("  PT entry not present!");
+		return;
+	}
+}
+
+void page_fault(struct registers* r)
+{
+	uint64_t fault_addr;
+	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
+	uint64_t cr3;
+	__asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
+
+	int present  = !(r->err_code & 0x1);
+	int rw	     = r->err_code & 0x2;
+	int user     = r->err_code & 0x4;
+	int reserved = r->err_code & 0x8;
+	int id	     = r->err_code & 0x10;
+
+	set_log_mode(LOG_DIRECT);
+	dmesg_flush_raw();
+
+	log_error("PAGE FAULT! err %lu (p:%d,rw:%d,user:%d,res:%d,id:%d) at 0x%lx", r->err_code, present, rw, user,
+		  reserved, id, fault_addr);
+	log_error("Caused by 0x%lx in address space %lx", r->rip, cr3);
+
+	log_error("General registers:");
+	log_error("RIP: %lx, RSP: %lx, RBP: %lx", r->rip, r->rsp, r->rbp);
+	log_error("RAX: %lx, RBX: %lx, RCX: %lx, RDX: %lx", r->rax, r->rbx, r->rcx, r->rdx);
+	log_error("RDI: %lx, RSI: %lx, RFLAGS: %lx, DS: %lx", r->rdi, r->rsi, r->rflags, r->ds);
+	log_error("CS: %lx, SS: %lx", r->cs, r->ss);
+	log_error("R8: %lx, R9: %lx, R10: %lx, R11: %lx", r->r8, r->r9, r->r10, r->r11);
+	log_error("R12: %lx, R13: %lx, R14: %lx, R15: %lx", r->r12, r->r13, r->r14, r->r15);
+
+	log_page_table_walk((uint64_t*)PHYS_TO_HHDM(cr3), fault_addr);
+
+	// char buff[16] = { 0 };
+	// memcpy(buff, (struct elf_file_header*)0x400000, 16);
+	// buff[15] = '\0'; // Null-terminate for logging
+	// log_debug("ELF Header Magic: %s", buff);
+
+	panic("Page Fault");
 }

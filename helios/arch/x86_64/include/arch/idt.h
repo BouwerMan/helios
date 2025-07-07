@@ -20,6 +20,10 @@ static constexpr u16 ICW1_INIT = 0x10;
 static constexpr u16 ICW1_ICW4 = 0x01;
 static constexpr u16 ICW4_8086 = 0x01;
 
+enum ISRn {
+	PAGE_FAULT = 14,
+};
+
 enum IRQn {
 	IRQ0  = 32,
 	IRQ1  = 33,

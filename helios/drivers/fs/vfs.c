@@ -19,11 +19,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <stdlib.h>
 #include <string.h>
 
 #include <drivers/fs/fat.h>
 #include <drivers/fs/vfs.h>
-#include <kernel/liballoc.h>
 #include <kernel/panic.h>
 #include <mm/slab.h>
 
@@ -32,8 +32,8 @@
 
 // TODO: Find a better way to handle some of these icky globals, also def need some locks
 
-struct vfs_fs_type* fs_list = NULL;
-struct vfs_mount* mount_list = NULL;
+struct vfs_fs_type* fs_list   = NULL;
+struct vfs_mount* mount_list  = NULL;
 struct vfs_superblock* rootfs = NULL;
 struct vfs_superblock** sb_list;
 static uint8_t sb_idx = 0;
@@ -77,8 +77,8 @@ void vfs_init(size_t dhash_size)
 	}
 
 	// TODO: Implement dentry destructors
-	dentry_ht = ht_create(dhash_size);
-	dentry_ht->ops->hash = dentry_hash;
+	dentry_ht		= ht_create(dhash_size);
+	dentry_ht->ops->hash	= dentry_hash;
 	dentry_ht->ops->compare = dentry_compare;
 
 	// TODO: Better way to init all the filesystems
@@ -158,7 +158,7 @@ struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
 		slab_free(&dentry_cache, child);
 		return NULL;
 	}
-	child->parent = parent;
+	child->parent  = parent;
 	child->fs_data = parent->fs_data;
 	// Check hash table first if found exit
 	if ((found = ht_get(dentry_ht, child)) != NULL) {
@@ -196,7 +196,7 @@ struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
 uint32_t dentry_hash(const void* key)
 {
 	struct vfs_dentry* dkey = (struct vfs_dentry*)key;
-	uint32_t hash = FNV_OFFSET;
+	uint32_t hash		= FNV_OFFSET;
 	// Initially hash the parent inode id
 	uint8_t* id_bytes = (uint8_t*)&dkey->parent->inode->id;
 	for (int i = 0; i < 4; i++) {
@@ -262,7 +262,7 @@ int vfs_open(const char* path, struct vfs_file* file)
 	if (!file->file_ptr) return -2; // mem alloc failure
 
 	file->file_size = dentry->inode->f_size;
-	file->read_ptr = file->file_ptr;
+	file->read_ptr	= file->file_ptr;
 
 	int ret = dentry->inode->ops->open(dentry->inode, file);
 	if (ret < 0) {
@@ -310,10 +310,10 @@ int mount(const char* mount_point, sATADevice* device, sPartition* partition, ui
 		kfree(mount);
 		return -1;
 	}
-	mount->device = device;
+	mount->device	 = device;
 	mount->lba_start = (uint32_t)partition->start;
-	mount->flags = partition->present ? MOUNT_PRESENT : 0;
-	mount->next = NULL;
+	mount->flags	 = partition->present ? MOUNT_PRESENT : 0;
+	mount->next	 = NULL;
 
 	// If it is present we add it to the array and init filesystem
 	if (mount->flags & MOUNT_PRESENT) {
@@ -352,7 +352,7 @@ static void register_mount(struct vfs_mount* mnt)
 	if (mount_list == NULL) {
 		mount_list = mnt;
 	} else {
-		mnt->next = mount_list;
+		mnt->next  = mount_list;
 		mount_list = mnt;
 	}
 }
@@ -371,7 +371,7 @@ void register_filesystem(struct vfs_fs_type* fs)
 		fs_list = fs;
 	} else {
 		fs->next = fs_list; // Add fs to beginning of list
-		fs_list = fs;
+		fs_list	 = fs;
 	}
 }
 
@@ -410,14 +410,14 @@ struct vfs_dentry* vfs_resolve_path(const char* path)
 	// TODO: Should check/normalize path
 
 	struct vfs_mount* match = NULL;
-	size_t match_len = 0;
+	size_t match_len	= 0;
 
 	// Traverse mount_list
 	for (struct vfs_mount* m = mount_list; m; m = m->next) {
 		size_t len = strlen(m->mount_point);
 		if (strncmp(path, m->mount_point, len) == 0 && (path[len] == '/' || path[len] == '\0')) {
 			if (len > match_len) {
-				match = m;
+				match	  = m;
 				match_len = len;
 			}
 		}
@@ -459,7 +459,7 @@ struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path)
 	struct vfs_dentry* parent = root;
 	while (token != NULL) {
 		parent = dentry_lookup(parent, token);
-		token = strtok(NULL, "/");
+		token  = strtok(NULL, "/");
 	}
 	return parent;
 }

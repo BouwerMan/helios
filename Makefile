@@ -38,15 +38,19 @@ SRCFILES := $(shell find $(PROJDIRS) -type f -name "*.c")
 HDRFILES := $(shell find $(PROJDIRS) -type f -name "*.h")
 ALLFILES := $(SRCFILES) $(HDRFILES)
 
-.PHONY: all libc helios clean qemu headers iso bochs todolist limine
+.PHONY: all libc helios clean qemu headers iso bochs todolist limine userspace
 
-all: headers libc helios
+all: headers libc userspace helios
 
 helios:
 	@DESTDIR=$(SYSROOT) $(MAKE) -C ./helios install
 
 libc:
-	@DESTDIR=$(SYSROOT) $(MAKE)  -C ./libc install
+	@DESTDIR=$(SYSROOT) $(MAKE) -C ./libc install
+
+userspace: libc
+	@DESTDIR=$(SYSROOT) $(MAKE) -C ./userspace all
+
 
 headers:
 	@mkdir -p $(SYSROOT)
@@ -63,7 +67,8 @@ limine/limine:
 
 iso: limine/limine all
 	@mkdir -p isodir/boot/limine isodir/EFI/BOOT
-	@cp sysroot/boot/$(OSNAME).kernel isodir/boot/
+	@cp sysroot/* isodir/ -r
+	# @cp sysroot/boot/$(OSNAME).kernel isodir/boot/
 	@cp -v limine.conf limine/limine-bios.sys limine/limine-bios-cd.bin \
 		  limine/limine-uefi-cd.bin isodir/boot/limine/
 	@cp -v limine/BOOTX64.EFI limine/BOOTIA32.EFI isodir/EFI/BOOT/
@@ -106,3 +111,4 @@ clean:
 	@$(MAKE) -C ./libc clean
 	@$(MAKE) -C ./helios clean
 	@$(MAKE) -C ./limine clean
+	@$(MAKE) -C ./userspace clean

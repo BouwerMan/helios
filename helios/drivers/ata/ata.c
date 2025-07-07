@@ -32,12 +32,12 @@
 
 // https://wiki.osdev.org/ATA_PIO_Mode#28_bit_PIO
 #include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <drivers/ata/ata.h>
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
-#include <kernel/liballoc.h>
 #include <kernel/panic.h>
 #include <mm/page_alloc.h>
 
@@ -56,7 +56,7 @@ bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba,
 		return false;
 	}
 	sATAController* ctrl = device->ctrl;
-	uint16_t command = get_command(device, op);
+	uint16_t command     = get_command(device, op);
 	if (!command) return false;
 
 	switch (command) {
@@ -141,7 +141,7 @@ static uint16_t get_command(sATADevice* device, uint16_t op)
 static bool bmr_poll(sATADevice* device)
 {
 	sATAController* ctrl = device->ctrl;
-	int timeout = 100000;
+	int timeout	     = 100000;
 	while (timeout--) {
 		uint8_t status = inb(ctrl->bmr_base + BMR_REG_STATUS);
 		if (status & BMR_STATUS_IRQ) {
@@ -171,8 +171,8 @@ static bool bmr_poll(sATADevice* device)
 static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_t lba, size_t sec_size,
 		     size_t sec_count)
 {
-	sATAController* ctrl = device->ctrl;
-	struct PRDT* prdt = ctrl->prdt;
+	sATAController* ctrl	= device->ctrl;
+	struct PRDT* prdt	= ctrl->prdt;
 	const uint16_t bmr_base = ctrl->bmr_base;
 
 	size_t pages = (sec_count * sec_size / PAGE_SIZE) + 1;

@@ -22,6 +22,11 @@ int putchar(int ic)
 // Needed for printf lib
 void putchar_(char c)
 {
+#if defined(__is_libk)
 	screen_putchar(c);
 	write_serial(c);
+#else
+	// TODO: syscalls
+	(void)c;
+#endif
 }

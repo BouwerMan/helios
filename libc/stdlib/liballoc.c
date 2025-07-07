@@ -7,8 +7,8 @@
 #pragma GCC diagnostic ignored "-Wsign-conversion"
 #pragma GCC diagnostic ignored "-Wmissing-prototypes"
 
-#include <kernel/liballoc.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 /**  Durand's Amazing Super Duper Memory functions.  */
 
@@ -32,11 +32,11 @@
 #define ALIGN(ptr)                                                                 \
 	if (ALIGNMENT > 1) {                                                       \
 		uintptr_t diff;                                                    \
-		ptr = (void*)((uintptr_t)ptr + ALIGN_INFO);                        \
+		ptr  = (void*)((uintptr_t)ptr + ALIGN_INFO);                       \
 		diff = (uintptr_t)ptr & (ALIGNMENT - 1);                           \
 		if (diff != 0) {                                                   \
 			diff = ALIGNMENT - diff;                                   \
-			ptr = (void*)((uintptr_t)ptr + diff);                      \
+			ptr  = (void*)((uintptr_t)ptr + diff);                     \
 		}                                                                  \
 		*((ALIGN_TYPE*)((uintptr_t)ptr - ALIGN_INFO)) = diff + ALIGN_INFO; \
 	}
@@ -88,13 +88,13 @@ struct liballoc_minor {
 static struct liballoc_major* l_memRoot = NULL; ///< The root memory block acquired from the system.
 static struct liballoc_major* l_bestBet = NULL; ///< The major with the most free memory.
 
-static unsigned int l_pageSize = 4096;	   ///< The size of an individual page. Set up in liballoc_init.
-static unsigned int l_pageCount = 16;	   ///< The number of pages to request per chunk. Set up in liballoc_init.
-static unsigned long long l_allocated = 0; ///< Running total of allocated memory.
-static unsigned long long l_inuse = 0;	   ///< Running total of used memory.
+static unsigned int l_pageSize	      = 4096; ///< The size of an individual page. Set up in liballoc_init.
+static unsigned int l_pageCount	      = 16;   ///< The number of pages to request per chunk. Set up in liballoc_init.
+static unsigned long long l_allocated = 0;    ///< Running total of allocated memory.
+static unsigned long long l_inuse     = 0;    ///< Running total of used memory.
 
-static long long l_warningCount = 0;	 ///< Number of warnings encountered
-static long long l_errorCount = 0;	 ///< Number of actual errors
+static long long l_warningCount	    = 0; ///< Number of warnings encountered
+static long long l_errorCount	    = 0; ///< Number of actual errors
 static long long l_possibleOverruns = 0; ///< Number of possible overruns
 
 // ***********   HELPER FUNCTIONS  *******************************
@@ -112,7 +112,7 @@ static void* liballoc_memcpy(void* s1, const void* s2, size_t n)
 	char* cdest;
 	char* csrc;
 	unsigned int* ldest = (unsigned int*)s1;
-	unsigned int* lsrc = (unsigned int*)s2;
+	unsigned int* lsrc  = (unsigned int*)s2;
 
 	while (n >= sizeof(unsigned int)) {
 		*ldest++ = *lsrc++;
@@ -120,7 +120,7 @@ static void* liballoc_memcpy(void* s1, const void* s2, size_t n)
 	}
 
 	cdest = (char*)ldest;
-	csrc = (char*)lsrc;
+	csrc  = (char*)lsrc;
 
 	while (n > 0) {
 		*cdest++ = *csrc++;
@@ -195,10 +195,10 @@ static struct liballoc_major* allocate_new_page(unsigned int size)
 		return NULL; // uh oh, we ran out of memory.
 	}
 
-	maj->prev = NULL;
-	maj->next = NULL;
+	maj->prev  = NULL;
+	maj->next  = NULL;
 	maj->pages = st;
-	maj->size = st * l_pageSize;
+	maj->size  = st * l_pageSize;
 	maj->usage = sizeof(struct liballoc_major);
 	maj->first = NULL;
 
@@ -216,9 +216,9 @@ static struct liballoc_major* allocate_new_page(unsigned int size)
 
 void* PREFIX(malloc)(size_t req_size)
 {
-	int startedBet = 0;
+	int startedBet		    = 0;
 	unsigned long long bestSize = 0;
-	void* p = NULL;
+	void* p			    = NULL;
 	uintptr_t diff;
 	struct liballoc_major* maj;
 	struct liballoc_minor* min;
@@ -277,7 +277,7 @@ void* PREFIX(malloc)(size_t req_size)
 
 	// Now we need to bounce through every major and find enough space....
 
-	maj = l_memRoot;
+	maj	   = l_memRoot;
 	startedBet = 0;
 
 	// Start at the best bet....
@@ -285,7 +285,7 @@ void* PREFIX(malloc)(size_t req_size)
 		bestSize = l_bestBet->size - l_bestBet->usage;
 
 		if (bestSize > (size + sizeof(struct liballoc_minor))) {
-			maj = l_bestBet;
+			maj	   = l_bestBet;
 			startedBet = 1;
 		}
 	}
@@ -297,7 +297,7 @@ void* PREFIX(malloc)(size_t req_size)
 		if (bestSize < diff) {
 			// Hmm.. this one has more memory then our bestBet. Remember!
 			l_bestBet = maj;
-			bestSize = diff;
+			bestSize  = diff;
 		}
 
 #ifdef USE_CASE1
@@ -317,7 +317,7 @@ void* PREFIX(malloc)(size_t req_size)
 
 			if (startedBet == 1) // If we started at the best bet,
 			{		     // let's start all over again.
-				maj = l_memRoot;
+				maj	   = l_memRoot;
 				startedBet = 0;
 				continue;
 			}
@@ -326,7 +326,7 @@ void* PREFIX(malloc)(size_t req_size)
 			maj->next = allocate_new_page(size); // next one will be okay.
 			if (maj->next == NULL) break;	     // no more memory.
 			maj->next->prev = maj;
-			maj = maj->next;
+			maj		= maj->next;
 
 			// .. fall through to CASE 2 ..
 		}
@@ -339,11 +339,11 @@ void* PREFIX(malloc)(size_t req_size)
 		if (maj->first == NULL) {
 			maj->first = (struct liballoc_minor*)((uintptr_t)maj + sizeof(struct liballoc_major));
 
-			maj->first->magic = LIBALLOC_MAGIC;
-			maj->first->prev = NULL;
-			maj->first->next = NULL;
-			maj->first->block = maj;
-			maj->first->size = size;
+			maj->first->magic    = LIBALLOC_MAGIC;
+			maj->first->prev     = NULL;
+			maj->first->next     = NULL;
+			maj->first->block    = maj;
+			maj->first->size     = size;
 			maj->first->req_size = req_size;
 			maj->usage += size + sizeof(struct liballoc_minor);
 
@@ -374,12 +374,12 @@ void* PREFIX(malloc)(size_t req_size)
 			// Yes, space in front. Squeeze in.
 			maj->first->prev = (struct liballoc_minor*)((uintptr_t)maj + sizeof(struct liballoc_major));
 			maj->first->prev->next = maj->first;
-			maj->first = maj->first->prev;
+			maj->first	       = maj->first->prev;
 
-			maj->first->magic = LIBALLOC_MAGIC;
-			maj->first->prev = NULL;
-			maj->first->block = maj;
-			maj->first->size = size;
+			maj->first->magic    = LIBALLOC_MAGIC;
+			maj->first->prev     = NULL;
+			maj->first->block    = maj;
+			maj->first->size     = size;
 			maj->first->req_size = req_size;
 			maj->usage += size + sizeof(struct liballoc_minor);
 
@@ -416,15 +416,15 @@ void* PREFIX(malloc)(size_t req_size)
 
 				if (diff >= (size + sizeof(struct liballoc_minor))) {
 					// yay....
-					min->next = (struct liballoc_minor*)((uintptr_t)min +
-									     sizeof(struct liballoc_minor) + min->size);
+					min->next	= (struct liballoc_minor*)((uintptr_t)min +
+										   sizeof(struct liballoc_minor) + min->size);
 					min->next->prev = min;
-					min = min->next;
-					min->next = NULL;
-					min->magic = LIBALLOC_MAGIC;
-					min->block = maj;
-					min->size = size;
-					min->req_size = req_size;
+					min		= min->next;
+					min->next	= NULL;
+					min->magic	= LIBALLOC_MAGIC;
+					min->block	= maj;
+					min->size	= size;
+					min->req_size	= req_size;
 					maj->usage += size + sizeof(struct liballoc_minor);
 
 					l_inuse += size;
@@ -455,14 +455,14 @@ void* PREFIX(malloc)(size_t req_size)
 					new_min = (struct liballoc_minor*)((uintptr_t)min +
 									   sizeof(struct liballoc_minor) + min->size);
 
-					new_min->magic = LIBALLOC_MAGIC;
-					new_min->next = min->next;
-					new_min->prev = min;
-					new_min->size = size;
+					new_min->magic	  = LIBALLOC_MAGIC;
+					new_min->next	  = min->next;
+					new_min->prev	  = min;
+					new_min->size	  = size;
 					new_min->req_size = req_size;
-					new_min->block = maj;
-					min->next->prev = new_min;
-					min->next = new_min;
+					new_min->block	  = maj;
+					min->next->prev	  = new_min;
+					min->next	  = new_min;
 					maj->usage += size + sizeof(struct liballoc_minor);
 
 					l_inuse += size;
@@ -495,7 +495,7 @@ void* PREFIX(malloc)(size_t req_size)
 #endif
 
 			if (startedBet == 1) {
-				maj = l_memRoot;
+				maj	   = l_memRoot;
 				startedBet = 0;
 				continue;
 			}
@@ -612,7 +612,7 @@ void PREFIX(free)(void* ptr)
 	} else {
 		if (l_bestBet != NULL) {
 			int bestSize = l_bestBet->size - l_bestBet->usage;
-			int majSize = maj->size - maj->usage;
+			int majSize  = maj->size - maj->usage;
 
 			if (majSize > bestSize) l_bestBet = maj;
 		}

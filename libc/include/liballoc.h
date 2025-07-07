@@ -1,5 +1,6 @@
 #ifndef _LIBALLOC_H
 #define _LIBALLOC_H
+#pragma once
 
 #include <stddef.h>
 
@@ -19,7 +20,11 @@
 // typedef	unsigned long	uintptr_t;
 
 // This lets you prefix malloc and friends
+#if defined(__is_libk)
 #define PREFIX(func) k##func
+#else
+#define PREFIX(func) func
+#endif
 
 #ifdef __cplusplus
 extern "C" {

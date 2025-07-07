@@ -12,9 +12,18 @@ extern "C" {
 __attribute__((__noreturn__)) void abort(void);
 int atexit(void (*func)(void));
 int atoi(const char* nptr);
-void free(void* ptr);
 char* getenv(const char* name);
-void* malloc(size_t size);
+
+#include <liballoc.h>
+#if defined(__is_libk)
+#define LIBC_MALLOC(size) kmalloc(size)
+#define LIBC_FREE(ptr)	  kfree(ptr)
+#else
+#define LIBC_MALLOC(size) malloc(size)
+#define LIBC_FREE(ptr)	  free(ptr)
+#endif
+// void free(void* ptr);
+// void* malloc(size_t size);
 
 #ifdef __cplusplus
 }

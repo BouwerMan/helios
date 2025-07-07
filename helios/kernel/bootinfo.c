@@ -24,7 +24,7 @@
 */
 
 #undef LOG_LEVEL
-#define LOG_LEVEL 1
+#define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
 #include <util/log.h>
 #undef FORCE_LOG_REDEF
@@ -44,6 +44,7 @@ void bootinfo_init()
 	struct limine_memmap_response* mmap		     = memmap_request.response;
 	struct limine_hhdm_response* hhdm		     = hhdm_request.response;
 	struct limine_executable_address_response* exec_addr = exe_addr_req.response;
+	struct limine_module_response* mod		     = mod_request.response;
 	struct bootinfo* bootinfo			     = &kernel.bootinfo;
 
 	// TODO: Framebuffer,SMBIOS, and EFI system table support?
@@ -73,4 +74,10 @@ void bootinfo_init()
 	bootinfo->executable.virtual_base  = exec_addr->virtual_base;
 
 	bootinfo->valid = true;
+
+	if (!mod) panic("Module response missing");
+	log_info("Module count: %zu", mod->module_count);
+	for (size_t i = 0; i < mod->module_count; i++) {
+		log_debug("path: %s, string: %s\n", mod->modules[i]->path, mod->modules[i]->string);
+	}
 }

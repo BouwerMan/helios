@@ -6,19 +6,17 @@ EXEC_PREFIX?=$(PREFIX)
 INCLUDEDIR?=$(PREFIX)/include
 LIBDIR?=$(EXEC_PREFIX)/lib
 
-CFLAGS:=$(CFLAGS) -ffreestanding -Wall -Wextra -pedantic -Werror
-CPPFLAGS:=$(CPPFLAGS) -D__is_libc -Iinclude
-LIBK_CFLAGS:=$(CFLAGS) -I$(PWD)/helios/include
-LIBK_CPPFLAGS:=$(CPPFLAGS) -D__is_libk
-
 ARCHDIR=arch/$(HOSTARCH)
-
 include $(ARCHDIR)/make.config
 
-CFLAGS:=$(CFLAGS) $(ARCH_CFLAGS)
-CPPFLAGS:=$(CPPFLAGS) $(ARCH_CPPFLAGS)
-LIBK_CFLAGS:=$(LIBK_CFLAGS) $(KERNEL_ARCH_CFLAGS)
-LIBK_CPPFLAGS:=$(LIBK_CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS)
+CFLAGS:=$(CFLAGS) $(ARCH_CFLAGS) -ffreestanding -Wall -Wextra -pedantic -Werror
+CPPFLAGS:=$(CPPFLAGS) $(ARCH_CPPFLAGS) -Iinclude
+
+LIBK_CFLAGS:=$(CFLAGS) $(KERNEL_ARCH_CFLAGS) -I$(PWD)/helios/include -D__is_libk
+LIBK_CPPFLAGS:=$(CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS) -D__is_libk
+
+LIBC_CFLAGS:=$(CFLAGS) -D__is_libc
+LIBC_CPP_FLAGS:=$(CPP_FLAGS) -D__is_libc
 
 SRC_DIRS:=ctype stdio stdlib string
 
@@ -41,22 +39,23 @@ $(ARCH_HOSTEDOBJS) \
 OBJS=\
 $(FREEOBJS) \
 $(HOSTEDOBJS) \
+$(BUILDDIR)/crt0.o
 
 LIBK_OBJS=$(FREEOBJS:.o=.libk.o)
+LIBC_OBJS=$(OBJS:.o=.libc.o)
 
-#BINARIES=libc.a libk.a # Not ready for libc yet.
-BINARIES=libk.a
+BINARIES=$(BUILDDIR)/libc.a $(BUILDDIR)/libk.a # Not ready for libc yet.
 
 .PHONY: all clean install install-headers install-libs
-.SUFFIXES: .o .libk.o .c .S .asm
+.SUFFIXES: .o .libk.o .libc.o .c .S .asm
 
 all: $(BINARIES)
 
-libc.a: $(OBJS)
-	@$(AR) rcs $@ $(OBJS)
+$(BUILDDIR)/libc.a: $(LIBC_OBJS)
+	@$(AR) rcs $@ $(LIBC_OBJS)
 
-libk.a: $(LIBK_OBJS)
-	@$(AR) rcs $(BUILDDIR)/$@ $(LIBK_OBJS)
+$(BUILDDIR)/libk.a: $(LIBK_OBJS)
+	@$(AR) rcs $@ $(LIBK_OBJS)
 
 $(BUILDDIR)/%.o: %.c
 	@echo "  CC      $@"
@@ -66,15 +65,20 @@ $(BUILDDIR)/%.o: %.c
 .c.S:
 	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
 
-$(BUILDDIR)/%.o: %.asm
+$(BUILDDIR)/%.libc.o: %.asm
 	@echo "  AR      $@"
 	@mkdir -p $(@D)
-	@nasm -felf32 $< -o $@
+	@nasm -Wall -g -F dwarf -felf64 $< -o $@
 
 $(BUILDDIR)/%.libk.o: %.c
 	@echo "  CC      $@"
 	@mkdir -p $(@D)
 	@$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
+
+$(BUILDDIR)/%.libc.o: %.c
+	@echo "  CC      $@"
+	@mkdir -p $(@D)
+	@$(CC) -MD -c $< -o $@ $(LIBC_CFLAGS) $(LIBC_CPPFLAGS)
 
 .S.libk.o:
 	@$(CC) -MD -c $< -o $@ $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
@@ -92,8 +96,7 @@ install-headers:
 # TODO: Maybe don't install libk
 install-libs: $(BINARIES)
 	@mkdir -p $(DESTDIR)$(LIBDIR)
-	@cp $(BUILDDIR)/$(BINARIES) $(DESTDIR)$(LIBDIR)
+	@cp $(BINARIES) $(DESTDIR)$(LIBDIR)
 
 -include $(OBJS:.o=.d)
 -include $(LIBK_OBJS:.o=.d)
-

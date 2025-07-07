@@ -21,9 +21,10 @@
 
 // https://wiki.osdev.org/PCI
 // https://www.pcilookup.com/
+#include <stdlib.h>
+
 #include <arch/ports.h>
 #include <drivers/pci/pci.h>
-#include <kernel/liballoc.h>
 
 #include <util/log.h>
 
@@ -58,7 +59,7 @@ const pci_device_t* get_device_by_class(uint8_t base_class, uint8_t sub_class)
 uint32_t pci_config_read_dword(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
 {
 	uint32_t address;
-	uint32_t lbus = (uint32_t)bus;
+	uint32_t lbus  = (uint32_t)bus;
 	uint32_t lslot = (uint32_t)slot;
 	uint32_t lfunc = (uint32_t)func;
 
@@ -73,7 +74,7 @@ uint32_t pci_config_read_dword(uint8_t bus, uint8_t slot, uint8_t func, uint8_t 
 void pci_config_write_dword(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, uint32_t value)
 {
 	uint32_t address;
-	uint32_t lbus = (uint32_t)bus;
+	uint32_t lbus  = (uint32_t)bus;
 	uint32_t lslot = (uint32_t)slot;
 	uint32_t lfunc = (uint32_t)func;
 
@@ -94,20 +95,20 @@ void list_devices()
 				if ((val & 0xFFFF) == VENDOR_INVALID) continue;
 
 				log_info("\t(%d, %d, %d) 0x%X", i, j, k, val);
-				pci_device_t* dev = (pci_device_t*)kmalloc(sizeof(pci_device_t));
-				dev->bus = i;
-				dev->dev = j;
-				dev->func = k;
-				dev->device_id = (uint16_t)(val >> 16);
-				dev->vendor_id = val & 0xFFFF;
-				val = pci_config_read_dword(i, j, k, 0x8);
-				dev->base_class = (uint8_t)(val >> 24);
-				dev->sub_class = (val >> 16) & 0xFF;
-				dev->prog_interface = (val >> 8) & 0xFF;
-				val = pci_config_read_dword(i, j, k, 0xC);
-				dev->type = (val >> 16) & 0xFF;
+				pci_device_t* dev     = (pci_device_t*)kmalloc(sizeof(pci_device_t));
+				dev->bus	      = i;
+				dev->dev	      = j;
+				dev->func	      = k;
+				dev->device_id	      = (uint16_t)(val >> 16);
+				dev->vendor_id	      = val & 0xFFFF;
+				val		      = pci_config_read_dword(i, j, k, 0x8);
+				dev->base_class	      = (uint8_t)(val >> 24);
+				dev->sub_class	      = (val >> 16) & 0xFF;
+				dev->prog_interface   = (val >> 8) & 0xFF;
+				val		      = pci_config_read_dword(i, j, k, 0xC);
+				dev->type	      = (val >> 16) & 0xFF;
 				devices[device_idx++] = dev;
-				val = pci_config_read_dword(i, j, k, 0x4);
+				val		      = pci_config_read_dword(i, j, k, 0x4);
 				log_info("status and command: %x", val);
 			}
 		}

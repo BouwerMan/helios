@@ -20,20 +20,20 @@
  */
 
 #include <stddef.h>
+#include <stdlib.h>
 
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
 #include <drivers/pci/pci.h>
-#include <kernel/liballoc.h>
 #include <mm/page_alloc.h>
 
 #include <util/log.h>
 
 /* port-bases */
-static const int PORTBASE_PRIMARY = 0x1F0;
+static const int PORTBASE_PRIMARY   = 0x1F0;
 static const int PORTBASE_SECONDARY = 0x170;
 
-static const int IDE_CTRL_CLASS = 0x01;
+static const int IDE_CTRL_CLASS	   = 0x01;
 static const int IDE_CTRL_SUBCLASS = 0x01;
 
 static const pci_device_t* ide_ctrl;
@@ -55,14 +55,14 @@ void ctrl_init()
 		return;
 	}
 
-	ctrls[0].id = DEVICE_PRIMARY;
-	ctrls[0].irq = CTRL_IRQ_BASE;
-	ctrls[0].port_base = PORTBASE_PRIMARY;
+	ctrls[0].id	      = DEVICE_PRIMARY;
+	ctrls[0].irq	      = CTRL_IRQ_BASE;
+	ctrls[0].port_base    = PORTBASE_PRIMARY;
 	ctrls[0].IO_port_base = IO_PORTBASE_PRIMARY;
 
-	ctrls[1].id = DEVICE_SECONDARY;
-	ctrls[1].irq = CTRL_IRQ_BASE + 1;
-	ctrls[1].port_base = PORTBASE_SECONDARY;
+	ctrls[1].id	      = DEVICE_SECONDARY;
+	ctrls[1].irq	      = CTRL_IRQ_BASE + 1;
+	ctrls[1].port_base    = PORTBASE_SECONDARY;
 	ctrls[1].IO_port_base = IO_PORTBASE_SECONDARY;
 
 	uint32_t bar4 = pci_config_read_dword(ide_ctrl->bus, ide_ctrl->dev, ide_ctrl->func, BAR4);
@@ -83,8 +83,8 @@ void ctrl_init()
 	for (size_t i = 0; i < 2; i++) {
 		log_info("Initializing controller: %d", ctrls[i].id);
 
-		ctrls[i].use_irq = false;
-		ctrls[i].use_dma = true;
+		ctrls[i].use_irq  = false;
+		ctrls[i].use_dma  = true;
 		ctrls[i].ide_ctrl = ide_ctrl;
 
 		if (ctrls[i].use_dma) {
@@ -105,8 +105,8 @@ void ctrl_init()
 		// Init attached drives, beginning with slave
 		for (short int j = 1; j >= 0; j--) {
 			ctrls[i].devices[j].present = false;
-			ctrls[i].devices[j].id = (uint8_t)(i * 2 + (unsigned short)j);
-			ctrls[i].devices[j].ctrl = ctrls + i;
+			ctrls[i].devices[j].id	    = (uint8_t)(i * 2 + (unsigned short)j);
+			ctrls[i].devices[j].ctrl    = ctrls + i;
 			device_init(ctrls[i].devices + j);
 		}
 	}

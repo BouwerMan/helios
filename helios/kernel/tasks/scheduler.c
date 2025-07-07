@@ -25,13 +25,13 @@
 #include <util/log.h>
 #undef FORCE_LOG_REDEF
 
+#include <stdlib.h>
 #include <string.h>
 
 #include <arch/gdt/gdt.h>
 #include <arch/idt.h>
 #include <arch/mmu/vmm.h>
 #include <arch/regs.h>
-#include <kernel/liballoc.h>
 #include <kernel/panic.h>
 #include <kernel/tasks/scheduler.h>
 #include <mm/page.h>
@@ -224,21 +224,26 @@ void init_scheduler(void)
  */
 struct task* new_task(entry_func entry)
 {
+	disable_preemption();
 	struct task* task = kmalloc(sizeof(struct task));
 	if (task == NULL) return NULL;
 	memset(task, 0, sizeof(struct task));
 
 	create_kernel_stack(task);
-	task->PID    = squeue.pid_i++;
-	task->cr3    = vmm_read_cr3();
+	task->PID = squeue.pid_i++;
+	task->cr3 = HHDM_TO_PHYS((uptr)vmm_create_address_space());
+	// task->cr3    = vmm_read_cr3();
 	task->parent = kernel_task;
 	if (entry) {
 		task->entry	= entry;
 		task->regs->rip = (uintptr_t)entry;
+		// We only set the task to ready if we have an entry point
+		// otherwise we wait until execve() is called
+		task->state = READY;
 	}
-	task->state = READY;
 	task_add(task);
 
+	enable_preemption();
 	return task;
 }
 

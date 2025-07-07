@@ -1,6 +1,5 @@
 #include <stdint.h>
 #include <string.h>
-#include <util/log.h>
 
 /**
  * @brief Moves 64-bit values between overlapping memory regions.
@@ -155,7 +154,7 @@ static void* small_memmove(void* restrict dest, const void* restrict src, size_t
  */
 static void* forward_move(void* restrict dest, const void* restrict src, size_t n)
 {
-	uint8_t* b = dest;
+	uint8_t* b	 = dest;
 	const uint8_t* s = src;
 
 	// Phase 1: peel off head bytes until b is 8-aligned
@@ -174,9 +173,9 @@ static void* forward_move(void* restrict dest, const void* restrict src, size_t 
 	}
 
 	// Phase 2: Copy 8-byte chunks
-	register uint64_t* d64 __asm__("rdi") = (uint64_t*)b;
+	register uint64_t* d64 __asm__("rdi")	    = (uint64_t*)b;
 	register const uint64_t* s64 __asm__("rsi") = (const uint64_t*)s;
-	register size_t cnt __asm__("rcx") = n / 8;
+	register size_t cnt __asm__("rcx")	    = n / 8;
 
 	__asm__ volatile("rep movsq" : "+D"(d64), "+S"(s64), "+c"(cnt)::"memory");
 
@@ -204,7 +203,7 @@ static void* backward_move(void* restrict dest, const void* restrict src, size_t
 {
 	// NOTE: Because we are moving backwards, I'm going to be lazy and just use the c only style.
 	// The forward path is usually the hot path anyways
-	uint8_t* d = dest;
+	uint8_t* d	 = dest;
 	const uint8_t* s = src;
 
 	// Phase 1: peel off tail bytes so (b+1) is 8-aligned
@@ -217,7 +216,7 @@ static void* backward_move(void* restrict dest, const void* restrict src, size_t
 
 	// Phase 2: Fill 8-byte chunks
 	// d+1 is aligned, so (uint64_t*)(d+1) is the pointer *one past* the last word
-	uint64_t* p64 = ((uint64_t*)(d + 1)) - 1;
+	uint64_t* p64	    = ((uint64_t*)(d + 1)) - 1;
 	const uint64_t* s64 = ((const uint64_t*)(s + 1)) - 1;
 	// Total 8 byte chunks
 	size_t num_chunks = n / 8;
@@ -225,7 +224,7 @@ static void* backward_move(void* restrict dest, const void* restrict src, size_t
 	size_t num_blocks = num_chunks / 8;
 
 	for (size_t i = 0; i < num_blocks; i++) {
-		p64[0] = s64[0];
+		p64[0]	= s64[0];
 		p64[-1] = s64[-1];
 		p64[-2] = s64[-2];
 		p64[-3] = s64[-3];
@@ -279,8 +278,8 @@ void* memmove(void* restrict dest, const void* restrict src, size_t n)
 		return small_memmove(dest, src, n);
 	}
 
-	uintptr_t d = (uintptr_t)dest;
-	uintptr_t s = (uintptr_t)src;
+	uintptr_t d  = (uintptr_t)dest;
+	uintptr_t s  = (uintptr_t)src;
 	bool overlap = (d > s) && ((d - s) < n);
 
 	// TODO: May need to double check that these different paths work safely

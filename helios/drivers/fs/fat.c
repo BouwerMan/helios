@@ -21,6 +21,7 @@
 
 // https://wiki.osdev.org/FAT#Reading_the_Boot_Sector
 #include <ctype.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <drivers/ata/ata.h>
@@ -28,7 +29,6 @@
 #include <drivers/ata/device.h>
 #include <drivers/fs/fat.h>
 #include <drivers/fs/vfs.h>
-#include <kernel/liballoc.h>
 #include <kernel/panic.h>
 #include <kernel/timer.h>
 
@@ -48,14 +48,14 @@ static int fat_process_dir_entries(uint8_t* dir_data, size_t dir_size,
 static int fat_lookup_inode_callback(const void* entry, void* context);
 
 struct vfs_fs_type fat16_fs_type = {
-	.name = "fat16",
+	.name	 = "fat16",
 	.fs_type = FAT16,
-	.mount = fat16_mount,
-	.next = NULL,
+	.mount	 = fat16_mount,
+	.next	 = NULL,
 };
 
 struct inode_ops fat16_default_ops = {
-	.open = fat_open_file,
+	.open	= fat_open_file,
 	.lookup = fat_lookup,
 };
 
@@ -102,8 +102,8 @@ struct vfs_superblock* fat16_mount(sATADevice* device, uint32_t lba_start, int f
 	if (!fs) goto clean_bs;
 	fat_fill_meta(bs, fs);
 	fs->lba_start = lba_start;
-	fs->device = device;
-	fs->bs = bs;
+	fs->device    = device;
+	fs->bs	      = bs;
 
 	sb->fs_type = &fat16_fs_type;
 	sb->fs_data = fs;
@@ -112,16 +112,16 @@ struct vfs_superblock* fat16_mount(sATADevice* device, uint32_t lba_start, int f
 	struct vfs_dentry* root_dentry = kmalloc(sizeof(struct vfs_dentry));
 	if (!root_dentry) goto clean_fs;
 	static const int root_len = 2; // strlen("/")
-	root_dentry->name = kmalloc(sizeof(root_len));
+	root_dentry->name	  = kmalloc(sizeof(root_len));
 	strncpy(root_dentry->name, "/", root_len);
 	if (!root_dentry->name) goto clean_dentry;
 	root_dentry->inode = fat16_get_root_inode(sb);
 	if (!root_dentry->inode) goto clean_name;
-	root_dentry->fs_data = fs;
-	root_dentry->parent = NULL;
+	root_dentry->fs_data   = fs;
+	root_dentry->parent    = NULL;
 	root_dentry->ref_count = 1;
-	root_dentry->flags = DENTRY_DIR | DENTRY_ROOT;
-	sb->root_dentry = root_dentry;
+	root_dentry->flags     = DENTRY_DIR | DENTRY_ROOT;
+	sb->root_dentry	       = root_dentry;
 
 	return sb;
 
@@ -179,27 +179,27 @@ int fat16_read_boot_sector(sATADevice* device, uint32_t lba_start, struct fat_BS
 struct vfs_inode* fat16_get_root_inode(struct vfs_superblock* sb)
 {
 	if (!sb) return NULL;
-	struct fat_fs* fs = (struct fat_fs*)sb->fs_data;
-	struct fat_BS* bs = fs->bs;
+	struct fat_fs* fs	 = (struct fat_fs*)sb->fs_data;
+	struct fat_BS* bs	 = fs->bs;
 	struct vfs_inode* r_node = kmalloc(sizeof(struct vfs_inode));
 	if (!r_node) return NULL;
 
-	r_node->id = 0;
-	r_node->filetype = FILETYPE_DIR;
-	r_node->f_size = fs->root_dir_sectors * bs->bytes_per_sector;
-	r_node->ref_count = 1;
-	r_node->permissions = VFS_PERM_ALL; // TODO: use stricter perms once supported.
-	r_node->flags = 0;
+	r_node->id		      = 0;
+	r_node->filetype	      = FILETYPE_DIR;
+	r_node->f_size		      = fs->root_dir_sectors * bs->bytes_per_sector;
+	r_node->ref_count	      = 1;
+	r_node->permissions	      = VFS_PERM_ALL; // TODO: use stricter perms once supported.
+	r_node->flags		      = 0;
 	struct fat_inode_info* i_info = kmalloc(sizeof(struct fat_inode_info));
 	if (!i_info) goto clean_vnode;
-	i_info->fat = (struct fat_fs*)(sb->fs_data);
-	i_info->fat_variant = FAT16;
-	i_info->init_cluster = 0;
+	i_info->fat		= (struct fat_fs*)(sb->fs_data);
+	i_info->fat_variant	= FAT16;
+	i_info->init_cluster	= 0;
 	i_info->current_cluster = 0;
-	i_info->chain_len = 0;
-	i_info->dir_cluster = 0;
-	i_info->dir_offset = 0;
-	i_info->fat_attrib = FAT_SYSTEM | FAT_DIRECTORY;
+	i_info->chain_len	= 0;
+	i_info->dir_cluster	= 0;
+	i_info->dir_offset	= 0;
+	i_info->fat_attrib	= FAT_SYSTEM | FAT_DIRECTORY;
 
 	r_node->fs_data = i_info;
 
@@ -238,10 +238,10 @@ static void fat_print_meta(struct fat_fs* fs)
 void fat_fill_meta(struct fat_BS* bs, struct fat_fs* fs)
 {
 	// TODO: This shit looks insane. Really need to clean this up lmao
-	fs->total_sectors = (bs->total_sectors_16 == 0) ? bs->total_sectors_32 : bs->total_sectors_16;
-	fs->fat_size = bs->table_size_16;
-	fs->sector_size = bs->bytes_per_sector;
-	fs->cluster_size = fs->sector_size * bs->sectors_per_cluster; // number of bytes in a cluster
+	fs->total_sectors    = (bs->total_sectors_16 == 0) ? bs->total_sectors_32 : bs->total_sectors_16;
+	fs->fat_size	     = bs->table_size_16;
+	fs->sector_size	     = bs->bytes_per_sector;
+	fs->cluster_size     = fs->sector_size * bs->sectors_per_cluster; // number of bytes in a cluster
 	fs->root_dir_sectors = ((bs->root_entry_count * 32U) + (bs->bytes_per_sector - 1U)) / bs->bytes_per_sector;
 	fs->data_sectors = fs->total_sectors - (bs->reserved_sector_count + (uint32_t)(bs->table_count * fs->fat_size) +
 						fs->root_dir_sectors);
@@ -284,25 +284,25 @@ struct vfs_dentry* fat_lookup(struct vfs_inode* dir_inode, struct vfs_dentry* ch
 {
 	if (dir_inode->filetype != FILETYPE_DIR) goto clean;
 	struct fat_inode_info* fat_info = dir_inode->fs_data;
-	struct vfs_inode* inode = kmalloc(sizeof(struct vfs_inode));
+	struct vfs_inode* inode		= kmalloc(sizeof(struct vfs_inode));
 	if (inode == NULL) goto clean;
-	child->inode = inode;
+	child->inode			 = inode;
 	struct fat_inode_info* fat_inode = kmalloc(sizeof(struct fat_inode_info));
 	if (fat_inode == NULL) goto clean_inode;
 	inode->fs_data = fat_inode;
 
 	int res = fat_scan_dir(fat_info->fat, fat_info->init_cluster, fat_lookup_inode_callback, (void*)child);
 	if (res <= 0) goto clean_fat_inode;
-	inode->id = vfs_get_next_id();
-	inode->ref_count = 1;
+	inode->id	   = vfs_get_next_id();
+	inode->ref_count   = 1;
 	inode->permissions = VFS_PERM_ALL;
-	inode->flags = 0;
-	inode->ops = &fat16_default_ops;
+	inode->flags	   = 0;
+	inode->ops	   = &fat16_default_ops;
 
-	fat_inode->fat = fat_info->fat;
-	fat_inode->fat_variant = FAT16;
+	fat_inode->fat		   = fat_info->fat;
+	fat_inode->fat_variant	   = FAT16;
 	fat_inode->current_cluster = 0;
-	fat_inode->dir_cluster = fat_info->init_cluster;
+	fat_inode->dir_cluster	   = fat_info->init_cluster;
 
 	child->inode = inode;
 
@@ -338,11 +338,11 @@ struct vfs_dentry* fat_create_dentry(const char* name, struct vfs_dentry* parent
 		kfree(dentry);
 		return NULL;
 	}
-	dentry->inode = NULL;
-	dentry->parent = parent;
-	dentry->fs_data = parent->fs_data;
+	dentry->inode	  = NULL;
+	dentry->parent	  = parent;
+	dentry->fs_data	  = parent->fs_data;
 	dentry->ref_count = 1;
-	dentry->flags = 0;
+	dentry->flags	  = 0;
 	return dentry;
 }
 
@@ -369,24 +369,24 @@ struct vfs_inode* fat_create_inode(struct vfs_superblock* sb)
 		kfree(inode);
 		return NULL;
 	}
-	info->fat = sb->fs_data;
-	info->fat_variant = sb->fs_type->fs_type;
-	info->init_cluster = 0;
+	info->fat	      = sb->fs_data;
+	info->fat_variant     = sb->fs_type->fs_type;
+	info->init_cluster    = 0;
 	info->current_cluster = 0;
-	info->chain_len = CHAIN_LEN_UNKNOWN;
-	info->dir_cluster = 0;
-	info->dir_offset = 0;
-	info->fat_attrib = 0;
+	info->chain_len	      = CHAIN_LEN_UNKNOWN;
+	info->dir_cluster     = 0;
+	info->dir_offset      = 0;
+	info->fat_attrib      = 0;
 
 	inode->fs_data = info;
 
-	inode->id = 0;
-	inode->filetype = FILETYPE_UNKNOWN;
-	inode->f_size = 0;
-	inode->ref_count = 1;
+	inode->id	   = 0;
+	inode->filetype	   = FILETYPE_UNKNOWN;
+	inode->f_size	   = 0;
+	inode->ref_count   = 1;
 	inode->permissions = VFS_PERM_ALL;
-	inode->flags = 0;
-	inode->ops = &fat16_default_ops;
+	inode->flags	   = 0;
+	inode->ops	   = &fat16_default_ops;
 
 	return inode;
 }
@@ -409,11 +409,11 @@ struct vfs_inode* fat_create_inode(struct vfs_superblock* sb)
 int fat_open_file(struct vfs_inode* inode, struct vfs_file* file)
 {
 	struct fat_inode_info* info = inode->fs_data;
-	uint32_t cluster_size = info->fat->cluster_size;
+	uint32_t cluster_size	    = info->fat->cluster_size;
 
 	uint32_t next_cluster = info->init_cluster;
-	uint8_t* buffer = file->file_ptr;
-	size_t i = 0;
+	uint8_t* buffer	      = file->file_ptr;
+	size_t i	      = 0;
 	while (next_cluster < FAT_END_OF_CHAIN) {
 		if ((i * cluster_size >= file->file_size)) return -1;
 		fat_open_cluster(info->fat, (uint8_t*)(buffer + (i * cluster_size)),
@@ -487,7 +487,7 @@ static void fat_normalize_filename(const uint8_t* entry, char* output)
  */
 static bool fat_compare_filenames(const char* fat_name, const char* target_name)
 {
-	size_t name_len = strlen(fat_name);
+	size_t name_len	  = strlen(fat_name);
 	size_t target_len = strlen(target_name);
 	if (name_len != target_len) return false;
 	for (size_t i = 0; i < name_len && i < target_len; i++) {
@@ -517,9 +517,9 @@ static bool fat_compare_filenames(const char* fat_name, const char* target_name)
 int fat_lookup_inode_callback(const void* entry, void* context)
 {
 	struct fat_filetable file_table;
-	struct vfs_dentry* dentry = context;
-	struct fat_fs* fat = dentry->fs_data;
-	struct vfs_inode* inode = dentry->inode;
+	struct vfs_dentry* dentry	 = context;
+	struct fat_fs* fat		 = dentry->fs_data;
+	struct vfs_inode* inode		 = dentry->inode;
 	struct fat_inode_info* fat_inode = inode->fs_data;
 
 	memcpy(&file_table, entry, 32);
@@ -527,11 +527,11 @@ int fat_lookup_inode_callback(const void* entry, void* context)
 	fat_normalize_filename(entry, norm_name);
 	if (fat_compare_filenames(norm_name, dentry->name)) {
 		// Populate inode with file metadata
-		inode->filetype = (file_table.attrib & FAT_DIRECTORY) ? FILETYPE_DIR : FILETYPE_FILE;
-		inode->f_size = file_table.size; // File size (bytes)
+		inode->filetype		= (file_table.attrib & FAT_DIRECTORY) ? FILETYPE_DIR : FILETYPE_FILE;
+		inode->f_size		= file_table.size; // File size (bytes)
 		fat_inode->init_cluster = file_table.cluster;
-		fat_inode->chain_len = (int16_t)(file_table.size / fat->cluster_size + 1); // Kinda rough estimate
-		fat_inode->fat_attrib = file_table.attrib;
+		fat_inode->chain_len	= (int16_t)(file_table.size / fat->cluster_size + 1); // Kinda rough estimate
+		fat_inode->fat_attrib	= file_table.attrib;
 
 		return 1; // Stop scanning, file found
 	}
@@ -554,13 +554,13 @@ int fat_lookup_inode_callback(const void* entry, void* context)
  */
 static uint8_t* fat_read_root_dir(struct fat_fs* fat, size_t* root_size)
 {
-	*root_size = fat->root_dir_sectors * fat->sector_size;
+	*root_size	   = fat->root_dir_sectors * fat->sector_size;
 	uint8_t* root_data = kmalloc(*root_size);
 	if (!root_data) return NULL;
 	for (size_t i = 0; i < fat->root_dir_sectors; i++) {
 		uint8_t* sector_buffer = root_data + (i * fat->sector_size);
-		uint32_t lba_addr = (uint32_t)(fat->lba_start + fat->first_root_dir_sector + i);
-		int res = fat_open_sector(fat, sector_buffer, fat->sector_size, lba_addr);
+		uint32_t lba_addr      = (uint32_t)(fat->lba_start + fat->first_root_dir_sector + i);
+		int res		       = fat_open_sector(fat, sector_buffer, fat->sector_size, lba_addr);
 		if (res != 0) {
 			kfree(root_data);
 			return NULL;
@@ -640,8 +640,8 @@ static int fat_scan_dir(struct fat_fs* fat, uint32_t start_cluster, int (*callba
 		return res;
 	}
 	uint8_t* cluster_buffer = kmalloc(fat->cluster_size);
-	uint32_t next_cluster = start_cluster;
-	int res = 0;
+	uint32_t next_cluster	= start_cluster;
+	int res			= 0;
 	while (next_cluster < FAT_END_OF_CHAIN) {
 		res = fat_open_cluster(fat, cluster_buffer, fat->cluster_size, next_cluster);
 		if (res) {

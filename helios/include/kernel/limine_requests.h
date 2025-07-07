@@ -18,3 +18,5 @@ LIMINE_EXTERN volatile struct limine_memmap_request memmap_request;
 LIMINE_EXTERN volatile struct limine_hhdm_request hhdm_request;
 
 LIMINE_EXTERN volatile struct limine_executable_address_request exe_addr_req;
+
+LIMINE_EXTERN volatile struct limine_module_request mod_request;

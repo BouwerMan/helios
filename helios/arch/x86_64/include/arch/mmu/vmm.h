@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
+#include <mm/page.h>
 #include <stdint.h>
 
 #include <kernel/panic.h>
@@ -65,6 +66,11 @@ static inline void vmm_load_cr3(uintptr_t pml4_phys_addr)
 	kassert((pml4_phys_addr & 0xFFF) == 0 && "CR3 address must be 4 KiB aligned");
 
 	__asm__ volatile("mov %0, %%cr3" ::"r"(pml4_phys_addr) : "memory");
+}
+
+static inline u64* get_pml4()
+{
+	return (u64*)PHYS_TO_HHDM(vmm_read_cr3());
 }
 
 /**

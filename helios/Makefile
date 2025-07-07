@@ -3,7 +3,7 @@ SRC_DIRS:=kernel drivers util mm
 
 ARCHDIR=arch/$(HOSTARCH)
 
-CFLAGS:=$(CFLAGS) -isystem$(ARCHDIR)/include  -isysteminclude -isystem$(PWD)/libc/include
+CFLAGS:=$(CFLAGS) -isystem$(ARCHDIR)/include  -isysteminclude -isystem$(PWD)/libc/include -D__is_libk
 LDFLAGS:=$(LDFLAGS)
 LIBS:=$(LIBS) -nostdlib -L$(PWD)/libc/build -lk -lgcc
 

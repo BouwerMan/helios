@@ -35,22 +35,27 @@ __attribute__((used, section(".limine_requests"))) volatile LIMINE_BASE_REVISION
 // once or marked as used with the "used" attribute as done here.
 
 __attribute__((used, section(".limine_requests"))) volatile struct limine_framebuffer_request framebuffer_request = {
-	.id = LIMINE_FRAMEBUFFER_REQUEST,
+	.id	  = LIMINE_FRAMEBUFFER_REQUEST,
 	.revision = 0
 };
 
 __attribute__((used, section(".limine_requests"))) volatile struct limine_memmap_request memmap_request = {
-	.id = LIMINE_MEMMAP_REQUEST,
+	.id	  = LIMINE_MEMMAP_REQUEST,
 	.revision = 0
 };
 
 __attribute__((used, section(".limine_requests"))) volatile struct limine_hhdm_request hhdm_request = {
-	.id = LIMINE_HHDM_REQUEST,
+	.id	  = LIMINE_HHDM_REQUEST,
 	.revision = 0
 };
 
 __attribute__((used, section(".limine_requests"))) volatile struct limine_executable_address_request exe_addr_req = {
-	.id = LIMINE_EXECUTABLE_ADDRESS_REQUEST,
+	.id	  = LIMINE_EXECUTABLE_ADDRESS_REQUEST,
+	.revision = 0
+};
+
+__attribute__((used, section(".limine_requests"))) volatile struct limine_module_request mod_request = {
+	.id	  = LIMINE_MODULE_REQUEST,
 	.revision = 0
 };
 
