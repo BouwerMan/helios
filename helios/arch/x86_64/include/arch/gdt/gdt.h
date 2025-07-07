@@ -11,6 +11,11 @@ static constexpr int GDT_ENTRIES = 7; /**< The number of entries in the Global D
  */
 static constexpr int TSS_OFFSET = 0x28;
 
+static constexpr int KERNEL_CS = 0x08;
+static constexpr int KERNEL_DS = 0x10;
+static constexpr int USER_CS   = 0x18 | 3;
+static constexpr int USER_DS   = 0x20 | 3;
+
 /* Defines a GDT entry. We say packed, because it prevents the
  *  compiler from doing things that it thinks is best: Prevent
  *  compiler "optimization" by packing */

@@ -236,15 +236,15 @@ int map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
 		return -1;
 	}
 
-	uint64_t* pte = walk_page_table(pml4, vaddr, true, flags & (PAGE_PRESENT | PAGE_WRITE));
+	// We want PAGE_PRESENT and PAGE_WRITE on almost all the higher levels
+	flags_t walk_flags = flags & (PAGE_USER | PAGE_PRESENT | PAGE_WRITE);
+	uint64_t* pte	   = walk_page_table(pml4, vaddr, true, walk_flags | PAGE_PRESENT | PAGE_WRITE);
 	if (!pte || *pte & PAGE_PRESENT) {
 		log_warn("Could not find pte or pte is already present");
 		return -1;
 	}
 
 	*pte = paddr | flags;
-	// TEMP
-	if (vaddr < 0x500000) log_info("pte: %p, pte value: %lx", (void*)pte, *pte);
 	return 0;
 }
 
@@ -504,9 +504,9 @@ void page_fault(struct registers* r)
 	set_log_mode(LOG_DIRECT);
 	dmesg_flush_raw();
 
-	log_error("PAGE FAULT! err %lu (p:%d,rw:%d,user:%d,res:%d,id:%d) at 0x%lx", r->err_code, present, rw, user,
-		  reserved, id, fault_addr);
-	log_error("Caused by 0x%lx in address space %lx", r->rip, cr3);
+	log_error(
+		"PAGE FAULT! err %lu (p:%d,rw:%d,user:%d,res:%d,id:%d) at 0x%lx. Caused by 0x%lx in address space %lx",
+		r->err_code, present, rw, user, reserved, id, fault_addr, r->rip, cr3);
 
 	log_error("General registers:");
 	log_error("RIP: %lx, RSP: %lx, RBP: %lx", r->rip, r->rsp, r->rbp);

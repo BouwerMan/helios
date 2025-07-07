@@ -65,6 +65,11 @@ $(BUILDDIR)/%.o: %.c
 .c.S:
 	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
 
+$(BUILDDIR)/%.libk.o: %.asm
+	@echo "  AR      $@"
+	@mkdir -p $(@D)
+	@nasm -Wall -g -F dwarf -felf64 $< -o $@
+
 $(BUILDDIR)/%.libc.o: %.asm
 	@echo "  AR      $@"
 	@mkdir -p $(@D)

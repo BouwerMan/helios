@@ -29,6 +29,7 @@
 #include <kernel/mmu/vmm.h>
 #include <kernel/panic.h>
 #include <kernel/screen.h>
+#include <kernel/syscall.h>
 #include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
 #include <limine.h>
@@ -70,6 +71,8 @@ void kernel_main()
 	log_debug("kmalloc returned %p, stored %d in it", (void*)test, *test);
 
 	init_scheduler();
+	log_info("Initalizing syscalls");
+	syscall_init();
 	log_info("Initializing dmesg");
 	dmesg_init();
 
@@ -141,7 +144,7 @@ void kernel_main()
 	struct limine_module_response* mod = mod_request.response;
 
 	struct task* task = new_task(NULL);
-	// execve(task, mod->modules[0]->address);
+	execve(task, mod->modules[0]->address);
 
 	// We're done, just hang...
 	log_warn("Shutting down in 3 seconds");

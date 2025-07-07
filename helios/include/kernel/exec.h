@@ -1,7 +1,10 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
 #include <kernel/helios.h>
 #include <kernel/tasks/scheduler.h>
+
+static constexpr size_t STACK_SIZE_PAGES = 1;
 
 #define ELF_FLAG_WRITABLE 1
 

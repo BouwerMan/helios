@@ -5,6 +5,8 @@
 #include <drivers/serial.h>
 #include <kernel/dmesg.h>
 #include <kernel/screen.h>
+#else
+extern void writec(char* c);
 #endif
 
 int putchar(int ic)
@@ -27,6 +29,6 @@ void putchar_(char c)
 	write_serial(c);
 #else
 	// TODO: syscalls
-	(void)c;
+	writec(&c);
 #endif
 }

@@ -24,6 +24,7 @@
 #include <kernel/dmesg.h>
 #include <kernel/screen.h>
 
+#include <arch/gdt/gdt.h>
 #include <arch/idt.h>
 #include <arch/ports.h>
 #include <util/log.h>
@@ -218,6 +219,7 @@ static int_handler interrupt_handlers[256] = { NULL };
  */
 void install_isr_handler(int isr, void (*handler)(struct registers* r))
 {
+	log_debug("Installing ISR handler (%p) for interrupt %d", (void*)handler, isr);
 	interrupt_handlers[isr] = handler;
 }
 
@@ -291,6 +293,7 @@ void isr_init()
 	idt_set_descriptor(30, (uint64_t)isr30, 0x8E);
 	idt_set_descriptor(31, (uint64_t)isr31, 0x8E);
 	idt_set_descriptor(48, (uint64_t)isr48, 0x8E);
+	idt_set_descriptor(128, (uint64_t)isr128, 0xEE);
 
 	// Install default exception handler for all ISRs
 	for (uint8_t i = 0; i < 32; i++) {

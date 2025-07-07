@@ -58,12 +58,12 @@ void gdt_flush()
 static void gdt_set_gate(uint8_t index, uint64_t base, uint32_t limit, uint8_t access, uint8_t gran)
 {
 	/* Setup the descriptor base address */
-	gdt[index].base_low = (base & 0xFFFF);
+	gdt[index].base_low    = (base & 0xFFFF);
 	gdt[index].base_middle = (base >> 16) & 0xFF;
-	gdt[index].base_high = (base >> 24) & 0xFF;
+	gdt[index].base_high   = (base >> 24) & 0xFF;
 
 	/* Setup the descriptor limits */
-	gdt[index].limit_low = (limit & 0xFFFF);
+	gdt[index].limit_low   = (limit & 0xFFFF);
 	gdt[index].granularity = ((limit >> 16) & 0x0F);
 
 	/* Finally, set up the granularity and access flags */
@@ -77,10 +77,10 @@ static void gdt_set_tss_descriptor(void* tss_ptr, size_t tss_size)
 	uint32_t limit = (uint32_t)(tss_size - 1);
 
 	// GDT entry 5 (first 8 bytes of the descriptor)
-	gdt[5].limit_low = limit & 0xFFFF;
-	gdt[5].base_low = base & 0xFFFF;
+	gdt[5].limit_low   = limit & 0xFFFF;
+	gdt[5].base_low	   = base & 0xFFFF;
 	gdt[5].base_middle = (base >> 16) & 0xFF;
-	gdt[5].access = 0x89; // 10001001b: present, system, type = 9 (TSS 64-bit available)
+	gdt[5].access	   = 0x89; // 10001001b: present, system, type = 9 (TSS 64-bit available)
 	gdt[5].granularity = ((limit >> 16) & 0x0F);
 	gdt[5].granularity |= (0 << 4); // AVL = 0, L = 0, D/B = 0, G = 0
 	gdt[5].base_high = (base >> 24) & 0xFF;
@@ -92,7 +92,7 @@ static void gdt_set_tss_descriptor(void* tss_ptr, size_t tss_size)
 	} __packed* tss_high = (void*)&gdt[6];
 
 	tss_high->base_upper = (uint32_t)((base >> 32) & 0xFFFFFFFF);
-	tss_high->reserved = 0;
+	tss_high->reserved   = 0;
 }
 
 /**
@@ -111,7 +111,7 @@ void gdt_init()
 	memset((unsigned char*)&gdt, 0, sizeof(struct gdt_entry) * 6); // Clear the GDT
 
 	/* Setup the GDT pointer and limit */
-	gp.limit = (sizeof(struct gdt_entry) * GDT_ENTRIES) - 1;
+	gp.limit  = (sizeof(struct gdt_entry) * GDT_ENTRIES) - 1;
 	gp.offset = gdt;
 
 	/* Our NULL descriptor */

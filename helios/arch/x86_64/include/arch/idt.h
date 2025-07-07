@@ -7,7 +7,6 @@
 #include <arch/regs.h>
 #include <kernel/types.h>
 
-static constexpr int KERNEL_CS	 = 0x08;
 static constexpr int IDT_ENTRIES = 256;
 
 static constexpr u16 PIC1_COMMAND = 0x20;
@@ -114,7 +113,8 @@ extern void isr28();
 extern void isr29();
 extern void isr30();
 extern void isr31();
-extern void isr48(); //yield
+extern void isr48();  //yield
+extern void isr128(); // syscall
 
 /* IRQ definitions */
 extern void irq0();
@@ -133,6 +133,3 @@ extern void irq12();
 extern void irq13();
 extern void irq14();
 extern void irq15();
-
-/* syscall handler */
-extern void isr128();
