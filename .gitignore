@@ -8,9 +8,9 @@ sysroot/
 *.iso
 mnt/
 limine/
-*.o
 *.txt
 
+*.elf
 *.o
 *.d
 *.kernel

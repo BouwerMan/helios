@@ -3,7 +3,7 @@ LIBS:=$(LIBS) -nostdlib -L$(PWD)/libc/build -lc -lgcc
 CFLAGS := -ffreestanding -I$(PWD)/libc/include -static \
 	  -fno-stack-protector -fno-pie $(LIBS)
 
-OUT_EXE := hello_world
+OUT_EXE := hello_world.elf
 
 all:
 	@echo "  CC      $@"

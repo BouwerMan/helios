@@ -1,4 +1,5 @@
 #include <printf.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #if defined(__is_libk)
@@ -6,29 +7,21 @@
 #include <kernel/dmesg.h>
 #include <kernel/screen.h>
 #else
-extern void writec(char* c);
+#include <arch/syscall.h>
 #endif
 
 int putchar(int ic)
 {
-#if defined(__is_libk)
 	char c = (char)ic;
+#if defined(__is_libk)
 	screen_putchar(c);
 	write_serial(c);
 #else
 	// TODO: Implement stdio and the write system call.
+	__syscall3(SYS_WRITE, 1, (long)&c, 1);
 #endif
 	return ic;
 }
 
 // Needed for printf lib
-void putchar_(char c)
-{
-#if defined(__is_libk)
-	screen_putchar(c);
-	write_serial(c);
-#else
-	// TODO: syscalls
-	writec(&c);
-#endif
-}
+void putchar_(char c) __attribute__((alias("putchar")));

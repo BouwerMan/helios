@@ -27,7 +27,7 @@ export CWARN=-Wall -Wextra -pedantic -Wshadow -Wpointer-arith \
 
 export CFLAGS=-Og -ggdb -pipe -ffreestanding -mcmodel=kernel -mgeneral-regs-only -mno-red-zone -mno-mmx -mno-sse -mno-sse3 -std=gnu23 $(CWARN)
 
-export GDEFINES=-D__KDEBUG__ -DLOG_LEVEL=0 -DENABLE_SERIAL_LOGGING -DSLAB_DEBUG
+export GDEFINES=-DLOG_LEVEL=0 -DENABLE_SERIAL_LOGGING
 
 # Configure the cross-compiler to use the desired system root.
 export SYSROOT=$(CURDIR)/sysroot
@@ -89,8 +89,8 @@ qemu: iso
 		-D log.txt \
 		-serial stdio \
 		-enable-kvm \
-		-cpu host
-		# -nographic \
+		-cpu host \
+		# -display none
 
 gdbinit:
 	./scripts/gen_gdbinit.sh
