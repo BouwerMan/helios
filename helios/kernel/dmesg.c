@@ -40,7 +40,7 @@ struct task* dmesg_task = nullptr;
 void dmesg_init()
 {
 	spinlock_init(&log_lock);
-	dmesg_task = new_task((entry_func)dmesg_task_entry);
+	dmesg_task = new_task("DMESG task", (entry_func)dmesg_task_entry);
 
 	log_debug("Setting log mode to use dmesg (LOG_BUFFERED)");
 	set_log_mode(LOG_BUFFERED);
@@ -52,7 +52,7 @@ void dmesg_enqueue(const char* str, size_t len)
 
 	for (size_t i = 0; i < len; i++) {
 		log_buffer[log_head] = str[i];
-		log_head	     = (log_head + 1) % DMESG_BUFFER_SIZE;
+		log_head = (log_head + 1) % DMESG_BUFFER_SIZE;
 
 		if (log_head == log_tail) {
 			// optional: drop oldest char or pause until consumed
@@ -69,7 +69,7 @@ void dmesg_flush(void)
 	spinlock_acquire(&log_lock);
 
 	while (log_head != log_tail) {
-		char c	 = log_buffer[log_tail];
+		char c = log_buffer[log_tail];
 		log_tail = (log_tail + 1) % DMESG_BUFFER_SIZE;
 		spinlock_release(&log_lock);
 
@@ -86,7 +86,7 @@ void dmesg_flush(void)
 void dmesg_flush_raw(void)
 {
 	while (log_head != log_tail) {
-		char c	 = log_buffer[log_tail];
+		char c = log_buffer[log_tail];
 		log_tail = (log_tail + 1) % DMESG_BUFFER_SIZE;
 
 		write_serial(c);
@@ -115,6 +115,6 @@ void dmesg_wait()
 
 void dmesg_wake()
 {
-	data_ready	  = true;
+	data_ready = true;
 	dmesg_task->state = READY;
 }

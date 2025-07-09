@@ -113,7 +113,10 @@ void kernel_main()
 
 	struct limine_module_response* mod = mod_request.response;
 
-	struct task* task = new_task(NULL);
+	struct task* task = new_task("Hello world userspace", NULL);
+
+	scheduler_dump();
+
 	execve(task, mod->modules[0]->address);
 
 	// We're done, just hang...

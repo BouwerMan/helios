@@ -182,12 +182,12 @@ void scheduler_init(void)
 		panic("Scheduler tasks cache init failure");
 	}
 
-	idle_task = new_task((entry_func)idle_task_entry);
+	idle_task = new_task("Idle task", (entry_func)idle_task_entry);
 	idle_task->cr3 = vmm_read_cr3();
 	idle_task->parent = kernel_task;
 	idle_task->state = IDLE;
 
-	kernel_task = new_task(NULL);
+	kernel_task = new_task("Kernel task", NULL);
 	kernel_task->cr3 = vmm_read_cr3();
 	kernel_task->parent = kernel_task;
 	squeue.current_task = kernel_task;
@@ -201,7 +201,7 @@ void scheduler_init(void)
  * @param entry Pointer to the entry function for the task.
  * @return Pointer to the newly created task structure, or NULL on failure.
  */
-struct task* new_task(entry_func entry)
+struct task* new_task(const char* name, entry_func entry)
 {
 	disable_preemption();
 	struct task* task = kmalloc(sizeof(struct task));
@@ -220,6 +220,10 @@ struct task* new_task(entry_func entry)
 		// otherwise we wait until execve() is called
 		task->state = READY;
 	}
+
+	strncpy(task->name, name, MAX_TASK_NAME_LEN);
+	task->name[MAX_TASK_NAME_LEN - 1] = '\0';
+
 	task_add(task);
 
 	enable_preemption();
@@ -238,6 +242,16 @@ void scheduler_tick()
 			task->sleep_ticks--;
 			if (task->sleep_ticks == 0) task->state = READY;
 		}
+	}
+}
+
+void scheduler_dump()
+{
+	log_info("Scheduler Tasks:");
+	struct task* pos;
+	list_for_each_entry(pos, &squeue.task_list, list)
+	{
+		log_info("  %lu: %s, state=%d", pos->PID, pos->name, pos->state);
 	}
 }
 

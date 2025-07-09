@@ -8,6 +8,8 @@
 
 typedef void (*entry_func)(void);
 
+static constexpr int MAX_TASK_NAME_LEN = 32;
+
 static constexpr int SCHEDULER_TIME = 20; // ms per preemptive tick
 static constexpr int MAX_RESOURCES = 20;
 
@@ -38,6 +40,7 @@ struct task {
 	struct vfs_file* resources[MAX_RESOURCES];
 	struct task* parent; // Should this just be parent PID?
 	struct list list;
+	char name[MAX_TASK_NAME_LEN];
 };
 
 struct scheduler_queue {
@@ -52,7 +55,7 @@ struct waitqueue {
 	struct list list;
 };
 
-struct task* new_task(entry_func entry);
+struct task* new_task(const char* name, entry_func entry);
 void schedule(struct registers* regs);
 void scheduler_init(void);
 void scheduler_tick();
@@ -63,6 +66,8 @@ void yield_blocked();
 
 struct task* get_current_task();
 struct scheduler_queue* get_scheduler_queue();
+
+void scheduler_dump();
 
 /// Waitqueue
 

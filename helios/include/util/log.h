@@ -10,12 +10,10 @@
 
 #define LOG_BUFFER_SIZE 512
 
-enum LOG_LEVELS {
-	LOG_LEVEL_DEBUG = 0,
-	LOG_LEVEL_INFO,
-	LOG_LEVEL_WARN,
-	LOG_LEVEL_ERROR,
-};
+#define LOG_LEVEL_DEBUG 0
+#define LOG_LEVEL_INFO	1
+#define LOG_LEVEL_WARN	2
+#define LOG_LEVEL_ERROR 3
 
 enum LOG_MODE {
 	LOG_DIRECT,   // Output logs directly to screen/serial.
