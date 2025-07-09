@@ -48,8 +48,8 @@ void buddy_dump_free_lists();
  *
  * @return The virtual address of the first zeroed page, or 0 on failure.
  */
-[[nodiscard]]
-uintptr_t get_free_pages(aflags_t flags, size_t pages);
+[[gnu::malloc, nodiscard]]
+void* get_free_pages(aflags_t flags, size_t pages);
 
 /**
  * @brief Allocates a contiguous block of pages.
@@ -69,8 +69,8 @@ struct page* alloc_pages(aflags_t flags, size_t order);
  *
  * @return the virtual address of the zeroed page, or 0 on failure.
  */
-[[nodiscard, gnu::always_inline]]
-static inline uintptr_t get_free_page(aflags_t flags)
+[[gnu::malloc, nodiscard, gnu::always_inline]]
+static inline void* get_free_page(aflags_t flags)
 {
 	return get_free_pages(flags, 1);
 }
@@ -100,8 +100,8 @@ static inline struct page* alloc_page(aflags_t flags)
  * @return The virtual address of the first page in the allocated block, or 0
  *         if the allocation fails.
  */
-[[nodiscard]]
-uintptr_t __get_free_pages(aflags_t flags, size_t order);
+[[gnu::malloc, nodiscard]]
+void* __get_free_pages(aflags_t flags, size_t order);
 
 /**
  * @brief Allocates a single page and returns its virtual address.
@@ -112,8 +112,8 @@ uintptr_t __get_free_pages(aflags_t flags, size_t order);
  *
  * @return the virtual address of the page, or 0 on failure.
  */
-[[nodiscard, gnu::always_inline]]
-static inline uintptr_t __get_free_page(aflags_t flags)
+[[gnu::malloc, nodiscard, gnu::always_inline]]
+static inline void* __get_free_page(aflags_t flags)
 {
 	return __get_free_pages(flags, 0);
 }

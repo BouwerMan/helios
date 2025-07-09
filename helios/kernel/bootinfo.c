@@ -41,11 +41,11 @@ static constexpr size_t MAX_MEMMAP_ENTRIES_PER_PAGE = PAGE_SIZE / sizeof(struct 
 
 void bootinfo_init()
 {
-	struct limine_memmap_response* mmap		     = memmap_request.response;
-	struct limine_hhdm_response* hhdm		     = hhdm_request.response;
+	struct limine_memmap_response* mmap = memmap_request.response;
+	struct limine_hhdm_response* hhdm = hhdm_request.response;
 	struct limine_executable_address_response* exec_addr = exe_addr_req.response;
-	struct limine_module_response* mod		     = mod_request.response;
-	struct bootinfo* bootinfo			     = &kernel.bootinfo;
+	struct limine_module_response* mod = mod_request.response;
+	struct bootinfo* bootinfo = &kernel.bootinfo;
 
 	// TODO: Framebuffer,SMBIOS, and EFI system table support?
 	if (!mmap || !hhdm || !exec_addr) {
@@ -60,18 +60,18 @@ void bootinfo_init()
 	for (size_t i = 0; i < mmap->entry_count; i++) {
 		struct limine_memmap_entry* entry = mmap->entries[i];
 		log_debug("%zu. Start Addr: %lx | Length: %lx | Type: %lu", i, entry->base, entry->length, entry->type);
-		mmap_entries[i].base   = entry->base;
+		mmap_entries[i].base = entry->base;
 		mmap_entries[i].length = entry->length;
-		mmap_entries[i].type   = entry->type;
+		mmap_entries[i].type = entry->type;
 	}
 
-	bootinfo->memmap	     = mmap_entries;
+	bootinfo->memmap = mmap_entries;
 	bootinfo->memmap_entry_count = mmap->entry_count;
 
 	bootinfo->hhdm_offset = hhdm->offset;
 
 	bootinfo->executable.physical_base = exec_addr->physical_base;
-	bootinfo->executable.virtual_base  = exec_addr->virtual_base;
+	bootinfo->executable.virtual_base = exec_addr->virtual_base;
 
 	bootinfo->valid = true;
 

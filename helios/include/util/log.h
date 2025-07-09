@@ -2,21 +2,33 @@
 #pragma once
 #include <printf.h>
 
-enum LOG_MODE {
-	LOG_DIRECT,
-	LOG_BUFFERED,
-};
-
-#define LOG_LEVEL_DEBUG 0
-#define LOG_LEVEL_INFO	1
-#define LOG_LEVEL_WARN	2
-#define LOG_LEVEL_ERROR 3
-
-#define LOG_BUFFER_SIZE 512
-
+// LOG_LEVEL: Determines the minimum level of logs to be compiled.
+// (e.g., LOG_LEVEL_INFO will compile INFO, WARN, and ERROR logs, but not DEBUG)
 #ifndef LOG_LEVEL
 #define LOG_LEVEL LOG_LEVEL_DEBUG
 #endif
+
+#define LOG_BUFFER_SIZE 512
+
+enum LOG_LEVELS {
+	LOG_LEVEL_DEBUG = 0,
+	LOG_LEVEL_INFO,
+	LOG_LEVEL_WARN,
+	LOG_LEVEL_ERROR,
+};
+
+enum LOG_MODE {
+	LOG_DIRECT,   // Output logs directly to screen/serial.
+	LOG_BUFFERED, // Buffer logs (e.g., for dmesg).
+};
+
+// ANSI Color Codes for Readability
+#define LOG_COLOR_RESET	 "\x1b[0m"
+#define LOG_COLOR_CYAN	 "\x1b[1;36m"
+#define LOG_COLOR_YELLOW "\x1b[1;33m"
+#define LOG_COLOR_RED	 "\x1b[1;31m"
+#define LOG_COLOR_GREEN	 "\x1b[1;32m"
+// NOTE: DEBUG has no color by default to keep it visually clean.
 
 // Optional force-redefinition toggle
 #if defined(FORCE_LOG_REDEF)
@@ -28,16 +40,35 @@ enum LOG_MODE {
 #endif
 // TODO: Make screen accept ANSI color codes
 
+// This internal macro handles the heavy lifting of formatting the log message.
+// It captures the length from snprintf and passes it to log_output to avoid a strlen call.
+// It also now checks for and reports buffer truncation.
+#define _LOG_IMPL(level_str, color, fmt, ...)                                                                          \
+	do {                                                                                                           \
+		char __log_buf[LOG_BUFFER_SIZE];                                                                       \
+		int __log_len = snprintf(__log_buf, sizeof(__log_buf),                                                 \
+					 color level_str LOG_COLOR_RESET " %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, \
+					 __func__, ##__VA_ARGS__);                                                     \
+                                                                                                                       \
+		if (__log_len > 0) {                                                                                   \
+			/* Output the original message (which might be truncated). */                                  \
+			/* We must ensure the length passed to log_output doesn't exceed the actual buffer size. */    \
+			int __len_to_write = (__log_len < (int)sizeof(__log_buf)) ? __log_len :                        \
+										    ((int)sizeof(__log_buf) - 1);      \
+			log_output(__log_buf, __len_to_write);                                                         \
+		}                                                                                                      \
+                                                                                                                       \
+		/* If snprintf's return value indicates the buffer was too small, print a warning. */                  \
+		if (__log_len >= (int)sizeof(__log_buf)) {                                                             \
+			static const char __trunc_msg[] = LOG_COLOR_RED "[LOG TRUNCATED]\n" LOG_COLOR_RESET;           \
+			log_output(__trunc_msg, sizeof(__trunc_msg) - 1); /* -1 to exclude null terminator */          \
+		}                                                                                                      \
+	} while (0)
+
 // Define or redefine log_debug
 #if !defined(log_debug) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_DEBUG
-#define log_debug(fmt, ...)                                                                                           \
-	do {                                                                                                          \
-		char __log_buf[LOG_BUFFER_SIZE];                                                                      \
-		snprintf(__log_buf, sizeof(__log_buf), "[DEBUG] %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, __func__, \
-			 ##__VA_ARGS__);                                                                              \
-		log_output(__log_buf);                                                                                \
-	} while (0)
+#define log_debug(fmt, ...) _LOG_IMPL("[DEBUG]", "", fmt, ##__VA_ARGS__)
 #else
 #define log_debug(fmt, ...) ((void)0)
 #endif
@@ -46,13 +77,7 @@ enum LOG_MODE {
 // Define or redefine log_info
 #if !defined(log_info) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_INFO
-#define log_info(fmt, ...)                                                                                         \
-	do {                                                                                                       \
-		char __log_buf[LOG_BUFFER_SIZE];                                                                   \
-		snprintf(__log_buf, sizeof(__log_buf), "\x1b[1;36m[INFO]\x1b[0m  %s:%d:%s(): " fmt "\n", __FILE__, \
-			 __LINE__, __func__, ##__VA_ARGS__);                                                       \
-		log_output(__log_buf);                                                                             \
-	} while (0)
+#define log_info(fmt, ...) _LOG_IMPL("[INFO] ", LOG_COLOR_CYAN, fmt, ##__VA_ARGS__)
 #else
 #define log_info(fmt, ...) ((void)0)
 #endif
@@ -61,13 +86,7 @@ enum LOG_MODE {
 // Define or redefine log_warn
 #if !defined(log_warn) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_WARN
-#define log_warn(fmt, ...)                                                                                         \
-	do {                                                                                                       \
-		char __log_buf[LOG_BUFFER_SIZE];                                                                   \
-		snprintf(__log_buf, sizeof(__log_buf), "\x1b[1;33m[WARN]\x1b[0m  %s:%d:%s(): " fmt "\n", __FILE__, \
-			 __LINE__, __func__, ##__VA_ARGS__);                                                       \
-		log_output(__log_buf);                                                                             \
-	} while (0)
+#define log_warn(fmt, ...) _LOG_IMPL("[WARN] ", LOG_COLOR_YELLOW, fmt, ##__VA_ARGS__)
 #else
 #define log_warn(fmt, ...) ((void)0)
 #endif
@@ -76,37 +95,37 @@ enum LOG_MODE {
 // Define or redefine log_error
 #if !defined(log_error) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_ERROR
-#define log_error(fmt, ...)                                                                                          \
-	do {                                                                                                         \
-		char __log_buf[LOG_BUFFER_SIZE];                                                                     \
-		snprintf(__log_buf, sizeof(__log_buf), "\x1b[1;31m[ERROR]\x1b[1;0m %s:%d:%s(): " fmt "\n", __FILE__, \
-			 __LINE__, __func__, ##__VA_ARGS__);                                                         \
-		log_output(__log_buf);                                                                               \
-	} while (0)
+#define log_error(fmt, ...) _LOG_IMPL("[ERROR]", LOG_COLOR_RED, fmt, ##__VA_ARGS__)
 #else
 #define log_error(fmt, ...) ((void)0)
 #endif
 #endif
 
-// All macros below this point are just special flavors of log_info
-
-// Define or redefine log_info
+// log_init is a special flavor of log_info
 #if !defined(log_init) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_INFO
-#define log_init(fmt, ...)                                                                                         \
-	do {                                                                                                       \
-		char __log_buf[LOG_BUFFER_SIZE];                                                                   \
-		snprintf(__log_buf, sizeof(__log_buf), "\x1b[1;32m[INIT]\x1b[0m  %s:%d:%s(): " fmt "\n", __FILE__, \
-			 __LINE__, __func__, ##__VA_ARGS__);                                                       \
-		log_output(__log_buf);                                                                             \
-	} while (0)
+#define log_init(fmt, ...) _LOG_IMPL("[INIT] ", LOG_COLOR_GREEN, fmt, ##__VA_ARGS__)
 #else
-#define log_info(fmt, ...) ((void)0)
+#define log_init(fmt, ...) ((void)0)
 #endif
 #endif
 
-// Function declarations
-
-void log_putchar(const char c);
+/**
+ * @brief Sets the logging mode (direct or buffered).
+ * @param mode The LOG_MODE to set.
+ */
 void set_log_mode(enum LOG_MODE mode);
-void log_output(const char* msg);
+
+/**
+ * @brief The backend function that handles the actual output of the formatted log message.
+ * @param msg The pre-formatted message string to output.
+ * @param len The length of the message string.
+ */
+void log_output(const char* msg, int len);
+
+/**
+ * @brief Outputs a single character based on the current log mode.
+ * Useful as a backend for a custom printf implementation.
+ * @param c The character to output.
+ */
+void log_putchar(const char c);

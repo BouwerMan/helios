@@ -10,10 +10,10 @@
 static constexpr int IDT_ENTRIES = 256;
 
 static constexpr u16 PIC1_COMMAND = 0x20;
-static constexpr u16 PIC1_DATA	  = 0x21;
+static constexpr u16 PIC1_DATA = 0x21;
 static constexpr u16 PIC2_COMMAND = 0xA0;
-static constexpr u16 PIC2_DATA	  = 0xA1;
-static constexpr u16 PIC_EOI	  = 0x20;
+static constexpr u16 PIC2_DATA = 0xA1;
+static constexpr u16 PIC_EOI = 0x20;
 
 static constexpr u16 ICW1_INIT = 0x10;
 static constexpr u16 ICW1_ICW4 = 0x01;
@@ -24,16 +24,16 @@ enum ISRn {
 };
 
 enum IRQn {
-	IRQ0  = 32,
-	IRQ1  = 33,
-	IRQ2  = 34,
-	IRQ3  = 35,
-	IRQ4  = 36,
-	IRQ5  = 37,
-	IRQ6  = 38,
-	IRQ7  = 39,
-	IRQ8  = 40,
-	IRQ9  = 41,
+	IRQ0 = 32,
+	IRQ1 = 33,
+	IRQ2 = 34,
+	IRQ3 = 35,
+	IRQ4 = 36,
+	IRQ5 = 37,
+	IRQ6 = 38,
+	IRQ7 = 39,
+	IRQ8 = 40,
+	IRQ9 = 41,
 	IRQ10 = 42,
 	IRQ11 = 43,
 	IRQ12 = 44,
@@ -63,21 +63,19 @@ struct xmm_reg {
 };
 
 // IDT
-void idt_set_descriptor(uint8_t vector, uint64_t isr, uint8_t flags);
 void idt_init(void);
 
 // ISR
 void isr_init();
-void install_isr_handler(int isr, void (*handler)(struct registers* r));
-void uninstall_isr_handler(int isr);
+void isr_install_handler(int isr, void (*handler)(struct registers* r));
+void isr_uninstall_handler(int isr);
 void isr_handler(struct registers* r);
 
 // IRQ
 void irq_init(void);
 void irq_handler(struct registers* r);
-
-void IRQ_set_mask(uint8_t IRQline);
-void IRQ_clear_mask(uint8_t IRQline);
+void irq_set_mask(uint8_t IRQline);
+void irq_clear_mask(uint8_t IRQline);
 
 extern void __set_idt(idtr_t* idtr);
 /* ISR definitions */

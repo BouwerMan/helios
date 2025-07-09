@@ -31,10 +31,10 @@ static constexpr u32 PIT_CLK = 1193180;
 
 /* This will keep track of how many ticks that the system
  *  has been running for */
-volatile uint64_t ticks		      = 0;
+volatile uint64_t ticks = 0;
 volatile uint64_t seconds_since_start = 0;
-volatile uint64_t countdown	      = 0;
-static uint32_t phase		      = 18;
+volatile uint64_t countdown = 0;
+static uint32_t phase = 18;
 
 extern volatile bool need_reschedule;
 
@@ -48,10 +48,10 @@ extern volatile bool need_reschedule;
  */
 void timer_phase(uint32_t hz)
 {
-	phase		 = hz;
+	phase = hz;
 	uint32_t divisor = PIT_CLK / hz; /* Calculate our divisor */
-	uint8_t low	 = (uint8_t)(divisor & 0xFF);
-	uint8_t high	 = (uint8_t)((divisor >> 8) & 0xFF);
+	uint8_t low = (uint8_t)(divisor & 0xFF);
+	uint8_t high = (uint8_t)((divisor >> 8) & 0xFF);
 	outb(0x43, 0x36); /* Set our command byte 0x36 */
 	outb(0x40, low);  /* Set low byte of divisor */
 	outb(0x40, high); /* Set high byte of divisor */
@@ -101,7 +101,7 @@ void sleep(uint64_t millis)
 	log_debug("Sleeping task %lu for %lu millis or %lu ticks", t->PID, millis, millis_to_ticks(millis));
 	// Don't need to convert to ticks since we have 1ms ticks but just incase
 	t->sleep_ticks = millis_to_ticks(millis);
-	t->state       = BLOCKED;
+	t->state = BLOCKED;
 	yield();
 }
 
@@ -116,6 +116,6 @@ void timer_init(void)
 {
 	log_debug("Initializing timer to 1000Hz");
 	/* Installs 'timer_handler' to IRQ0 */
-	install_isr_handler(IRQ0, timer_handler);
+	isr_install_handler(IRQ0, timer_handler);
 	timer_phase(TIMER_HERTZ);
 }

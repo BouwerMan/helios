@@ -27,14 +27,18 @@
 #include <kernel/spinlock.h>
 #include <util/log.h>
 
-/* import our font that's in the object file we've created above */
+/*******************************************************************************
+* Global Variable Definitions
+*******************************************************************************/
+
+// import our font that's in the object file we've created above
 extern char _binary_fonts_font_psf_start[];
 extern char _binary_fonts_font_psf_end[];
 
-/* import our font that's in the object file we've created above */
+// import our font that's in the object file we've created above
 extern char _binary_font_start[];
 
-uint16_t* unicode = NULL;
+static uint16_t* unicode = NULL;
 
 static struct screen_info sc = {
 	.cx = 0,
@@ -43,10 +47,53 @@ static struct screen_info sc = {
 	.bgc = 0x000000,
 };
 
+/*******************************************************************************
+* Private Function Prototypes
+*******************************************************************************/
+
+/**
+ * @brief Scrolls the framebuffer content upward by one row.
+ */
 static void scroll();
+
+/**
+ * @brief Draws a character at a specific position on the screen with specified colors.
+ *
+ * @param c  The Unicode character to display.
+ * @param cx The x-coordinate of the cursor position (in characters, not pixels).
+ * @param cy The y-coordinate of the cursor position (in characters, not pixels).
+ * @param fg The foreground color (e.g., 0xFFFFFF for white).
+ * @param bg The background color (e.g., 0x000000 for black).
+ */
 static void screen_putchar_at(uint16_t c, size_t cx, size_t cy, uint32_t fg, uint32_t bg);
+
+/**
+ * @brief Draws a single scanline of a glyph onto a framebuffer row.
+ *
+ * @param glyph_row     Pointer to the packed glyph row data (usually one row of the bitmap).
+ * @param dst           Pointer to the framebuffer scanline to write to (one PIXEL per pixel).
+ * @param width         Actual number of pixels to draw (may be < bytesperline * 8).
+ * @param bytesperline  Number of bytes per glyph row in memory (usually (width + 7) / 8).
+ * @param fg            Foreground color.
+ * @param bg            Background color.
+ */
 static inline void draw_glyph_scanline(const uint8_t* glyph_row, PIXEL* dst, uint32_t fg, uint32_t bg);
+
+/**
+ * @brief Renders a full glyph bitmap to the framebuffer at a specified byte offset.
+ *
+ * @param glyph         Pointer to the glyph bitmap data (packed 1bpp format).
+ * @param offset        Byte offset into the framebuffer where the top-left pixel of the glyph should be drawn.
+ * @param width         Width of the glyph in pixels.
+ * @param height        Height of the glyph in pixels.
+ * @param fg            Foreground color (used for set bits).
+ * @param bg            Background color (used for cleared bits).
+ */
 static inline void draw_glyph(uint8_t* glyph, size_t offset, uint32_t fg, uint32_t bg);
+
+/*******************************************************************************
+* Public Function Definitions
+*******************************************************************************/
 
 void screen_init(uint32_t fg_color, uint32_t bg_color)
 {
@@ -171,13 +218,10 @@ void screen_putchar(char c)
 	spinlock_release(&sc.lock);
 }
 
-/**
- * @brief Scrolls the framebuffer content upward by one row.
- *
- * This function shifts the visible content of the framebuffer upward by one
- * row, effectively removing the topmost row and making space for new content
- * at the bottom. The last row is cleared and filled with the background color.
- */
+/*******************************************************************************
+* Private Function Definitions
+*******************************************************************************/
+
 static void scroll()
 {
 	uintptr_t addr = (uintptr_t)sc.fb->address;
@@ -205,19 +249,6 @@ static void scroll()
 	}
 }
 
-/**
- * @brief Draws a character at a specific position on the screen with specified colors.
- *
- * This function renders a Unicode character at the given cursor position
- * on the screen using the provided foreground and background colors. It
- * utilizes a PSF font to determine the glyph representation of the character.
- *
- * @param c  The Unicode character to display.
- * @param cx The x-coordinate of the cursor position (in characters, not pixels).
- * @param cy The y-coordinate of the cursor position (in characters, not pixels).
- * @param fg The foreground color (e.g., 0xFFFFFF for white).
- * @param bg The background color (e.g., 0x000000 for black).
- */
 static void screen_putchar_at(uint16_t c, size_t cx, size_t cy, uint32_t fg, uint32_t bg)
 {
 	/* unicode translation */
@@ -235,16 +266,6 @@ static void screen_putchar_at(uint16_t c, size_t cx, size_t cy, uint32_t fg, uin
 	draw_glyph(glyph, fb_offset, fg, bg);
 }
 
-/**
- * @brief Draws a single scanline of a glyph onto a framebuffer row.
- *
- * @param glyph_row     Pointer to the packed glyph row data (usually one row of the bitmap).
- * @param dst           Pointer to the framebuffer scanline to write to (one PIXEL per pixel).
- * @param width         Actual number of pixels to draw (may be < bytesperline * 8).
- * @param bytesperline  Number of bytes per glyph row in memory (usually (width + 7) / 8).
- * @param fg            Foreground color.
- * @param bg            Background color.
- */
 static inline void draw_glyph_scanline(const uint8_t* glyph_row, PIXEL* dst, uint32_t fg, uint32_t bg)
 {
 	uint32_t pixel_index = 0; // Horizontal pixel index across the row
@@ -264,21 +285,6 @@ static inline void draw_glyph_scanline(const uint8_t* glyph_row, PIXEL* dst, uin
 	}
 }
 
-/**
- * @brief Renders a full glyph bitmap to the framebuffer at a specified byte offset.
- *
- * This function iterates over each scanline of the provided glyph bitmap and renders
- * it into the framebuffer using the specified foreground and background colors.
- * It assumes the framebuffer is linear and that the glyph is encoded as a series
- * of packed bitmaps (one per row).
- *
- * @param glyph         Pointer to the glyph bitmap data (packed 1bpp format).
- * @param offset        Byte offset into the framebuffer where the top-left pixel of the glyph should be drawn.
- * @param width         Width of the glyph in pixels.
- * @param height        Height of the glyph in pixels.
- * @param fg            Foreground color (used for set bits).
- * @param bg            Background color (used for cleared bits).
- */
 static inline void draw_glyph(uint8_t* glyph, size_t offset, uint32_t fg, uint32_t bg)
 {
 	for (size_t y = 0; y < sc.char_height; y++) {

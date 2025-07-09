@@ -37,24 +37,23 @@ void set_log_mode(enum LOG_MODE mode)
 void log_putchar(const char c)
 {
 	if (current_mode == LOG_DIRECT) {
-		// #if ENABLE_SERIAL_LOGGING
+#if ENABLE_SERIAL_LOGGING
 		write_serial(c);
-		// #endif
+#endif
 		screen_putchar(c);
-	} else if (LOG_BUFFERED) {
+	} else if (current_mode == LOG_BUFFERED) {
 		dmesg_enqueue(&c, 1);
 	}
 }
 
-// TODO: Pass through len?
-void log_output(const char* msg)
+void log_output(const char* msg, int len)
 {
 	if (current_mode == LOG_DIRECT) {
 #if ENABLE_SERIAL_LOGGING
 		write_serial_string(msg); // Custom serial output
 #endif
 		screen_putstring(msg);
-	} else if (LOG_BUFFERED) {
-		dmesg_enqueue(msg, strlen(msg));
+	} else if (current_mode == LOG_BUFFERED) {
+		dmesg_enqueue(msg, (size_t)len);
 	}
 }

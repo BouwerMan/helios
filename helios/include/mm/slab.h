@@ -174,6 +174,8 @@ void slab_cache_purge_corrupt(struct slab_cache* cache);
 *
 *******************************************************************************/
 
+void slab_test();
+
 /**
  * @brief Dump statistics of a slab cache for debugging purposes.
  *
@@ -181,38 +183,3 @@ void slab_cache_purge_corrupt(struct slab_cache* cache);
  *              If the cache is NULL or uninitialized, an error is logged.
  */
 void slab_dump_stats(struct slab_cache* cache);
-
-/**
- * @brief Test for use-before-initialization in a slab cache.
- *
- * @param cache Pointer to the slab_cache to test.
- */
-void test_use_before_alloc(struct slab_cache* cache);
-
-/**
- * @brief Test for buffer overflow detection in a slab cache.
- *
- * @param cache Pointer to the slab_cache to test.
- */
-void test_buffer_overflow(struct slab_cache* cache);
-
-/**
- * @brief Test for buffer underflow detection in a slab cache.
- *
- * @param cache Pointer to the slab_cache to test.
- */
-void test_buffer_underflow(struct slab_cache* cache);
-
-/**
- * @brief Test valid usage of a slab cache.
- *
- * @param cache Pointer to the slab_cache to test.
- */
-void test_valid_usage(struct slab_cache* cache);
-
-/**
- * @brief Test object alignment in a slab cache.
- *
- * @param cache Pointer to the slab_cache to test.
- */
-void test_object_alignment(struct slab_cache* cache);

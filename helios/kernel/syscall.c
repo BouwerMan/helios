@@ -1,8 +1,34 @@
+/**
+ * @file kernel/syscall.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include <stddef.h>
+#include <stdio.h>
+
 #include <arch/idt.h>
 #include <kernel/dmesg.h>
 #include <kernel/syscall.h>
-#include <stddef.h>
-#include <stdio.h>
+
+/*******************************************************************************
+* Private Function Prototypes
+*******************************************************************************/
 
 [[gnu::always_inline]]
 static inline void SYSRET(struct registers* r, u64 val)
@@ -18,7 +44,7 @@ void sys_write(struct registers* r)
 	}
 
 	const char* buf = (const char*)r->rsi;
-	size_t size	= r->rdx;
+	size_t size = r->rdx;
 
 	for (size_t i = 0; i < size; i++) {
 		dmesg_enqueue(buf, 1);
@@ -53,5 +79,5 @@ void syscall_handler(struct registers* r)
 
 void syscall_init()
 {
-	install_isr_handler(SYSCALL_INT, syscall_handler);
+	isr_install_handler(SYSCALL_INT, syscall_handler);
 }

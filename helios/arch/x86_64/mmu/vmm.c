@@ -44,95 +44,68 @@
 #include <mm/page_alloc.h>
 #include <util/log.h>
 
-static inline void* _alloc_page_table(aflags_t flags)
-{
-	return (void*)get_free_pages(flags, PML4_SIZE_PAGES);
-}
-
-static inline void _free_page_table(void* table)
-{
-	free_pages(table, PML4_SIZE_PAGES);
-}
-
-static void _map_memmap_entry(uint64_t* pml4, struct bootinfo_memmap_entry* entry, uintptr_t exe_virt_base)
-{
-	flags_t flags;
-	switch (entry->type) {
-	case LIMINE_MEMMAP_USABLE:
-	case LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE:
-		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK | PAGE_NO_EXECUTE;
-		break;
-	case LIMINE_MEMMAP_FRAMEBUFFER:
-		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_COMBINING | PAGE_NO_EXECUTE;
-		break;
-	case LIMINE_MEMMAP_EXECUTABLE_AND_MODULES:
-		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK;
-		break;
-	default:
-		return;
-	}
-
-	uintptr_t start = entry->base;
-	uintptr_t end	= entry->base + entry->length;
-	log_debug("Mapping [%lx-%lx), type: %lu", start, end, entry->type);
-	for (size_t phys = start; phys < end; phys += PAGE_SIZE) {
-		map_page(pml4, PHYS_TO_HHDM(phys), phys, flags);
-
-		// Manually map executable areas
-		if (entry->type != LIMINE_MEMMAP_EXECUTABLE_AND_MODULES) continue;
-		uintptr_t exe_virt = (phys - start) + exe_virt_base;
-		map_page(pml4, exe_virt, phys, flags & ~PAGE_NO_EXECUTE);
-	}
-}
-
-void page_fault(struct registers* r);
+/*******************************************************************************
+* Private Function Prototypes
+*******************************************************************************/
 
 /**
- * @brief Initializes the virtual memory manager (VMM).
+ * @brief Maps a memory map entry into the virtual memory space.
  *
- * This function sets up the kernel's address space by creating a new PML4
- * table and mapping memory regions based on the boot information provided
- * by the bootloader. It ensures that the kernel's memory layout is properly
- * initialized and ready for use.
- *
- * Steps:
- * 1. Validates the boot information structure.
- * 2. Allocates a new PML4 table for the kernel.
- * 3. Iterates through the memory map entries provided by the bootloader and
- *    maps them into the kernel's address space.
- * 4. Loads the new PML4 table into the CR3 register to activate the address space.
+ * @param pml4 Pointer to the PML4 table used for virtual memory mapping.
+ * @param entry Pointer to the memory map entry to be mapped.
+ * @param exe_virt_base Base virtual address for executable mappings.
  */
-void vmm_init()
-{
-	install_isr_handler(PAGE_FAULT, page_fault);
+static void map_memmap_entry(u64* pml4, struct bootinfo_memmap_entry* entry, uptr exe_virt_base);
+/**
+ * @brief Handles page faults by logging the faulting address and attempting to resolve it.
+ *
+ * @param r Pointer to the registers structure containing the faulting address.
+ */
+static void page_fault(struct registers* r);
 
-	// Init new address space, then copy from limine
-	struct bootinfo* bootinfo = &kernel.bootinfo;
-	if (!bootinfo->valid) panic("bootinfo marked not valid");
+/**
+ * @brief Walks the page table hierarchy to locate or create a page table entry.
+ *
+ * @param pml4   Pointer to the PML4 table.
+ * @param vaddr  The virtual address to resolve.
+ * @param create Whether to create missing entries in the hierarchy.
+ * @param flags  Flags to set for newly created entries.
+ *
+ * @return       A pointer to the page table entry corresponding to the given
+ *               virtual address, or NULL if the entry does not exist and
+ *               @create is false.
+ */
+static u64* walk_page_table(u64* pml4, uptr vaddr, bool create, flags_t flags);
 
-	kernel.pml4 = _alloc_page_table(AF_KERNEL);
-	log_debug("Current PML4: %p", (void*)kernel.pml4);
-	for (size_t i = 0; i < bootinfo->memmap_entry_count; i++) {
-		struct bootinfo_memmap_entry* entry = &bootinfo->memmap[i];
-		_map_memmap_entry(kernel.pml4, entry, bootinfo->executable.virtual_base);
-	}
+static void log_page_table_walk(u64* pml4, uptr vaddr);
 
-	vmm_load_cr3(HHDM_TO_PHYS(kernel.pml4));
-}
+/**
+ * @brief Retrieves the index for a specific level in the page table hierarchy.
+ *
+ * @param level  The level in the page table hierarchy (0 = PML4, 3 = PT).
+ * @param vaddr  The virtual address to calculate the index for.
+ * @return       The index for the specified level, or (size_t)-1 if the level is invalid.
+ */
+static size_t get_table_index(int level, uintptr_t vaddr);
 
-uint64_t* vmm_create_address_space()
-{
-	// pml4 has 512 entries, each 8 bytes. which means it is 4096 (1 page) bytes in size.
-	uint64_t* pml4 = _alloc_page_table(AF_KERNEL);
-	if (!pml4) {
-		log_error("Failed to allocate PML4");
-		panic("Out of memory");
-	}
+/**
+ * @brief Checks if a page table is empty.
+ *
+ * @param table  Pointer to the page table to check.
+ * @return       True if the table is empty, false otherwise.
+ */
+static bool is_table_empty(uint64_t* table);
 
-	memcpy(pml4, kernel.pml4, PAGE_SIZE);
-
-	return pml4;
-}
+/**
+ * @brief Recursively prunes empty page tables in the hierarchy.
+ *
+ * @param table  Pointer to the current page table.
+ * @param level  Current level in the page table hierarchy (0 = PML4, 3 = leaf).
+ * @param vaddr  Virtual address to prune from.
+ *
+ * @return       True if the table is empty after pruning, false otherwise.
+ */
+static bool prune_page_table_recursive(uint64_t* table, int level, uintptr_t vaddr);
 
 /**
  * @brief Invalidates a single page in the TLB (Translation Lookaside Buffer).
@@ -154,64 +127,65 @@ static inline size_t _page_table_index(uptr vaddr, int shift)
 #define _pd_index(vaddr)   _page_table_index(vaddr, 21)
 #define _pt_index(vaddr)   _page_table_index(vaddr, 12)
 
-/**
- * @brief Walks the page table hierarchy to locate or create a page table entry.
- *
- * This function traverses the page table hierarchy (PML4 -> PDPT -> PD -> PT)
- * to locate the page table entry corresponding to the given virtual address.
- * If @create is true, missing entries in the hierarchy are created with the
- * specified @flags. If @create is false and a required entry is missing, the
- * function returns NULL.
- *
- * @param pml4   Pointer to the PML4 table.
- * @param vaddr  The virtual address to resolve.
- * @param create Whether to create missing entries in the hierarchy.
- * @param flags  Flags to set for newly created entries.
- *
- * @return       A pointer to the page table entry corresponding to the given
- *               virtual address, or NULL if the entry does not exist and
- *               @create is false.
- */
-uint64_t* walk_page_table(uint64_t* pml4, uintptr_t vaddr, bool create, flags_t flags)
+static inline void* _alloc_page_table(aflags_t flags)
 {
-	if ((flags & PAGE_PRESENT) == 0) {
-		log_warn("walk_page_table creating an entry WITHOUT PAGE_PRESENT! flags: 0x%lx", flags);
+	return (void*)get_free_pages(flags, PML4_SIZE_PAGES);
+}
+
+static inline void _free_page_table(void* table)
+{
+	free_pages(table, PML4_SIZE_PAGES);
+}
+
+/*******************************************************************************
+* Public Function Definitions
+*******************************************************************************/
+
+/**
+ * @brief Initializes the virtual memory manager (VMM).
+ *
+ * This function sets up the kernel's address space by creating a new PML4
+ * table and mapping memory regions based on the boot information provided
+ * by the bootloader. It ensures that the kernel's memory layout is properly
+ * initialized and ready for use.
+ *
+ * Steps:
+ * 1. Validates the boot information structure.
+ * 2. Allocates a new PML4 table for the kernel.
+ * 3. Iterates through the memory map entries provided by the bootloader and
+ *    maps them into the kernel's address space.
+ * 4. Loads the new PML4 table into the CR3 register to activate the address space.
+ */
+void vmm_init()
+{
+	isr_install_handler(PAGE_FAULT, page_fault);
+
+	// Init new address space, then copy from limine
+	struct bootinfo* bootinfo = &kernel.bootinfo;
+	if (!bootinfo->valid) panic("bootinfo marked not valid");
+
+	kernel.pml4 = _alloc_page_table(AF_KERNEL);
+	log_debug("Current PML4: %p", (void*)kernel.pml4);
+	for (size_t i = 0; i < bootinfo->memmap_entry_count; i++) {
+		struct bootinfo_memmap_entry* entry = &bootinfo->memmap[i];
+		map_memmap_entry(kernel.pml4, entry, bootinfo->executable.virtual_base);
 	}
-	// Ensure the virtual address is canonical
-	if ((vaddr >> 48) != 0 && (vaddr >> 48) != 0xFFFF) return NULL;
 
-	// Mask the flags to ensure only valid bits are used
-	flags &= FLAGS_MASK;
+	vmm_load_cr3(HHDM_TO_PHYS(kernel.pml4));
+}
 
-	// Get the PML4 index for the virtual address
-	uint64_t pml4_i = _pml4_index(vaddr);
-	if ((pml4[pml4_i] & PAGE_PRESENT) == 0) {
-		if (!create) return NULL;
-		pml4[pml4_i] = HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
+uint64_t* vmm_create_address_space()
+{
+	// pml4 has 512 entries, each 8 bytes. which means it is 4096 (1 page) bytes in size.
+	uint64_t* pml4 = _alloc_page_table(AF_KERNEL);
+	if (!pml4) {
+		log_error("Failed to allocate PML4");
+		panic("Out of memory");
 	}
 
-	// Get the PDPT from the PML4 entry
-	uint64_t* pdpt	= (uint64_t*)PHYS_TO_HHDM(pml4[pml4_i] & ~FLAGS_MASK); // Mask off flags
-	uint64_t pdpt_i = _pdpt_index(vaddr);
-	if ((pdpt[pdpt_i] & PAGE_PRESENT) == 0) {
-		if (!create) return NULL;
-		pdpt[pdpt_i] = HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
-	}
+	memcpy(pml4, kernel.pml4, PAGE_SIZE);
 
-	// Get the PD from the PDPT entry
-	uint64_t* pd  = (uint64_t*)PHYS_TO_HHDM(pdpt[pdpt_i] & ~FLAGS_MASK); // Mask off flags
-	uint64_t pd_i = _pd_index(vaddr);
-	if ((pd[pd_i] & PAGE_PRESENT) == 0) {
-		if (!create) return NULL;
-		pd[pd_i] = HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
-	}
-
-	// Get the PT from the PD entry
-	uint64_t* pt  = (uint64_t*)PHYS_TO_HHDM(pd[pd_i] & ~FLAGS_MASK);
-	uint64_t pt_i = _pt_index(vaddr);
-
-	// Return the pointer to the page table entry
-	return pt + pt_i;
+	return pml4;
 }
 
 /**
@@ -229,7 +203,7 @@ uint64_t* walk_page_table(uint64_t* pml4, uintptr_t vaddr, bool create, flags_t 
  *
  * @return       0 on success, -1 on failure (e.g., misalignment or mapping issues).
  */
-int map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
+int vmm_map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
 {
 	if (!is_page_aligned(vaddr) || !is_page_aligned(paddr)) {
 		log_error("Something isn't aligned right, vaddr: %lx, paddr: %lx", vaddr, paddr);
@@ -238,7 +212,7 @@ int map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
 
 	// We want PAGE_PRESENT and PAGE_WRITE on almost all the higher levels
 	flags_t walk_flags = flags & (PAGE_USER | PAGE_PRESENT | PAGE_WRITE);
-	uint64_t* pte	   = walk_page_table(pml4, vaddr, true, walk_flags | PAGE_PRESENT | PAGE_WRITE);
+	uint64_t* pte = walk_page_table(pml4, vaddr, true, walk_flags | PAGE_PRESENT | PAGE_WRITE);
 	if (!pte || *pte & PAGE_PRESENT) {
 		log_warn("Could not find pte or pte is already present");
 		return -1;
@@ -246,90 +220,6 @@ int map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
 
 	*pte = paddr | flags;
 	return 0;
-}
-
-/**
- * @brief Retrieves the index for a specific level in the page table hierarchy.
- *
- * This function calculates the index of the entry in the page table for the
- * given level (PML4, PDPT, PD, or PT) based on the provided virtual address.
- *
- * @param level  The level in the page table hierarchy (0 = PML4, 3 = PT).
- * @param vaddr  The virtual address to calculate the index for.
- *
- * @return       The index for the specified level, or (size_t)-1 if the level is invalid.
- */
-static size_t _get_index(int level, uintptr_t vaddr)
-{
-	switch (level) {
-	case 0:
-		return _pml4_index(vaddr);
-	case 1:
-		return _pdpt_index(vaddr);
-	case 2:
-		return _pd_index(vaddr);
-	case 3:
-		return _pt_index(vaddr);
-	default:
-		return (size_t)-1; // Invalid level
-	}
-}
-
-/**
- * @brief Checks if a page table is empty.
- *
- * This function iterates through all entries in the given page table and
- * determines if all entries are zero (i.e., the table is empty).
- *
- * @param table  Pointer to the page table to check.
- *
- * @return       True if the table is empty, false otherwise.
- */
-static bool _is_table_empty(uint64_t* table)
-{
-	// TODO: turn this into a memcmp (ideally architecture specific with rep cmpsb)
-	for (size_t i = 0; i < PML4_ENTRIES; i++) {
-		if (table[i] != 0) return false; // Found non-empty entry
-	}
-	return true;
-}
-
-/**
- * @brief Recursively prunes empty page tables in the hierarchy.
- *
- * This function traverses the page table hierarchy starting from the given
- * level and virtual address. It checks if the current table entry is present
- * and, if not, determines whether the table is empty. If the table is empty,
- * it clears the entry and frees the associated memory. For non-leaf levels,
- * the function recurses into child tables to prune them as well.
- *
- * @param table  Pointer to the current page table.
- * @param level  Current level in the page table hierarchy (0 = PML4, 3 = leaf).
- * @param vaddr  Virtual address to prune from.
- *
- * @return       True if the table is empty after pruning, false otherwise.
- */
-static bool _prune_page_table_recursive(uint64_t* table, int level, uintptr_t vaddr)
-{
-	size_t index	= _get_index(level, vaddr);
-	uintptr_t entry = table[index];
-
-	// If the entry is not present, return early
-	if ((entry & PAGE_PRESENT) == 0) {
-		return _is_table_empty(table);
-	}
-
-	// If we are not at the leaf, we need to recurse
-	if (level < 3) {
-		uint64_t* child_table = (uint64_t*)PHYS_TO_HHDM(entry & PAGE_FRAME_MASK);
-		if (_prune_page_table_recursive(child_table, level + 1, vaddr)) {
-			table[index] = 0; // Clear the entry if child table was pruned
-			_free_page_table(child_table);
-			log_debug("Freed PT at level %d (vaddr: 0x%lx)", level, vaddr);
-		}
-	}
-
-	return _is_table_empty(table);
 }
 
 /**
@@ -346,7 +236,7 @@ static bool _prune_page_table_recursive(uint64_t* table, int level, uintptr_t va
  * @return       0 on success, -1 on failure (e.g., misalignment).
  *               Returns 0 if the page was already unmapped.
  */
-int unmap_page(uint64_t* pml4, uintptr_t vaddr)
+int vmm_unmap_page(uint64_t* pml4, uintptr_t vaddr)
 {
 	if (!is_page_aligned(vaddr)) {
 		log_error("Something isn't aligned right, vaddr: %lx", vaddr);
@@ -381,7 +271,7 @@ int unmap_page(uint64_t* pml4, uintptr_t vaddr)
  */
 int prune_page_tables(uint64_t* pml4, uintptr_t vaddr)
 {
-	(void)_prune_page_table_recursive(pml4, 0, vaddr);
+	(void)prune_page_table_recursive(pml4, 0, vaddr);
 
 	return 0;
 }
@@ -410,7 +300,7 @@ void vmm_test_prune_single_mapping(void)
 	uintptr_t paddr = (uintptr_t)HHDM_TO_PHYS(get_free_page(AF_KERNEL));
 
 	log_info("Mapping page: virt=0x%lx -> phys=0x%lx", vaddr, paddr);
-	int result = map_page(pml4, vaddr, paddr, PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK);
+	int result = vmm_map_page(pml4, vaddr, paddr, PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK);
 	if (result != 0) {
 		log_error("Failed to map test page");
 		return;
@@ -418,7 +308,7 @@ void vmm_test_prune_single_mapping(void)
 
 	// 3. Unmap the virtual address
 	log_info("Unmapping page: 0x%lx", vaddr);
-	result = unmap_page(pml4, vaddr);
+	result = vmm_unmap_page(pml4, vaddr);
 	if (result != 0) {
 		log_error("Failed to unmap test page");
 		return;
@@ -429,7 +319,7 @@ void vmm_test_prune_single_mapping(void)
 	prune_page_tables(pml4, vaddr);
 
 	// 5. Verify that the PML4 entry is now 0
-	size_t pml4_i = _get_index(0, vaddr);
+	size_t pml4_i = get_table_index(0, vaddr);
 	if (pml4[pml4_i] == 0) {
 		log_info("✅ PML4 entry cleared — pruning successful");
 	} else {
@@ -441,12 +331,152 @@ void vmm_test_prune_single_mapping(void)
 	_free_page_table(pml4);
 }
 
-void log_page_table_walk(uint64_t* pml4, uintptr_t vaddr)
+/*******************************************************************************
+* Private Function Definitions
+*******************************************************************************/
+
+static size_t get_table_index(int level, uintptr_t vaddr)
+{
+	switch (level) {
+	case 0:
+		return _pml4_index(vaddr);
+	case 1:
+		return _pdpt_index(vaddr);
+	case 2:
+		return _pd_index(vaddr);
+	case 3:
+		return _pt_index(vaddr);
+	default:
+		return (size_t)-1; // Invalid level
+	}
+}
+
+static bool is_table_empty(uint64_t* table)
+{
+	// TODO: turn this into a memcmp (ideally architecture specific with rep cmpsb)
+	for (size_t i = 0; i < PML4_ENTRIES; i++) {
+		if (table[i] != 0) return false; // Found non-empty entry
+	}
+	return true;
+}
+
+/**
+ * @brief Recursively prunes empty page tables in the hierarchy.
+ *
+ * This function traverses the page table hierarchy starting from the given
+ * level and virtual address. It checks if the current table entry is present
+ * and, if not, determines whether the table is empty. If the table is empty,
+ * it clears the entry and frees the associated memory. For non-leaf levels,
+ * the function recurses into child tables to prune them as well.
+ *
+ * @param table  Pointer to the current page table.
+ * @param level  Current level in the page table hierarchy (0 = PML4, 3 = leaf).
+ * @param vaddr  Virtual address to prune from.
+ *
+ * @return       True if the table is empty after pruning, false otherwise.
+ */
+static bool prune_page_table_recursive(uint64_t* table, int level, uintptr_t vaddr)
+{
+	size_t index = get_table_index(level, vaddr);
+	uintptr_t entry = table[index];
+
+	// If the entry is not present, return early
+	if ((entry & PAGE_PRESENT) == 0) {
+		return is_table_empty(table);
+	}
+
+	// If we are not at the leaf, we need to recurse
+	if (level < 3) {
+		uint64_t* child_table = (uint64_t*)PHYS_TO_HHDM(entry & PAGE_FRAME_MASK);
+		if (prune_page_table_recursive(child_table, level + 1, vaddr)) {
+			table[index] = 0; // Clear the entry if child table was pruned
+			_free_page_table(child_table);
+			log_debug("Freed PT at level %d (vaddr: 0x%lx)", level, vaddr);
+		}
+	}
+
+	return is_table_empty(table);
+}
+
+static u64* walk_page_table(u64* pml4, uptr vaddr, bool create, flags_t flags)
+{
+	if ((flags & PAGE_PRESENT) == 0) {
+		log_warn("walk_page_table creating an entry WITHOUT PAGE_PRESENT! flags: 0x%lx", flags);
+	}
+	// Ensure the virtual address is canonical
+	if ((vaddr >> 48) != 0 && (vaddr >> 48) != 0xFFFF) return NULL;
+
+	// Mask the flags to ensure only valid bits are used
+	flags &= FLAGS_MASK;
+
+	// Get the PML4 index for the virtual address
+	uint64_t pml4_i = _pml4_index(vaddr);
+	if ((pml4[pml4_i] & PAGE_PRESENT) == 0) {
+		if (!create) return NULL;
+		pml4[pml4_i] = HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
+	}
+
+	// Get the PDPT from the PML4 entry
+	uint64_t* pdpt = (uint64_t*)PHYS_TO_HHDM(pml4[pml4_i] & ~FLAGS_MASK); // Mask off flags
+	uint64_t pdpt_i = _pdpt_index(vaddr);
+	if ((pdpt[pdpt_i] & PAGE_PRESENT) == 0) {
+		if (!create) return NULL;
+		pdpt[pdpt_i] = HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
+	}
+
+	// Get the PD from the PDPT entry
+	uint64_t* pd = (uint64_t*)PHYS_TO_HHDM(pdpt[pdpt_i] & ~FLAGS_MASK); // Mask off flags
+	uint64_t pd_i = _pd_index(vaddr);
+	if ((pd[pd_i] & PAGE_PRESENT) == 0) {
+		if (!create) return NULL;
+		pd[pd_i] = HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
+	}
+
+	// Get the PT from the PD entry
+	uint64_t* pt = (uint64_t*)PHYS_TO_HHDM(pd[pd_i] & ~FLAGS_MASK);
+	uint64_t pt_i = _pt_index(vaddr);
+
+	// Return the pointer to the page table entry
+	return pt + pt_i;
+}
+
+static void map_memmap_entry(uint64_t* pml4, struct bootinfo_memmap_entry* entry, uintptr_t exe_virt_base)
+{
+	flags_t flags;
+	switch (entry->type) {
+	case LIMINE_MEMMAP_USABLE:
+	case LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE:
+		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK | PAGE_NO_EXECUTE;
+		break;
+	case LIMINE_MEMMAP_FRAMEBUFFER:
+		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_COMBINING | PAGE_NO_EXECUTE;
+		break;
+	case LIMINE_MEMMAP_EXECUTABLE_AND_MODULES:
+		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK;
+		break;
+	default:
+		return;
+	}
+
+	uintptr_t start = entry->base;
+	uintptr_t end = entry->base + entry->length;
+	log_debug("Mapping [%lx-%lx), type: %lu", start, end, entry->type);
+	for (size_t phys = start; phys < end; phys += PAGE_SIZE) {
+		vmm_map_page(pml4, PHYS_TO_HHDM(phys), phys, flags);
+
+		// Manually map executable areas
+		if (entry->type != LIMINE_MEMMAP_EXECUTABLE_AND_MODULES) continue;
+		uintptr_t exe_virt = (phys - start) + exe_virt_base;
+		vmm_map_page(pml4, exe_virt, phys, flags & ~PAGE_NO_EXECUTE);
+	}
+}
+
+static void log_page_table_walk(u64* pml4, uptr vaddr)
 {
 	size_t pml4_i = _pml4_index(vaddr);
 	size_t pdpt_i = _pdpt_index(vaddr);
-	size_t pd_i   = _pd_index(vaddr);
-	size_t pt_i   = _pt_index(vaddr);
+	size_t pd_i = _pd_index(vaddr);
+	size_t pt_i = _pt_index(vaddr);
 
 	uint64_t pml4e = pml4[pml4_i];
 	log_info("PML4E [%03lx] = 0x%016lx", pml4_i, pml4e);
@@ -488,18 +518,18 @@ void log_page_table_walk(uint64_t* pml4, uintptr_t vaddr)
 	}
 }
 
-void page_fault(struct registers* r)
+static void page_fault(struct registers* r)
 {
 	uint64_t fault_addr;
 	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
 	uint64_t cr3;
 	__asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
 
-	int present  = !(r->err_code & 0x1);
-	int rw	     = r->err_code & 0x2;
-	int user     = r->err_code & 0x4;
+	int present = !(r->err_code & 0x1);
+	int rw = r->err_code & 0x2;
+	int user = r->err_code & 0x4;
 	int reserved = r->err_code & 0x8;
-	int id	     = r->err_code & 0x10;
+	int id = r->err_code & 0x10;
 
 	set_log_mode(LOG_DIRECT);
 	dmesg_flush_raw();

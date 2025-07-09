@@ -42,8 +42,8 @@ See [page_alloc.h](../../helios/include/mm/page_alloc.h) for more details.
 
 | Function | Description |
 |---|---|
-| uintptr_t get_free_page(flags_t flags) | Used to allocate a single page of memory. |
-| uintptr_t get_free_pages(flags_t flags, size_t pages) | Used to allocate several physically contiguous pages of memory. |
+| void\* get_free_page(flags_t flags) | Used to allocate a single page of memory. |
+| void\* get_free_pages(flags_t flags, size_t pages) | Used to allocate several physically contiguous pages of memory. |
 
 ### Deallocation Functions
 

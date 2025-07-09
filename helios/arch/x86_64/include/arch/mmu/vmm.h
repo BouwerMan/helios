@@ -8,26 +8,26 @@
 #include <kernel/types.h>
 
 static constexpr int PML4_SIZE_PAGES = 1;
-static constexpr int PML4_ENTRIES    = 512;
+static constexpr int PML4_ENTRIES = 512;
 
-static constexpr u64 FLAGS_MASK	     = 0xFFF;
+static constexpr u64 FLAGS_MASK = 0xFFF;
 static constexpr u64 PAGE_FRAME_MASK = ~FLAGS_MASK;
-static constexpr u64 PAGE_PRESENT    = 1ULL << 0;  // Page is present in memory
-static constexpr u64 PAGE_WRITE	     = 1ULL << 1;  // Writable
-static constexpr u64 PAGE_USER	     = 1ULL << 2;  // Accessible from user-mode
-static constexpr u64 PAGE_PWT	     = 1ULL << 3;  // Write-through caching enabled
-static constexpr u64 PAGE_PCD	     = 1ULL << 4;  // Disable caching
-static constexpr u64 PAGE_ACCESSED   = 1ULL << 5;  // Set by CPU when page is read/written
-static constexpr u64 PAGE_DIRTY	     = 1ULL << 6;  // Set by CPU on write
-static constexpr u64 PAGE_HUGE	     = 1ULL << 7;  // 2 MiB or 1 GiB page (set only in PD or PDPT)
-static constexpr u64 PAGE_PAT	     = 1ULL << 7;  // Page Attribute Table (set in PTE)
-static constexpr u64 PAGE_GLOBAL     = 1ULL << 8;  // Global page (ignores CR3 reload)
+static constexpr u64 PAGE_PRESENT = 1ULL << 0;	   // Page is present in memory
+static constexpr u64 PAGE_WRITE = 1ULL << 1;	   // Writable
+static constexpr u64 PAGE_USER = 1ULL << 2;	   // Accessible from user-mode
+static constexpr u64 PAGE_PWT = 1ULL << 3;	   // Write-through caching enabled
+static constexpr u64 PAGE_PCD = 1ULL << 4;	   // Disable caching
+static constexpr u64 PAGE_ACCESSED = 1ULL << 5;	   // Set by CPU when page is read/written
+static constexpr u64 PAGE_DIRTY = 1ULL << 6;	   // Set by CPU on write
+static constexpr u64 PAGE_HUGE = 1ULL << 7;	   // 2 MiB or 1 GiB page (set only in PD or PDPT)
+static constexpr u64 PAGE_PAT = 1ULL << 7;	   // Page Attribute Table (set in PTE)
+static constexpr u64 PAGE_GLOBAL = 1ULL << 8;	   // Global page (ignores CR3 reload)
 static constexpr u64 PAGE_NO_EXECUTE = 1ULL << 63; // Requires EFER.NXE to be set
 
-static constexpr u64 CACHE_WRITE_BACK	   = 0;			  // PAT=0, PCD=0, PWT=0
-static constexpr u64 CACHE_WRITE_THROUGH   = PAGE_PWT;		  // PAT=0, PCD=0, PWT=1
-static constexpr u64 CACHE_UNCACHABLE	   = PAGE_PCD | PAGE_PWT; // PAT=0, PCD=1, PWT=1
-static constexpr u64 CACHE_UNCACHABLE_ALT  = PAGE_PCD;		  // PAT=0, PCD=1, PWT=0
+static constexpr u64 CACHE_WRITE_BACK = 0;			  // PAT=0, PCD=0, PWT=0
+static constexpr u64 CACHE_WRITE_THROUGH = PAGE_PWT;		  // PAT=0, PCD=0, PWT=1
+static constexpr u64 CACHE_UNCACHABLE = PAGE_PCD | PAGE_PWT;	  // PAT=0, PCD=1, PWT=1
+static constexpr u64 CACHE_UNCACHABLE_ALT = PAGE_PCD;		  // PAT=0, PCD=1, PWT=0
 static constexpr u64 CACHE_WRITE_COMBINING = PAGE_PAT | PAGE_PWT; // PAT=1, PCD=0, PWT=1
 static constexpr u64 CACHE_WRITE_PROTECTED = PAGE_PAT;		  // PAT=1, PCD=0, PWT=0
 
@@ -80,20 +80,6 @@ void vmm_init();
 uint64_t* vmm_create_address_space();
 
 /**
- * @brief Walks the page table hierarchy to locate or create a page table entry.
- *
- * @param pml4   Pointer to the PML4 table.
- * @param vaddr  The virtual address to resolve.
- * @param create Whether to create missing entries in the hierarchy.
- * @param flags  Flags to set for newly created entries.
- *
- * @return       A pointer to the page table entry corresponding to the given
- *               virtual address, or NULL if the entry does not exist and
- *               @create is false.
- */
-uint64_t* walk_page_table(uint64_t* pml4, uintptr_t vaddr, bool create, flags_t flags);
-
-/**
  * @brief Maps a virtual address to a physical address in the page table.
  *
  * @param pml4   Pointer to the PML4 table.
@@ -103,7 +89,7 @@ uint64_t* walk_page_table(uint64_t* pml4, uintptr_t vaddr, bool create, flags_t 
  *
  * @return       0 on success, -1 on failure (e.g., misalignment or mapping issues).
  */
-int map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags);
+int vmm_map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags);
 
 /**
  * @brief Unmaps a virtual address from the page table.
@@ -114,7 +100,7 @@ int map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags);
  * @return       0 on success, -1 on failure (e.g., misalignment).
  *               Returns 0 if the page was already unmapped.
  */
-int unmap_page(uint64_t* pml4, uintptr_t vaddr);
+int vmm_unmap_page(uint64_t* pml4, uintptr_t vaddr);
 
 /**
  * @brief Prunes empty page tables recursively.

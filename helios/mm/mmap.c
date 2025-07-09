@@ -14,11 +14,12 @@ void* mmap_sys(u64* pml4, void* addr, size_t length, int prot, int flags, int fd
 	}
 
 	size_t pages = CEIL_DIV(length, PAGE_SIZE);
-	uptr paddr   = HHDM_TO_PHYS(get_free_pages(AF_KERNEL, pages));
+	uptr paddr = HHDM_TO_PHYS(get_free_pages(AF_KERNEL, pages));
 
 	// TODO: More flags???
 	for (size_t i = 0; i < pages; i++) {
-		int res = map_page(pml4, (uptr)addr + i * PAGE_SIZE, paddr + i * PAGE_SIZE, PAGE_PRESENT | PAGE_WRITE);
+		int res = vmm_map_page(pml4, (uptr)addr + i * PAGE_SIZE, paddr + i * PAGE_SIZE,
+				       PAGE_PRESENT | PAGE_WRITE);
 		if (res) return MAP_FAILED;
 		log_debug("Mapped vaddr: %p, to paddr: %lx", addr, paddr);
 	}

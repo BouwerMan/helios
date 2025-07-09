@@ -98,7 +98,7 @@ void __arch_entry()
 
 	log_init("Init Stage 6: Initializing kernel stack and jumping to kernel_main");
 
-	uintptr_t kernel_stack = get_free_pages(AF_KERNEL, KERNEL_STACK_SIZE_PAGES);
-	__switch_to_new_stack((void*)(kernel_stack + KERNEL_STACK_SIZE_PAGES * PAGE_SIZE), kernel_main);
+	void* kernel_stack = get_free_pages(AF_KERNEL, KERNEL_STACK_SIZE_PAGES);
+	__switch_to_new_stack((void*)((uptr)kernel_stack + KERNEL_STACK_SIZE_PAGES * PAGE_SIZE), kernel_main);
 	__builtin_unreachable();
 }

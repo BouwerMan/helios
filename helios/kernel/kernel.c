@@ -18,6 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <arch/mmu/vmm.h>
 #include <drivers/ata/controller.h>
 #include <drivers/fs/vfs.h>
 #include <drivers/pci/pci.h>
@@ -26,7 +27,6 @@
 #include <kernel/exec.h>
 #include <kernel/helios.h>
 #include <kernel/limine_requests.h>
-#include <kernel/mmu/vmm.h>
 #include <kernel/panic.h>
 #include <kernel/screen.h>
 #include <kernel/syscall.h>
@@ -66,11 +66,11 @@ void kernel_main()
 
 	liballoc_init(); // Just initializes the liballoc spinlock
 	int* test = kmalloc(141);
-	*test	  = 513;
+	*test = 513;
 
 	log_debug("kmalloc returned %p, stored %d in it", (void*)test, *test);
 
-	init_scheduler();
+	scheduler_init();
 	log_info("Initalizing syscalls");
 	syscall_init();
 	log_info("Initializing dmesg");
@@ -89,7 +89,7 @@ void kernel_main()
 	mount("/", fat_device, &fat_device->part_table[0], FAT16);
 
 	struct vfs_file f = { 0 };
-	int res2	  = vfs_open("/dir/test2.txt", &f);
+	int res2 = vfs_open("/dir/test2.txt", &f);
 	if (res2 < 0) {
 		log_error("oh no");
 	} else {
@@ -97,7 +97,7 @@ void kernel_main()
 	}
 	log_info("open 2");
 	struct vfs_file f2 = { 0 };
-	res2		   = vfs_open("/test2.txt", &f2);
+	res2 = vfs_open("/test2.txt", &f2);
 	if (res2 < 0) {
 		log_error("oh no");
 	} else {
@@ -109,37 +109,7 @@ void kernel_main()
 	vfs_close(&f2);
 #endif
 
-	log_info(TESTING_HEADER, "Slab Allocator");
-
-	struct slab_cache test_cache = { 0 };
-	(void)slab_cache_init(&test_cache, "Test cache", sizeof(uint64_t), 0, NULL, NULL);
-	log_debug("Test cache slab size: %d pages", SLAB_SIZE_PAGES);
-
-	test_use_before_alloc(&test_cache);
-	test_buffer_overflow(&test_cache);
-	test_buffer_underflow(&test_cache);
-	test_valid_usage(&test_cache);
-	test_object_alignment(&test_cache);
-
-	slab_cache_purge_corrupt(&test_cache);
-
-	uint64_t* data = slab_alloc(&test_cache);
-	*data	       = 12345;
-	log_info("Got data at %p, set value to %lu", (void*)data, *data);
-	uint64_t* data2 = slab_alloc(&test_cache);
-	*data2		= 54321;
-	log_info("Got data2 at %p, set value to %lu", (void*)data2, *data2);
-	size_t slab_bytes = SLAB_SIZE_PAGES * PAGE_SIZE;
-	size_t mask	  = ~(slab_bytes - 1);
-	log_debug("Slab base for data: %lx", (uintptr_t)data & mask);
-	slab_dump_stats(&test_cache);
-	slab_free(&test_cache, data2);
-
-	slab_cache_destroy(&test_cache);
-	(void)slab_alloc(&test_cache);
-	slab_dump_stats(&test_cache);
-
-	log_info(TESTING_FOOTER, "Slab Allocator");
+	slab_test();
 
 	struct limine_module_response* mod = mod_request.response;
 

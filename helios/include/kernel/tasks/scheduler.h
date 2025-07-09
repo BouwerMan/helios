@@ -6,6 +6,8 @@
 
 #include <util/list.h>
 
+typedef void (*entry_func)(void);
+
 static constexpr int SCHEDULER_TIME = 20; // ms per preemptive tick
 static constexpr int MAX_RESOURCES = 20;
 
@@ -21,8 +23,6 @@ enum TASK_TYPE {
 	KERNEL_TASK,
 	USER_TASK,
 };
-
-typedef void (*entry_func)(void);
 
 // Any changes to this structure needs to be reflected in switch.asm
 struct task {
@@ -52,11 +52,9 @@ struct waitqueue {
 	struct list list;
 };
 
-void task_add(struct task* task);
 struct task* new_task(entry_func entry);
 void schedule(struct registers* regs);
-void init_scheduler(void);
-struct task* scheduler_pick_next();
+void scheduler_init(void);
 void scheduler_tick();
 void enable_preemption();
 void disable_preemption();
