@@ -181,7 +181,7 @@ void buddy_dump_free_lists()
 	spinlock_acquire(&allocator->lock);
 
 	for (size_t order = allocator->min_order; order <= allocator->max_order; order++) {
-		struct list* head = &allocator->free_lists[order];
+		struct list_head* head = &allocator->free_lists[order];
 
 		if (list_empty(head)) {
 			log_info("Order %zu: (empty)", order);
@@ -291,8 +291,8 @@ void* __get_free_pages(aflags_t flags, size_t order)
  */
 void* get_free_pages(aflags_t flags, size_t pages)
 {
-	size_t rounded_size = round_to_power_of_2(pages);
-	size_t order = (size_t)log2(rounded_size);
+	size_t rounded_size = roundup_pow_of_two(pages);
+	size_t order = (size_t)ilog2(rounded_size);
 	void* page_virt = __get_free_pages(flags, order);
 	if (!page_virt) return 0;
 
@@ -352,8 +352,8 @@ void free_pages(void* addr, size_t pages)
 	uintptr_t page_virt = HHDM_TO_PHYS((uintptr_t)addr);
 	struct page* page = &mem_map[phys_to_pfn(page_virt)];
 
-	size_t rounded_size = round_to_power_of_2(pages);
-	size_t order = (size_t)log2(rounded_size);
+	size_t rounded_size = roundup_pow_of_two(pages);
+	size_t order = (size_t)ilog2(rounded_size);
 
 	log_debug("Freeing %zu pages at address %p (order: %zu)", pages, addr, order);
 	__free_pages(page, order);
@@ -456,7 +456,7 @@ static struct page* alloc_pages_core(struct buddy_allocator* allocator, aflags_t
 
 	// Iterate from requested order to largest possible
 	for (size_t i = order; i <= allocator->max_order; i++) {
-		struct list* order_list = &allocator->free_lists[i];
+		struct list_head* order_list = &allocator->free_lists[i];
 		if (list_empty(order_list)) {
 			log_debug("Free list for order %zu is empty", i);
 			continue;

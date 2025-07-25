@@ -15,6 +15,8 @@
 
 /// Macros
 
+#define UNIMPLEMENTED __builtin_unreachable()
+
 /**
  * @brief Computes the ceiling of the division of two numbers.
  * 
@@ -30,14 +32,6 @@
 	})
 
 /**
- * @brief Checks if a number is a power of two.
- * 
- * @param n The number to check.
- * @return True if n is a power of two, false otherwise.
- */
-#define IS_POWER_OF_TWO(n) (n && !(n & (n - 1)))
-
-/**
  * @brief Aligns a given size up to the nearest multiple of the specified alignment.
  * 
  * @param size The size to align.
@@ -46,21 +40,47 @@
  */
 #define ALIGN_UP(size, align) (((size + align - 1) / align) * align)
 
+/**
+ * @brief Return the maximum of two values.
+ */
 #define MAX(a, b)                       \
-	__extension__({                 \
+	({                              \
 		__typeof__(a) _a = (a); \
 		__typeof__(b) _b = (b); \
 		_a > _b ? _a : _b;      \
 	})
 
+/**
+ * @brief Return the minimum of two values.
+ */
 #define MIN(a, b)                       \
-	__extension__({                 \
+	({                              \
 		__typeof__(a) _a = (a); \
 		__typeof__(b) _b = (b); \
 		_a < _b ? _a : _b;      \
 	})
 
+/**
+ * @brief Clamp a value between lower and upper bounds.
+ */
+#define CLAMP(val, lo, hi) (MAX((lo), MIN((val), (hi))))
+
+/**
+ * @brief Get the number of elements in a statically sized array.
+ * @param arr Array variable (not a pointer).
+ * @return Number of elements.
+ */
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+
+/**
+ * @brief Set a single bit in a value.
+ */
+#define SET_BIT(n) (1ULL << (n))
+
+/**
+ * @brief Get a single bit in a value.
+ */
+#define GET_BIT(val, n) (((val) >> (n)) & 1U)
 
 /**
  * @brief Macro to indicate that the given expression is unlikely to be true.
@@ -116,7 +136,7 @@ struct kernel_context {
 
 	struct bootinfo bootinfo;
 
-	struct list slab_caches;
+	struct list_head slab_caches;
 };
 
 extern struct kernel_context kernel;

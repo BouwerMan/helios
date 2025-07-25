@@ -10,6 +10,7 @@ export OSNAME=HeliOS
 export AR:=$(PREFIX)/$(HOST)-ar
 export AS:=$(PREFIX)/$(HOST)-as
 export CC:=$(PREFIX)/$(HOST)-gcc
+# export CC:=clang
 
 $(info Using cross-compiler: $(CC))
 

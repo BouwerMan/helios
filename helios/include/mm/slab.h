@@ -14,7 +14,6 @@ static constexpr int MAX_CACHE_NAME_LEN = 32;
 
 // NOTE: SLAB_SIZE_PAGES must be a power of 2.
 static constexpr int SLAB_SIZE_PAGES = 16;
-_Static_assert(IS_POWER_OF_TWO(SLAB_SIZE_PAGES) == true, "SLAB_SIZE_PAGES must be power of 2");
 
 // Maximum number of free slabs that a cache can have before it starts destroying them.
 static constexpr int MAX_EMPTY_SLABS = 8;
@@ -49,23 +48,23 @@ struct slab_cache {
 	spinlock_t lock;
 
 	/** @brief List of empty slabs with no allocated objects. */
-	struct list empty;
+	struct list_head empty;
 	/** @brief Number of empty slabs. */
 	size_t num_empty;
 	/** @brief List of partially filled slabs with some allocated objects. */
-	struct list partial;
+	struct list_head partial;
 	/** @brief Number of partially filled slabs. */
 	size_t num_partial;
 	/** @brief List of fully occupied slabs with no free objects. */
-	struct list full;
+	struct list_head full;
 	/** @brief Number of fully occupied slabs. */
 	size_t num_full;
 	/** @brief List of slabs in quarantine for debugging use-after-free errors. */
-	struct list quarantine;
+	struct list_head quarantine;
 	/** @brief Number of slabs currently in the quarantine list. */
 	size_t num_quarantine;
 	/** @brief Link to the slab cache node in the global list of caches. */
-	struct list cache_node;
+	struct list_head cache_node;
 
 	/** @brief Constructor callback for initializing objects in the cache. */
 	void (*constructor)(void*);
@@ -99,7 +98,7 @@ enum _SLAB_LOCATION {
  */
 struct slab {
 	/** @brief Link to the next slab in the list. */
-	struct list link;
+	struct list_head link;
 	/** @brief Index of the top of the free stack. */
 	size_t free_top;
 	/** @brief Pointer to the parent slab cache. */

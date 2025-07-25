@@ -39,12 +39,12 @@ struct task {
 	entry_func entry;
 	struct vfs_file* resources[MAX_RESOURCES];
 	struct task* parent; // Should this just be parent PID?
-	struct list list;
+	struct list_head list;
 	char name[MAX_TASK_NAME_LEN];
 };
 
 struct scheduler_queue {
-	struct list task_list; // list head of the queue
+	struct list_head task_list; // list head of the queue
 	struct task* current_task;
 	struct slab_cache* cache;
 	size_t task_count;
@@ -52,7 +52,7 @@ struct scheduler_queue {
 };
 
 struct waitqueue {
-	struct list list;
+	struct list_head list;
 };
 
 struct task* new_task(const char* name, entry_func entry);

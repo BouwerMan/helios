@@ -19,6 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <kernel/kmath.h>
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
@@ -180,7 +181,7 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
 		object_align = MAX(object_align, sizeof(void*));
 	}
 
-	if (!IS_POWER_OF_TWO(object_align)) {
+	if (!is_pow_of_two(object_align)) {
 		log_error("Object alignment is not a power of 2: %lu", object_align);
 		return -EALIGN;
 	}
@@ -231,17 +232,9 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
 	list_init(&cache->full);
 	list_init(&cache->quarantine);
 	list_append(&kernel.slab_caches, &cache->cache_node);
-	cache->num_empty = 0;
-	cache->num_partial = 0;
-	cache->num_full = 0;
-	cache->num_quarantine = 0;
 
 	cache->constructor = constructor;
 	cache->destructor = destructor;
-
-	cache->total_slabs = 0;
-	cache->total_objects = 0;
-	cache->used_objects = 0;
 
 	// Copy the cache name and ensure null termination
 	strncpy(cache->name, name, MAX_CACHE_NAME_LEN);
@@ -715,7 +708,7 @@ static void slab_relocate(struct slab* slab, enum _SLAB_LOCATION location)
 		&cache->num_full,
 		&cache->num_quarantine,
 	};
-	struct list* lists[] = {
+	struct list_head* lists[] = {
 		&cache->empty,
 		&cache->partial,
 		&cache->full,

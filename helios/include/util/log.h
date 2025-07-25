@@ -46,7 +46,7 @@ enum LOG_MODE {
 		char __log_buf[LOG_BUFFER_SIZE];                                                                       \
 		int __log_len = snprintf(__log_buf, sizeof(__log_buf),                                                 \
 					 color level_str LOG_COLOR_RESET " %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, \
-					 __func__, ##__VA_ARGS__);                                                     \
+					 __func__ __VA_OPT__(, ) __VA_ARGS__);                                         \
                                                                                                                        \
 		if (__log_len > 0) {                                                                                   \
 			/* Output the original message (which might be truncated). */                                  \
@@ -63,46 +63,41 @@ enum LOG_MODE {
 		}                                                                                                      \
 	} while (0)
 
-// Define or redefine log_debug
 #if !defined(log_debug) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_DEBUG
-#define log_debug(fmt, ...) _LOG_IMPL("[DEBUG]", "", fmt, ##__VA_ARGS__)
+#define log_debug(fmt, ...) _LOG_IMPL("[DEBUG]", "", fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_debug(fmt, ...) ((void)0)
 #endif
 #endif
 
-// Define or redefine log_info
 #if !defined(log_info) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_INFO
-#define log_info(fmt, ...) _LOG_IMPL("[INFO] ", LOG_COLOR_CYAN, fmt, ##__VA_ARGS__)
+#define log_info(fmt, ...) _LOG_IMPL("[INFO] ", LOG_COLOR_CYAN, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_info(fmt, ...) ((void)0)
 #endif
 #endif
 
-// Define or redefine log_warn
 #if !defined(log_warn) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_WARN
-#define log_warn(fmt, ...) _LOG_IMPL("[WARN] ", LOG_COLOR_YELLOW, fmt, ##__VA_ARGS__)
+#define log_warn(fmt, ...) _LOG_IMPL("[WARN] ", LOG_COLOR_YELLOW, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_warn(fmt, ...) ((void)0)
 #endif
 #endif
 
-// Define or redefine log_error
 #if !defined(log_error) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_ERROR
-#define log_error(fmt, ...) _LOG_IMPL("[ERROR]", LOG_COLOR_RED, fmt, ##__VA_ARGS__)
+#define log_error(fmt, ...) _LOG_IMPL("[ERROR]", LOG_COLOR_RED, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_error(fmt, ...) ((void)0)
 #endif
 #endif
 
-// log_init is a special flavor of log_info
 #if !defined(log_init) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_INFO
-#define log_init(fmt, ...) _LOG_IMPL("[INIT] ", LOG_COLOR_GREEN, fmt, ##__VA_ARGS__)
+#define log_init(fmt, ...) _LOG_IMPL("[INIT] ", LOG_COLOR_GREEN, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_init(fmt, ...) ((void)0)
 #endif

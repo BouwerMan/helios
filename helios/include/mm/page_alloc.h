@@ -19,8 +19,8 @@
 static constexpr int MAX_ORDER = 10; // 2^10 pages (1024 pages), or 4MiB blocks
 
 struct buddy_allocator {
-	struct list free_lists[MAX_ORDER + 1]; // One for each order
-	size_t size;			       // Total size in bytes
+	struct list_head free_lists[MAX_ORDER + 1]; // One for each order
+	size_t size;				    // Total size in bytes
 	size_t min_order;
 	size_t max_order;
 	spinlock_t lock;

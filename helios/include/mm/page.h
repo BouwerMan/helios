@@ -30,7 +30,7 @@ enum BLOCK_STATE {
 
 // TODO: Should do funky union shit so that I save space since this struct will serve as metadata for allocators
 struct page {
-	struct list list;
+	struct list_head list;
 	atomic_t ref_count;  // Reference count for the page
 	unsigned long flags; // Flags for the page (e.g., dirty, accessed)
 

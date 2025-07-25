@@ -1,46 +1,50 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#if defined(__x86_64__) || defined(_M_X64)
-extern const int tab64[64];
-// Holy
-// https://stackoverflow.com/a/11398748
+#define __BIT_WIDTH(x) (sizeof(x) * CHAR_BIT)
 
-/// Computes the log base 2 of a value
-static inline int log2(uint64_t value)
+/**
+ * @brief Computes the integer base-2 logarithm of an unsigned long value.
+ * @param v  Unsigned long value. Must be non-zero; behavior is undefined for zero.
+ * @return   Zero-based index of the most significant set bit in v.
+ */
+static inline int ilog2(unsigned long v)
 {
-	value |= value >> 1;
-	value |= value >> 2;
-	value |= value >> 4;
-	value |= value >> 8;
-	value |= value >> 16;
-	value |= value >> 32;
-	return tab64[((uint64_t)((value - (value >> 1)) * 0x07EDD5E59A4E28C2)) >> 58];
+	return (int)__BIT_WIDTH(v) - 1 - __builtin_clzll(v);
 }
 
-static inline size_t round_to_power_of_2(size_t n)
+/**
+ * @brief Rounds an unsigned long value up to the next highest power of two.
+ * @param v  Unsigned long value.
+ * @return   The smallest power of two greater than or equal to v.
+ *           Returns 1 if v is zero.
+ */
+static inline unsigned long roundup_pow_of_two(unsigned long v)
 {
-	n--;
-	n |= n >> 1;
-	n |= n >> 2;
-	n |= n >> 4;
-	n |= n >> 8;
-	n |= n >> 16;
-	n |= n >> 32;
-	return ++n;
+	if (v == 0) return 1;
+	return 1ULL << ((int)__BIT_WIDTH(v) - __builtin_clzll(v - 1));
 }
-#else
-extern const int tab32[32];
-static inline int log2(uint32_t value)
+
+/**
+ * @brief Rounds an unsigned long down to the nearest power of two.
+ *        Returns 0 for zero input.
+ */
+static inline unsigned long rounddown_pow_of_two(unsigned long v)
 {
-	value |= value >> 1;
-	value |= value >> 2;
-	value |= value >> 4;
-	value |= value >> 8;
-	value |= value >> 16;
-	return tab32[(uint32_t)(value * 0x07C4ACDD) >> 27];
+	if (v == 0) return 0;
+	return 1UL << ((int)__BIT_WIDTH(v) - 1 - __builtin_clzll(v));
 }
-#endif
+
+/**
+ * @brief Checks if an unsigned long value is a power of two.
+ * @param n  Unsigned long value.
+ * @return   true if n is a power of two (and non-zero), false otherwise.
+ */
+static inline bool is_pow_of_two(unsigned long n)
+{
+	return (n != 0 && ((n & (n - 1)) == 0));
+}
