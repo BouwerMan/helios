@@ -15,11 +15,14 @@ ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count)
 
 // TODO: Implement a tty_read that gets keyboard input
 
-// The collection of operations for our TTY device
-struct inode_ops tty_device_ops = {
+struct file_ops tty_device_fops = {
 	.write = tty_write,
 	.read = NULL,
 	.open = NULL,
 	.close = NULL,
+};
+
+// The collection of operations for our TTY device
+struct inode_ops tty_device_ops = {
 	.lookup = NULL,
 };

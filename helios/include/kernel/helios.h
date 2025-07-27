@@ -97,7 +97,7 @@
 #define BOCHS_BREAKPOINT (asm volatile("xchgw %bx, %bx"))
 #define QEMU_BREAKPOINT	 (__asm__ volatile("jmp $"))
 
-#define QEMU_SHUTDOWN outw(0x604, 0x2000)
+#define QEMU_SHUTDOWN() outword(0x604, 0x2000)
 
 #define TESTING_HEADER                                                                        \
 	"\n\n*****************************************************************************\n" \

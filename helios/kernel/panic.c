@@ -19,7 +19,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <arch/ports.h>
 #include <kernel/dmesg.h>
+#include <kernel/helios.h>
 #include <kernel/panic.h>
 #include <kernel/screen.h>
 
@@ -32,6 +34,7 @@ void panic(const char* message)
 	dmesg_flush_raw();
 	set_color(COLOR_RED, COLOR_BLACK);
 	log_error("KERNEL PANIC!\n%s", message);
+	QEMU_SHUTDOWN();
 	for (;;)
 		__asm__ volatile("hlt");
 }

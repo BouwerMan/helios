@@ -19,6 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <kernel/tasks/scheduler.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -27,7 +28,7 @@
 #include <drivers/fs/vfs.h>
 #include <kernel/panic.h>
 #include <mm/slab.h>
-
+#include <util/hashtable.h>
 #include <util/ht.h>
 #include <util/log.h>
 
@@ -44,8 +45,11 @@ struct vfs_superblock** sb_list;
 static uint8_t sb_idx = 0;
 
 struct slab_cache dentry_cache = { 0 };
+struct slab_cache file_cache = { 0 };
 
-struct ht* dentry_ht;
+// struct ht* dentry_ht;
+static constexpr int d_ht_bits = 12; // 4096 buckets
+DEFINE_HASHTABLE(d_ht, d_ht_bits);
 
 static struct vfs_mount* g_vfs_root_mount = nullptr;
 
@@ -81,37 +85,24 @@ static void add_superblock(struct vfs_superblock* sb)
 
 /**
  * vfs_init - Initializes the virtual filesystem.
- * @dhash_size: The size of the dentry hash table (must be a power of 2).
- *
- * This function sets up the initial structures required for the virtual
- * filesystem, including the superblock list, dentry hash table, and
- * filesystem initialization. It allocates memory for the superblock list
- * and creates the dentry hash table with the specified size. Additionally,
- * it initializes the FAT filesystem as a placeholder.
- *
- * Note:
- * - The `dhash_size` parameter must be a power of 2 for proper hash table
- *   functionality.
- * - Dentry destructors are not yet implemented.
- * - Filesystem initialization is currently limited to FAT.
  */
-void vfs_init(size_t dhash_size)
+void vfs_init()
 {
 	sb_list = kmalloc(sizeof(uintptr_t) * 8);
 
-	int res = slab_cache_init(&dentry_cache, "VFS Dentry", sizeof(struct vfs_dentry), 8, NULL, NULL);
+	int res = slab_cache_init(&dentry_cache, "VFS Dentry", sizeof(struct vfs_dentry), 0, NULL, NULL);
 	if (res < 0) {
 		log_error("Could not init dentry cache, slab_cache_init() returned %d", res);
 		panic("Dentry cache init failure");
 	}
 
-	// TODO: Implement dentry destructors
-	dentry_ht = ht_create(dhash_size);
-	dentry_ht->ops->hash = dentry_hash;
-	dentry_ht->ops->compare = dentry_compare;
+	res = slab_cache_init(&file_cache, "VFS Filesystem", sizeof(struct vfs_file), 8, nullptr, nullptr);
+	if (res < 0) {
+		log_error("Could not init file cache, slab_cache_init() returned %d", res);
+		panic("file cache init failure");
+	}
 
-	// TODO: Better way to init all the filesystems
-	// fat_init();
+	ramfs_init();
 }
 
 int mount_initial_rootfs()
@@ -172,7 +163,18 @@ mount_point_fail:
 struct vfs_dentry* dget(struct vfs_dentry* dentry)
 {
 	dentry->ref_count++;
+	log_debug("Dentry %s ref_count: %d", dentry->name, dentry->ref_count);
 	return dentry;
+}
+
+void dput(struct vfs_dentry* dentry)
+{
+	dentry->ref_count--;
+	log_debug("Dentry %s ref_count: %d", dentry->name, dentry->ref_count);
+	if (dentry->ref_count <= 0) {
+		log_debug("Deallocating dentry %s", dentry->name);
+		dentry_dealloc(dentry);
+	}
 }
 
 /**
@@ -181,7 +183,29 @@ struct vfs_dentry* dget(struct vfs_dentry* dentry)
  */
 void dentry_add(struct vfs_dentry* dentry)
 {
-	ht_set(dentry_ht, dentry, dentry);
+	u32 hash = dentry_hash(dentry);
+	struct hlist_head* bucket = &d_ht[hash_min(hash, HASH_BITS(d_ht))];
+	dentry->bucket = bucket;
+	hash_add(d_ht, &dentry->hash, hash);
+	dentry->inode->nlink++;
+}
+
+/**
+ * dentry_ht_check - Check if a dentry exists in the hash table.
+ * @d: Pointer to the dentry to check.
+ *
+ * Return: Pointer to the matching dentry if found, or NULL if not found.
+ */
+struct vfs_dentry* dentry_ht_check(struct vfs_dentry* d)
+{
+	u32 key = dentry_hash(d);
+	struct vfs_dentry* obj = nullptr;
+	hash_for_each_possible (d_ht, obj, hash, key) {
+		if (dentry_compare(d, obj)) {
+			return obj;
+		}
+	}
+	return nullptr;
 }
 
 /**
@@ -198,30 +222,19 @@ void dentry_add(struct vfs_dentry* dentry)
  */
 struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
 {
-	// TODO: Make better hashtable implementation like the linux kernel.
 	struct vfs_dentry* found;
-	// Have to allocate some stuff beforehand for the filesystem and hash table checks
-	struct vfs_dentry* child = slab_alloc(&dentry_cache);
-	if (!child) return nullptr;
-	child->name = strdup(name);
-	if (!child->name) {
-		slab_free(&dentry_cache, child);
-		return nullptr;
-	}
-	child->parent = parent;
-	child->fs_data = parent->fs_data;
-	// Check hash table first if found exit
-	if ((found = ht_get(dentry_ht, child))) {
+	struct vfs_dentry* child = dentry_alloc(parent, name);
+
+	// Check hash table first
+	if ((found = dentry_ht_check(child))) {
 		// Since we found it, we free all the child init stuff then return found
-		kfree(child->name);
-		slab_free(&dentry_cache, child);
+		dentry_dealloc(child);
 		return dget(found);
 	}
 
 	if (!parent->inode || !parent->inode->ops || !parent->inode->ops->lookup) {
 		log_error("Invalid inode operations");
-		kfree(child->name);
-		slab_free(&dentry_cache, child);
+		dentry_dealloc(child);
 		return nullptr; // Handle invalid inode or missing lookup operation
 	}
 
@@ -241,7 +254,7 @@ struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
  *            special constants are mixed into the hash.
  * @return 32-bit FNV-1a hash value representing the dentry.
  */
-uint32_t dentry_hash(const void* key)
+u32 dentry_hash(const struct vfs_dentry* key)
 {
 	static constexpr u32 FNV_PRIME = 0x01000193;
 	static constexpr u32 FNV_OFFSET = 0x811c9dc5;
@@ -289,80 +302,153 @@ uint32_t dentry_hash(const void* key)
  * This function checks if two `vfs_dentry` structures are equal by comparing
  * their names and the IDs of their parent inodes.
  *
- * @param key1 A pointer to the first `vfs_dentry` structure.
- * @param key2 A pointer to the second `vfs_dentry` structure.
+ * @param d1 A pointer to the first `vfs_dentry` structure.
+ * @param d2 A pointer to the second `vfs_dentry` structure.
  * @return `true` if the dentries are equal, `false` otherwise.
  */
-bool dentry_compare(const void* key1, const void* key2)
+bool dentry_compare(const struct vfs_dentry* d1, const struct vfs_dentry* d2)
 {
-	struct vfs_dentry* dkey1 = (struct vfs_dentry*)key1;
-	struct vfs_dentry* dkey2 = (struct vfs_dentry*)key2;
-	return (strcmp(dkey1->name, dkey2->name) == 0) && (dkey1->parent->inode->id == dkey2->parent->inode->id);
+	return (strcmp(d1->name, d2->name) == 0) && (d1->parent->inode->id == d2->parent->inode->id);
 }
 
-/**
- * vfs_open - Opens a file in the virtual filesystem.
- * @path: The path to the file to be opened.
- * @file: Pointer to the vfs_file structure where file details will be stored.
- *
- * This function resolves the given file path, validates the inode, allocates
- * memory for the file buffer, and invokes the filesystem-specific open
- * operation. It ensures proper error handling and resource management.
- *
- * Return:
- *  - 0 on success.
- *  - -1 if path resolution fails or the inode is invalid.
- *  - -2 if memory allocation fails.
- *  - Error code from the filesystem-specific open operation on failure.
- */
-int vfs_open(const char* path, struct vfs_file* file)
+int vfs_open(const char* path, int flags)
 {
-	// Just going to have this do the path walking
-	// linux kernel takes inode as argument, might want that in the future.
-	// Would probably jsut confuse myself because then you need a wrapper
-	// function (open()) that travels the path and then calls this for fs
-	// specific open().
+	// TODO: Rework lookup to check for mount points.
 
-#if 0
-
-	struct vfs_dentry* dentry = vfs_resolve_path(path);
-	if (!dentry) return -1;
-	if (!dentry->inode) return -1;
-
-	if (dentry->inode->f_size == 0) return -1; // Invalid file size
-	file->file_ptr = kmalloc(dentry->inode->f_size);
-	if (!file->file_ptr) return -2; // mem alloc failure
-
-	file->file_size = dentry->inode->f_size;
-	file->read_ptr = file->file_ptr;
-
-	int ret = dentry->inode->ops->open(dentry->inode, file);
-	if (ret < 0) {
-		kfree(file->file_ptr);
-		return ret;
+	struct vfs_dentry* dentry = vfs_lookup(path);
+	if (!dentry || !dentry->inode) {
+		if (flags & O_CREAT) {
+			int res = vfs_create(path, VFS_PERM_ALL, flags, &dentry);
+			if (res < 0) {
+				return res;
+			}
+		} else {
+			return -VFS_ERR_NOENT;
+		}
 	}
-	return 0;
-#endif
-	UNIMPLEMENTED;
-	return -1;
+
+	// TODO: Validate flags (dentries don't support access flags yet)
+
+	struct vfs_file* file = slab_alloc(&file_cache);
+	if (!file) {
+		// TODO: release dentry?
+		log_error("Could not allocate vfs_file");
+		return -VFS_ERR_NOMEM;
+	}
+
+	file->dentry = dget(dentry);
+	file->f_pos = (flags & O_APPEND) ? (off_t)dentry->inode->f_size : 0;
+	file->flags = flags;
+	file->ref_count = 1;
+	file->fops = dentry->inode->fops;
+
+	if (file->fops->open) {
+		int res = file->fops->open(dentry->inode, file);
+		if (res < 0) {
+			slab_free(&file_cache, file);
+			return res;
+		}
+	}
+
+	int fd = install_fd(get_current_task(), file);
+	if (fd < 0) {
+		slab_free(&file_cache, file);
+		return -VFS_ERR_NOSPC; // Is this the right code?
+	}
+
+	return fd;
 }
 
-/**
- * vfs_close - Closes a file in the virtual filesystem.
- * @file: Pointer to the vfs_file structure representing the file to be closed.
- */
-void vfs_close(struct vfs_file* file)
+int vfs_close(int fd)
 {
-	UNIMPLEMENTED;
+	struct vfs_file* file = get_file(fd);
+	if (!file) {
+		return -VFS_ERR_INVAL;
+	}
+
+	file->fops->close(file->dentry->inode, file);
+	file->ref_count--;
+	if (file->ref_count <= 0) {
+		dput(file->dentry);
+		slab_free(&file_cache, file);
+	}
+
+	return VFS_OK;
 }
 
 void vfs_dump_child(struct vfs_dentry* parent)
 {
 	struct vfs_dentry* child;
-	list_for_each_entry(child, &parent->children, siblings)
-	{
-		log_debug("%s", child->name);
+	list_for_each_entry (child, &parent->children, siblings) {
+		log_debug("%s - type: %d", child->name, child->inode->filetype);
 	}
+}
+
+int vfs_create(const char* path, uint16_t mode, int flags, struct vfs_dentry** out_dentry)
+{
+	// Split path into parent + basename
+	char* path_copy = strdup(path);
+	trim_trailing(path_copy, '/');
+	char* name = strrchr(path_copy, '/');
+
+	if (!name || !*(name + 1)) {
+		kfree(path_copy);
+		return -VFS_ERR_INVAL;
+	}
+
+	// Split into parent and name
+	*name = '\0';
+	name++; // Now, name points to the last component
+
+	// Determine parent string
+	const char* parent = (path_copy[0] == '\0') ? "/" : path_copy;
+
+	log_debug("Path: %s, p: %s, name: %s", path, parent, name);
+
+	struct vfs_dentry* pdentry = vfs_lookup(parent);
+	if (!pdentry || !pdentry->inode || !(pdentry->inode->filetype == FILETYPE_DIR)) {
+		kfree(path_copy);
+		return -VFS_ERR_NOTDIR;
+	}
+
+	// Try to lookup the file by name
+	struct vfs_dentry* child = dentry_lookup(pdentry, name);
+
+	if (child && child->inode) {
+		if (flags & O_EXCL) {
+			dput(child);
+			kfree(path_copy);
+			return -VFS_ERR_EXIST;
+		}
+		// File exists but not O_EXCL — treat as success?
+		*out_dentry = child;
+		kfree(path_copy);
+		return VFS_OK;
+	}
+
+	child = dentry_alloc(pdentry, name);
+	if (!child) {
+		kfree(path_copy);
+		return -VFS_ERR_NOMEM;
+	}
+
+	if (!pdentry->inode->ops || !pdentry->inode->ops->create) {
+		dentry_dealloc(child);
+		kfree(path_copy);
+		return -VFS_ERR_NODEV;
+	}
+
+	int res = pdentry->inode->ops->create(pdentry->inode, child, mode); // or default mode
+	if (res < 0) {
+		dentry_dealloc(child);
+		kfree(path_copy);
+		return res;
+	}
+	dentry_add(child); // Now track the new dentry in the hashtable
+
+	*out_dentry = child;
+
+	return VFS_OK;
 }
 
 int vfs_mkdir(const char* path, uint16_t mode)
@@ -415,9 +501,9 @@ int vfs_mkdir(const char* path, uint16_t mode)
 
 	int res = pinode->ops->mkdir(pinode, child, mode);
 	if (res < 0) {
-		kfree(child->name);
-		slab_free(&dentry_cache, child);
+		dentry_dealloc(child);
 		kfree(buf);
+		return res;
 	}
 
 	dentry_add(child);
@@ -426,75 +512,70 @@ int vfs_mkdir(const char* path, uint16_t mode)
 	return VFS_OK;
 }
 
+ssize_t vfs_write(int fd, const char* buffer, size_t count)
+{
+	struct vfs_file* file = get_file(fd);
+	if (!file) {
+		return -VFS_ERR_INVAL;
+	}
+
+	return file->fops->write(file, buffer, count);
+}
+
+ssize_t vfs_read(int fd, char* buffer, size_t count)
+{
+	struct vfs_file* file = get_file(fd);
+	if (!file) {
+		return -VFS_ERR_INVAL;
+	}
+
+	return file->fops->read(file, buffer, count);
+}
+
+off_t vfs_lseek(int fd, off_t offset, int whence)
+{
+	struct vfs_file* file = get_file(fd);
+	if (!file) {
+		return -VFS_ERR_INVAL;
+	}
+
+	switch (whence) {
+	case SEEK_SET:
+		file->f_pos = offset;
+		return file->f_pos;
+	case SEEK_CUR:
+		if (file->f_pos + offset < 0) break;
+		file->f_pos += offset;
+		return file->f_pos;
+	case SEEK_END:
+		file->f_pos = (off_t)file->dentry->inode->f_size + offset;
+		return file->f_pos;
+	}
+
+	return -VFS_ERR_INVAL;
+}
+
+struct vfs_file* get_file(int fd)
+{
+	if (fd >= MAX_RESOURCES || fd < 0) {
+		return nullptr;
+	}
+
+	struct task* current_task = get_current_task();
+
+	return current_task->resources[fd];
+}
+
 bool vfs_does_name_exist(struct vfs_dentry* parent, const char* name)
 {
 	struct vfs_dentry* child;
-	list_for_each_entry(child, &parent->children, siblings)
-	{
+	list_for_each_entry (child, &parent->children, siblings) {
 		if (!strcmp(child->name, name)) {
 			return true;
 		}
 	}
 
 	return false;
-}
-
-/**
- * mount - Mounts a filesystem at the specified mount point.
- * @mount_point: The path where the filesystem will be mounted.
- * @device: Pointer to the ATA device structure representing the storage device.
- * @partition: Pointer to the partition structure containing partition details.
- * @fs_type: The type of filesystem to mount (e.g., FAT32, EXT2).
- *
- * This function initializes a mount structure, associates it with the given
- * device and partition, and registers it in the system. If the partition is
- * present, it initializes the filesystem and superblock, and adds them to
- * the system's mount and superblock lists.
- *
- * Return:
- *  - 0 on successful mount and initialization.
- *  - 1 if the partition is not present.
- *  - -1 on failure (e.g., memory allocation failure or missing mount function).
- */
-int mount(const char* mount_point, sATADevice* device, sPartition* partition, uint8_t fs_type)
-{
-#if 0
-	// building mount struct
-	struct vfs_mount* mount = kmalloc(sizeof(struct vfs_mount));
-	if (!mount) return -1;
-	mount->mount_point = strdup(mount_point);
-	if (!mount->mount_point) {
-		kfree(mount);
-		return -1;
-	}
-	mount->device = device;
-	mount->lba_start = (uint32_t)partition->start;
-	mount->flags = partition->present ? MOUNT_PRESENT : 0;
-	mount->next = NULL;
-
-	// If it is present we add it to the array and init filesystem
-	if (mount->flags & MOUNT_PRESENT) {
-		log_info("Adding mount");
-		register_mount(mount);
-		// Set rootfs
-		log_info("Initializing filesystem");
-		struct vfs_fs_type* fs = find_filesystem(fs_type);
-		if (fs->mount == NULL) panic("uh oh mount function dont exist");
-		struct vfs_superblock* sb = fs->mount(device, mount->lba_start, 0);
-		if (!mount) {
-			kfree(mount->mount_point);
-			kfree(mount);
-			return -1;
-		}
-		mount->sb = sb;
-		add_superblock(sb);
-		if (mount->mount_point[0] == '/' && (strlen(mount->mount_point) == 1)) {
-			rootfs = mount->sb;
-		}
-		return 0;
-	}
-	return 1;
-#endif
 }
 
 // source should be nullptr for ramfs/virual fs types
@@ -706,7 +787,35 @@ struct vfs_dentry* dentry_alloc(struct vfs_dentry* parent, const char* name)
 	list_init(&dentry->children);
 	list_init(&dentry->siblings);
 
+	INIT_HLIST_NODE(&dentry->hash);
+
 	return dentry;
+}
+
+void dentry_dealloc(struct vfs_dentry* d)
+{
+	// TODO: deallocate the inode attached to this dentry
+	if (!list_empty(&d->children)) {
+		log_warn("dentry still has children!");
+		return;
+	}
+
+	if (!list_empty(&d->siblings)) {
+		list_del(&d->siblings);
+	}
+
+	// hlist_del_init checks for hashed state before removing
+	hash_del(&d->hash);
+
+	if (d->name) {
+		kfree(d->name);
+	}
+
+	if (d->inode) {
+		d->inode->nlink--;
+	}
+
+	slab_free(&dentry_cache, d);
 }
 
 /*******************************************************************************

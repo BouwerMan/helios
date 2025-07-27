@@ -22,6 +22,8 @@ typedef intptr_t iptr;
 // Flags/bitmask type
 typedef unsigned long flags_t;
 
+typedef long off_t;
+
 typedef struct {
 	int counter;
 } atomic_t;

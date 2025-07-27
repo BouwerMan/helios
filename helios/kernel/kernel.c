@@ -87,7 +87,7 @@ void kernel_main()
 	// mount("/", fat_device, &fat_device->part_table[0], FAT16);
 
 	log_info("Initializing VFS and mounting root ramfs");
-	vfs_init(64);
+	vfs_init();
 	mount_initial_rootfs();
 
 	vfs_mkdir("/test", VFS_PERM_ALL);
@@ -95,6 +95,26 @@ void kernel_main()
 	vfs_mkdir("/test/test2", VFS_PERM_ALL);
 	vfs_dump_child(vfs_lookup("/"));
 	vfs_dump_child(vfs_lookup("/test/"));
+
+	int fd = vfs_open("/test/testfile", O_CREAT | O_RDWR);
+	if (fd < 0) {
+		panic("Couldn't open file");
+	}
+	vfs_dump_child(vfs_lookup("/test/"));
+
+	char buffer[] = "Hello how are you doing. Don't care fuck you";
+	ssize_t w = vfs_write(fd, buffer, strlen(buffer));
+	log_debug("Wrote %zd chars", w);
+
+	vfs_lseek(fd, 0, SEEK_SET);
+
+	char rbuf[sizeof(buffer)];
+	ssize_t n = vfs_read(fd, rbuf, sizeof(rbuf) - 1);
+	rbuf[n] = '\0';
+
+	log_debug("Read %zd chars: '%s'", n, rbuf);
+
+	vfs_close(fd);
 
 #if 0
 

@@ -11,7 +11,7 @@ typedef void (*entry_func)(void);
 static constexpr int MAX_TASK_NAME_LEN = 32;
 
 static constexpr int SCHEDULER_TIME = 20; // ms per preemptive tick
-static constexpr int MAX_RESOURCES = 20;
+static constexpr int MAX_RESOURCES = 128;
 
 enum TASK_STATE {
 	INITIALIZED,
@@ -74,3 +74,5 @@ void scheduler_dump();
 void waitqueue_sleep(struct waitqueue* wqueue);
 void waitqueue_wake_one(struct waitqueue* wqueue);
 void waitqueue_wake_all(struct waitqueue* wqueue);
+
+int install_fd(struct task* t, struct vfs_file* file);

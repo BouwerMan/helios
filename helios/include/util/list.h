@@ -28,6 +28,10 @@
 
 #include <kernel/container_of.h>
 #include <kernel/types.h>
+#include <stddef.h>
+
+static constexpr uptr LIST_POISON1 = 0x100;
+static constexpr uptr LIST_POISON2 = 0x122;
 
 /**
  * __WRITE_ONCE - Ensures a value is written to a variable exactly once.
@@ -151,6 +155,32 @@ static inline void list_add_tail(struct list_head* head, struct list_head* new)
 	__list_insert(new, head, head->prev);
 }
 
+/*
+ * Delete a list entry by making the prev/next entries
+ * point to each other.
+ *
+ * This is only for internal list manipulation where we know
+ * the prev/next entries already!
+ */
+static inline void __list_del(struct list_head* prev, struct list_head* next)
+{
+	next->prev = prev;
+	__WRITE_ONCE(prev->next, next);
+}
+
+/**
+ * list_del - deletes entry from list.
+ * @entry: the element to delete from the list.
+ * Note: list_empty() on entry does not return true after this, the entry is
+ * in an undefined state.
+ */
+static inline void list_del(struct list_head* entry)
+{
+	__list_del(entry->prev, entry->next);
+	entry->next = (void*)LIST_POISON1;
+	entry->prev = (void*)LIST_POISON2;
+}
+
 #define list_entry_is_head(pos, head, member) list_is_head((head), &pos->member)
 
 #define list_entry(link, type, member) container_of(link, type, member)
@@ -173,7 +203,12 @@ static inline void list_add_tail(struct list_head* head, struct list_head* new)
 	for (pos = list_first_entry(head, typeof(*pos), member); !list_entry_is_head(pos, head, member); \
 	     pos = list_next_entry(pos, member))
 
-// hlist stuff
+/*
+ * Double linked lists with a single pointer list head.
+ * Mostly useful for hash tables where the two pointer list head is
+ * too wasteful.
+ * You lose the ability to access the tail in O(1).
+ */
 
 #define HLIST_HEAD_INIT	     { .first = nullptr }
 #define HLIST_HEAD(name)     struct hlist_head name = { .first = nullptr }
@@ -182,4 +217,149 @@ static inline void INIT_HLIST_NODE(struct hlist_node* h)
 {
 	h->next = nullptr;
 	h->pprev = nullptr;
+}
+
+/**
+ * hlist_unhashed - Has node been removed from list and reinitialized?
+ * @h: Node to be checked
+ *
+ * Not that not all removal functions will leave a node in unhashed
+ * state.  For example, hlist_nulls_del_init_rcu() does leave the
+ * node in unhashed state, but hlist_nulls_del() does not.
+ */
+static inline int hlist_unhashed(const struct hlist_node* h)
+{
+	return !h->pprev;
+}
+
+/**
+ * hlist_empty - Is the specified hlist_head structure an empty hlist?
+ * @h: Structure to check.
+ */
+static inline int hlist_empty(const struct hlist_head* h)
+{
+	return !h->first;
+}
+
+static inline void __hlist_del(struct hlist_node* n)
+{
+	struct hlist_node* next = n->next;
+	struct hlist_node** pprev = n->pprev;
+
+	__WRITE_ONCE(*pprev, next);
+	if (next) __WRITE_ONCE(next->pprev, pprev);
+}
+
+/**
+ * hlist_del - Delete the specified hlist_node from its list
+ * @n: Node to delete.
+ *
+ * Note that this function leaves the node in hashed state.  Use
+ * hlist_del_init() or similar instead to unhash @n.
+ */
+static inline void hlist_del(struct hlist_node* n)
+{
+	__hlist_del(n);
+	n->next = (void*)LIST_POISON1;
+	n->pprev = (void*)LIST_POISON2;
+}
+
+/**
+ * hlist_del_init - Delete the specified hlist_node from its list and initialize
+ * @n: Node to delete.
+ *
+ * Note that this function leaves the node in unhashed state.
+ */
+static inline void hlist_del_init(struct hlist_node* n)
+{
+	if (!hlist_unhashed(n)) {
+		__hlist_del(n);
+		INIT_HLIST_NODE(n);
+	}
+}
+
+/**
+ * hlist_add_head - add a new entry at the beginning of the hlist
+ * @h: hlist head to add it after
+ * @n: new entry to be added
+ *
+ * Insert a new entry after the specified head.
+ * This is good for implementing stacks.
+ */
+static inline void hlist_add_head(struct hlist_head* h, struct hlist_node* n)
+{
+	struct hlist_node* first = h->first;
+	n->next = first;
+
+	if (first) {
+		first->pprev = &n->next;
+	}
+
+	h->first = n;
+	n->pprev = &h->first;
+}
+
+/**
+ * hlist_add_before - add a new entry before the one specified
+ * @n: new entry to be added
+ * @next: hlist node to add it before, which must be non-NULL
+ */
+static inline void hlist_add_before(struct hlist_node* n, struct hlist_node* next)
+{
+	n->pprev = next->pprev;
+	n->next = next;
+	*n->pprev = n;
+	next->pprev = &n->next;
+}
+
+/**
+ * hlist_add_behind - add a new entry after the one specified
+ * @n: new entry to be added
+ * @prev: hlist node to add it after, which must be non-NULL
+ */
+static inline void hlist_add_behind(struct hlist_node* n, struct hlist_node* prev)
+{
+	n->next = prev->next;
+	prev->next = n;
+	n->pprev = &prev->next;
+
+	if (n->next) {
+		n->next->pprev = &n->next;
+	}
+}
+
+#define hlist_entry(ptr, type, member) container_of(ptr, type, member)
+
+#define hlist_for_each(pos, head) for (pos = (head)->first; pos; pos = pos->next)
+
+#define hlist_entry_safe(ptr, type, member)                             \
+	({                                                              \
+		typeof(ptr) ____ptr = (ptr);                            \
+		____ptr ? hlist_entry(____ptr, type, member) : nullptr; \
+	})
+
+/**
+ * hlist_for_each_entry	- iterate over list of given type
+ * @pos:	the type * to use as a loop cursor.
+ * @head:	the head for your list.
+ * @member:	the name of the hlist_node within the struct.
+ */
+#define hlist_for_each_entry(pos, head, member)                                  \
+	for (pos = hlist_entry_safe((head)->first, typeof(*(pos)), member); pos; \
+	     pos = hlist_entry_safe((pos)->member.next, typeof(*(pos)), member))
+
+/**
+ * hlist_count_nodes - count nodes in the hlist
+ * @head:	the head for your hlist.
+ */
+static inline size_t hlist_count_nodes(struct hlist_head* head)
+{
+	struct hlist_node* pos;
+	size_t count = 0;
+
+	hlist_for_each (pos, head) {
+		count++;
+	}
+
+	return count;
 }

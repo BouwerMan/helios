@@ -48,3 +48,11 @@ PenaltyBreakFirstLessLess: 0
 PenaltyBreakString: 10
 PenaltyExcessCharacter: 100
 PenaltyReturnTypeOnItsOwnLine: 60
+
+ForEachMacros:
+- 'hlist_for_each'
+- 'hlist_for_each_entry'
+- 'list_for_each'
+- 'list_for_each_entry'
+- 'hash_for_each'
+- 'hash_for_each_possible'

@@ -249,8 +249,7 @@ void scheduler_dump()
 {
 	log_info("Scheduler Tasks:");
 	struct task* pos;
-	list_for_each_entry(pos, &squeue.task_list, list)
-	{
+	list_for_each_entry (pos, &squeue.task_list, list) {
 		log_info("  %lu: %s, state=%d", pos->PID, pos->name, pos->state);
 	}
 }
@@ -294,12 +293,22 @@ void waitqueue_wake_all(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;
 	struct task* pos;
-	list_for_each_entry(pos, &wqueue->list, list)
-	{
+	list_for_each_entry (pos, &wqueue->list, list) {
 		log_debug("Waking task %lu", pos->PID);
 		pos->state = READY;
 		list_remove(&pos->list);
 	}
+}
+
+int install_fd(struct task* t, struct vfs_file* file)
+{
+	for (size_t i = 0; i < MAX_RESOURCES; i++) {
+		if (t->resources[i] == nullptr) {
+			t->resources[i] = file;
+			return (int)i;
+		}
+	}
+	return -1;
 }
 
 /*******************************************************************************
