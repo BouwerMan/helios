@@ -29,6 +29,19 @@
 #include <kernel/container_of.h>
 #include <kernel/types.h>
 
+/**
+ * __WRITE_ONCE - Ensures a value is written to a variable exactly once.
+ * @x: The variable to write to.
+ * @val: The value to write to the variable.
+ *
+ * This macro uses a volatile cast to prevent the compiler from optimizing
+ * away the write operation, ensuring that the value is written exactly once.
+ */
+#define __WRITE_ONCE(x, val)                        \
+	do {                                        \
+		*(volatile typeof(x)*)&(x) = (val); \
+	} while (0)
+
 #define LIST_HEAD_INIT(name) { &(name), &(name) }
 
 #define LIST_HEAD(name) struct list_head name = LIST_HEAD_INIT(name)
@@ -76,35 +89,69 @@ static inline void list_move(struct list_head* link, struct list_head* new_link)
 
 /**
  * list_is_first -- tests whether @list is the first entry in list @head
- * @list: the entry to test
  * @head: the head of the list
+ * @list: the entry to test
  */
-static inline int list_is_first(const struct list_head* list, const struct list_head* head)
+static inline int list_is_first(const struct list_head* head, const struct list_head* list)
 {
 	return list->prev == head;
 }
 
 /**
  * list_is_last - tests whether @list is the last entry in list @head
- * @list: the entry to test
  * @head: the head of the list
+ * @list: the entry to test
  */
-static inline int list_is_last(const struct list_head* list, const struct list_head* head)
+static inline int list_is_last(const struct list_head* head, const struct list_head* list)
 {
 	return list->next == head;
 }
 
 /**
  * list_is_head - tests whether @list is the list @head
- * @list: the entry to test
  * @head: the head of the list
+ * @list: the entry to test
  */
-static inline int list_is_head(const struct list_head* list, const struct list_head* head)
+static inline bool list_is_head(const struct list_head* head, const struct list_head* list)
 {
 	return list == head;
 }
 
-#define list_entry_is_head(pos, head, member) list_is_head(&pos->member, (head))
+/*
+ * Insert a new entry between two known consecutive entries.
+ *
+ * This is only for internal list manipulation where we know
+ * the prev/next entries already!
+ */
+static inline void __list_insert(struct list_head* new, struct list_head* next, struct list_head* prev)
+{
+	next->prev = new;
+
+	new->next = next;
+	new->prev = prev;
+
+	__WRITE_ONCE(prev->next, new);
+}
+
+/**
+ * list_add - add a new entry
+ * @head: list head to add it after
+ * @new: new entry to be added
+ *
+ * Insert a new entry after the specified head.
+ * This is good for implementing stacks.
+ */
+static inline void list_add(struct list_head* head, struct list_head* new)
+{
+	__list_insert(new, head->next, head);
+}
+
+static inline void list_add_tail(struct list_head* head, struct list_head* new)
+{
+	__list_insert(new, head, head->prev);
+}
+
+#define list_entry_is_head(pos, head, member) list_is_head((head), &pos->member)
 
 #define list_entry(link, type, member) container_of(link, type, member)
 
@@ -120,11 +167,13 @@ static inline int list_is_head(const struct list_head* list, const struct list_h
 
 #define list_next_entry(pos, member) list_entry((pos)->member.next, typeof(*(pos)), member)
 
-#define list_for_each(pos, head) for (pos = (head)->next; !list_is_head(pos, (head)); pos = pos->next)
+#define list_for_each(pos, head) for (pos = (head)->next; !list_is_head((head), pos); pos = pos->next)
 
 #define list_for_each_entry(pos, head, member)                                                           \
 	for (pos = list_first_entry(head, typeof(*pos), member); !list_entry_is_head(pos, head, member); \
 	     pos = list_next_entry(pos, member))
+
+// hlist stuff
 
 #define HLIST_HEAD_INIT	     { .first = nullptr }
 #define HLIST_HEAD(name)     struct hlist_head name = { .first = nullptr }

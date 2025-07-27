@@ -34,6 +34,7 @@
 
 #include <util/log.h>
 
+#if 0
 // https://unix.stackexchange.com/questions/209566/how-to-format-a-partition-inside-of-an-img-file
 
 static int fat_open_sector(const struct fat_fs* fs, uint8_t* buffer, uint16_t buffer_size, uint32_t sector);
@@ -751,3 +752,4 @@ static int fat_open_sector(const struct fat_fs* fs, uint8_t* buffer, uint16_t bu
 	}
 	return 0;
 }
+#endif

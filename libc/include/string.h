@@ -31,21 +31,22 @@ char* strndup(const char* s, size_t n);
 char* strcat(char* restrict s1, const char* restrict s2);
 char* strncat(char* restrict s1, const char* restrict s2, size_t n);
 
-extern int memcmp(const void* s1, const void* s2, size_t n);
+int memcmp(const void* s1, const void* s2, size_t n);
 
-extern int strcmp(const char* s1, const char* s2);
+int strcmp(const char* s1, const char* s2);
 
 // FIXME: Unimplemented
 int strcoll(const char* s1, const char* s2);
 
-extern int strncmp(const char* s1, const char* s2, size_t n);
+int strncmp(const char* s1, const char* s2, size_t n);
 
 // FIXME: Unimplemented
 size_t strxfrm(char* restrict s1, const char* restrict s2, size_t n);
 // FIXME: Unimplemented
 void* memchr(const void* s, int c, size_t n);
-// FIXME: Unimplemented
-extern char* __pure strchr(const char* s, int c);
+
+char* __pure strchr(const char* s, int c);
+char* strrchr(const char* s, int c);
 
 // FIXME: Unimplemented
 size_t strcspn(const char* s1, const char* s2);
@@ -55,7 +56,9 @@ char* strpbrk(const char* s1, const char* s2);
 size_t strspn(const char* s1, const char* s2);
 // FIXME: Unimplemented
 char* strstr(const char* s1, const char* s2);
+
 char* strtok(char* restrict s1, const char* restrict s2);
+
 // FIXME: Unimplemented
 void* memset_explicit(void* s, int c, size_t n);
 // FIXME: Unimplemented

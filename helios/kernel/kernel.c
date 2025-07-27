@@ -80,37 +80,25 @@ void kernel_main()
 	log_info("Initializing Timer");
 	timer_init();
 
-#if 1
-	list_devices();
-	ctrl_init();
+	// list_devices();
+	// ctrl_init();
+	//
+	// sATADevice* fat_device = ctrl_get_device(3);
+	// mount("/", fat_device, &fat_device->part_table[0], FAT16);
+
+	log_info("Initializing VFS and mounting root ramfs");
 	vfs_init(64);
+	mount_initial_rootfs();
 
-	sATADevice* fat_device = ctrl_get_device(3);
-	mount("/", fat_device, &fat_device->part_table[0], FAT16);
+	vfs_mkdir("/test", VFS_PERM_ALL);
+	vfs_mkdir("/subdir", VFS_PERM_ALL);
+	vfs_mkdir("/test/test2", VFS_PERM_ALL);
+	vfs_dump_child(vfs_lookup("/"));
+	vfs_dump_child(vfs_lookup("/test/"));
 
-	struct vfs_file f = { 0 };
-	int res2 = vfs_open("/dir/test2.txt", &f);
-	if (res2 < 0) {
-		log_error("oh no");
-	} else {
-		// log_info("%s", f.read_ptr);
-	}
-	log_info("open 2");
-	struct vfs_file f2 = { 0 };
-	res2 = vfs_open("/test2.txt", &f2);
-	if (res2 < 0) {
-		log_error("oh no");
-	} else {
-		log_info("f_size: %zu, at %lx", f2.file_size, (uint64_t)f2.read_ptr);
-		// log_debug_long(f2.read_ptr);
-	}
-	log_debug("Closing");
-	vfs_close(&f);
-	vfs_close(&f2);
-#endif
+#if 0
 
-	slab_test();
-
+slab_test();
 	struct limine_module_response* mod = mod_request.response;
 
 	struct task* task = new_task("Hello world userspace", NULL);
@@ -124,6 +112,7 @@ void kernel_main()
 	sleep(1000);
 	log_warn("Shutting down in 2 seconds");
 	sleep(1000);
+#endif
 	log_warn("Shutting down in 1 second");
 	sleep(1000);
 

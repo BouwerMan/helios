@@ -3,14 +3,19 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
 #include <drivers/ata/partition.h>
 
+static constexpr size_t FS_TYPE_LEN = 8;
+static constexpr size_t VFS_MAX_NAME = 255; // Not including null terminator
+
 // TODO: Add more filesystems once drivers for them are supported
 enum FILESYSTEMS {
 	UNSUPPORTED = 0,
+	RAMFS,
 	FAT16,
 	FAT32, // Not sure these are techincally supported
 	FAT12, // Not sure these are techincally supported
@@ -57,10 +62,63 @@ enum MOUNT_FLAGS {
 	MOUNT_PRESENT = 0x1,
 };
 
+enum MOUNT_ERRORS {
+	ENODEV,
+	ENOENT,
+	EFAULT,
+};
+
+/**
+ * @brief Common error codes for VFS operations.
+ */
+enum vfs_err {
+	VFS_OK = 0,	     ///< Success (no error)
+	VFS_ERR_EXIST,	     ///< Entry already exists
+	VFS_ERR_NOTDIR,	     ///< Not a directory
+	VFS_ERR_NAMETOOLONG, ///< Name is too long
+	VFS_ERR_NOENT,	     ///< No such file or directory
+	VFS_ERR_NOSPC,	     ///< No space left on device
+	VFS_ERR_NOMEM,	     ///< Out of memory
+	VFS_ERR_PERM,	     ///< Permission denied
+	VFS_ERR_IO,	     ///< I/O error (generic)
+	VFS_ERR_NODEV,	     ///< No such device or device not available
+	VFS_ERR_NOTEMPTY,    ///< Directory not empty
+	VFS_ERR_ROFS,	     ///< Read-only file system
+	VFS_ERR_FAULT,	     ///< Bad address (invalid pointer)
+	VFS_ERR_BUSY,	     ///< Resource busy
+	VFS_ERR_XDEV,	     ///< Cross-device link
+	VFS_ERR_INVAL,	     ///< Invalid argument
+	VFS_ERR_UNKNOWN,     ///< Miscellanious error
+};
+
+/**
+ * Array of error names corresponding to VFS error codes.
+ * The index of each error name matches the absolute value of the error code.
+ */
+static const char* vfs_err_names[] = { "VFS_OK",	 "VFS_ERR_EXIST", "VFS_ERR_NOTDIR",   "VFS_ERR_NAMETOOLONG",
+				       "VFS_ERR_NOENT",	 "VFS_ERR_NOSPC", "VFS_ERR_NOMEM",    "VFS_ERR_PERM",
+				       "VFS_ERR_IO",	 "VFS_ERR_NODEV", "VFS_ERR_NOTEMPTY", "VFS_ERR_ROFS",
+				       "VFS_ERR_FAULT",	 "VFS_ERR_BUSY",  "VFS_ERR_XDEV",     "VFS_ERR_INVAL",
+				       "VFS_ERR_UNKNOWN" };
+
+/**
+ * Retrieves the name of a VFS error code.
+ * @param errno: The VFS error code (can be negative or positive).
+ * @return: The corresponding error name as a string.
+ */
+static inline const char* vfs_get_err_name(enum vfs_err errno)
+{
+	if (errno < 0) errno = -errno;
+	return vfs_err_names[errno];
+}
+
+// A more Unix-like vfs_file
 struct vfs_file {
-	void* file_ptr;
-	unsigned char* read_ptr;
-	size_t file_size;
+	struct vfs_dentry* dentry; // <-- THIS IS THE MAGIC LINK!
+	uint64_t f_pos;		   // The current read/write offset for this session
+	int flags;		   // Open flags (O_RDONLY, O_WRONLY, O_APPEND, etc.)
+	int ref_count;		   // How many file descriptors point to this?
+	void* private_data;	   // For filesystem-specific use
 };
 
 struct vfs_mount {
@@ -70,23 +128,37 @@ struct vfs_mount {
 	uint32_t lba_start;	   // Optional: offset of the partition
 	int flags;		   // Optional: e.g., read-only
 	struct vfs_mount* next;	   // Linked list of active mounts
+	struct list_head* list;	   //Linked list of active mounts
 };
 
 // TODO: Add timestamp stuff
 struct vfs_inode {
-	int id;
-	uint8_t filetype; // either DIR or FILE
+	size_t id;
+	uint8_t filetype; // FILE, DIR, or maybe someday: CHAR_DEV, BLOCK_DEV, SYMLINK...
 	size_t f_size;
 	int ref_count;
 	uint16_t permissions;
 	uint8_t flags;
-	struct inode_ops* ops;
-	void* fs_data; // Filysystem specific, for FAT it stores fat_inode_info
+	struct inode_ops* ops; // What can you DO with this inode?
+
+	struct vfs_superblock* sb; // A pointer back to the superblock of its filesystem
+	uint32_t nlink;		   // Number of hard links (dentries) pointing to this inode
+
+	void* fs_data; // Filesystem specific, for FAT it stores fat_inode_info
 };
 
 struct inode_ops {
+	// These are for opening/closing the file handle
 	int (*open)(struct vfs_inode* inode, struct vfs_file* file);
 	int (*close)(struct vfs_inode* inode, struct vfs_file* file);
+
+	int (*mkdir)(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode);
+
+	// These are for I/O!
+	ssize_t (*read)(struct vfs_file* file, char* buffer, size_t count);
+	ssize_t (*write)(struct vfs_file* file, const char* buffer, size_t count);
+
+	// This is for navigating directories
 	struct vfs_dentry* (*lookup)(struct vfs_inode* dir_inode, struct vfs_dentry* child);
 };
 
@@ -95,16 +167,18 @@ struct vfs_dentry {
 	char* name;
 	struct vfs_inode* inode;
 	struct vfs_dentry* parent; // Reference to parent's directory
-	void* fs_data;		   // Filesystem specific data, for FAT it stores fat_fs
+
+	struct list_head children; // Points to the *first child* in this directory
+	struct list_head siblings; // Points to the *next child* in the parent's list
+
+	void* fs_data; // Filesystem specific data, for FAT it stores fat_fs
 	int ref_count;
 	int flags;
 };
 
 struct vfs_fs_type {
-	char name[8];	 // Filesystem name
-	uint8_t fs_type; // enum of filesystem type for faster checks
-	struct vfs_superblock* (*mount)(sATADevice* device, uint32_t lba_start,
-					int flags); // Mount function
+	char fs_type[FS_TYPE_LEN]; // Filesystem name
+	struct vfs_superblock* (*mount)(const char* source, int flags);
 	struct vfs_fs_type* next;
 };
 
@@ -116,14 +190,19 @@ struct vfs_superblock {
 };
 
 void vfs_init(size_t dhash_size);
+int mount_initial_rootfs();
+
 void register_filesystem(struct vfs_fs_type* fs);
-int mount(const char* mount_point, sATADevice* device, sPartition* partition, uint8_t fs_type);
+// int mount(const char* mount_point, sATADevice* device, sPartition* partition, uint8_t fs_type);
+int vfs_mount(const char* source, const char* target, const char* fstype, int flags);
+struct vfs_dentry* vfs_lookup(const char* path);
 
 int vfs_get_next_id();
 int vfs_get_id();
 void dentry_add(struct vfs_dentry* dentry);
 uint32_t dentry_hash(const void* key);
 bool dentry_compare(const void* key1, const void* key2);
+struct vfs_dentry* dentry_create(struct vfs_dentry* parent, const char* name);
 
 struct vfs_superblock* vfs_get_sb(int idx);
 
@@ -134,3 +213,7 @@ struct vfs_dentry* dget(struct vfs_dentry* dentry);
 
 int vfs_open(const char* path, struct vfs_file* file);
 void vfs_close(struct vfs_file* file);
+int vfs_mkdir(const char* path, uint16_t mode);
+bool vfs_does_name_exist(struct vfs_dentry* parent, const char* name);
+void vfs_dump_child(struct vfs_dentry* parent);
+struct vfs_dentry* dentry_alloc(struct vfs_dentry* parent, const char* name);
