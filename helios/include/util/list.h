@@ -61,7 +61,8 @@ static inline int list_empty(struct list_head* list)
 	return list->next == list;
 }
 
-static inline void list_insert(struct list_head* link, struct list_head* new_link)
+static inline void list_insert(struct list_head* link,
+			       struct list_head* new_link)
 {
 	new_link->prev = link->prev;
 	new_link->next = link;
@@ -69,12 +70,14 @@ static inline void list_insert(struct list_head* link, struct list_head* new_lin
 	new_link->next->prev = new_link;
 }
 
-static inline void list_append(struct list_head* list, struct list_head* new_link)
+static inline void list_append(struct list_head* list,
+			       struct list_head* new_link)
 {
 	list_insert((struct list_head*)list, new_link);
 }
 
-static inline void list_prepend(struct list_head* list, struct list_head* new_link)
+static inline void list_prepend(struct list_head* list,
+				struct list_head* new_link)
 {
 	list_insert(list->next, new_link);
 }
@@ -96,7 +99,8 @@ static inline void list_move(struct list_head* link, struct list_head* new_link)
  * @head: the head of the list
  * @list: the entry to test
  */
-static inline int list_is_first(const struct list_head* head, const struct list_head* list)
+static inline int list_is_first(const struct list_head* head,
+				const struct list_head* list)
 {
 	return list->prev == head;
 }
@@ -106,7 +110,8 @@ static inline int list_is_first(const struct list_head* head, const struct list_
  * @head: the head of the list
  * @list: the entry to test
  */
-static inline int list_is_last(const struct list_head* head, const struct list_head* list)
+static inline int list_is_last(const struct list_head* head,
+			       const struct list_head* list)
 {
 	return list->next == head;
 }
@@ -116,7 +121,8 @@ static inline int list_is_last(const struct list_head* head, const struct list_h
  * @head: the head of the list
  * @list: the entry to test
  */
-static inline bool list_is_head(const struct list_head* head, const struct list_head* list)
+static inline bool list_is_head(const struct list_head* head,
+				const struct list_head* list)
 {
 	return list == head;
 }
@@ -127,7 +133,9 @@ static inline bool list_is_head(const struct list_head* head, const struct list_
  * This is only for internal list manipulation where we know
  * the prev/next entries already!
  */
-static inline void __list_insert(struct list_head* new, struct list_head* next, struct list_head* prev)
+static inline void __list_insert(struct list_head* new,
+				 struct list_head* next,
+				 struct list_head* prev)
 {
 	next->prev = new;
 
@@ -185,9 +193,11 @@ static inline void list_del(struct list_head* entry)
 
 #define list_entry(link, type, member) container_of(link, type, member)
 
-#define list_first_entry(link, type, member) list_entry((link)->next, type, member)
+#define list_first_entry(link, type, member) \
+	list_entry((link)->next, type, member)
 
-#define list_last_entry(link, type, member) list_entry((link)->prev, type, member)
+#define list_last_entry(link, type, member) \
+	list_entry((link)->prev, type, member)
 
 #define list_head(list, type, member) list_entry((list)->next, type, member)
 
@@ -195,12 +205,15 @@ static inline void list_del(struct list_head* entry)
 
 #define list_next(element) (element->next)
 
-#define list_next_entry(pos, member) list_entry((pos)->member.next, typeof(*(pos)), member)
+#define list_next_entry(pos, member) \
+	list_entry((pos)->member.next, typeof(*(pos)), member)
 
-#define list_for_each(pos, head) for (pos = (head)->next; !list_is_head((head), pos); pos = pos->next)
+#define list_for_each(pos, head) \
+	for (pos = (head)->next; !list_is_head((head), pos); pos = pos->next)
 
-#define list_for_each_entry(pos, head, member)                                                           \
-	for (pos = list_first_entry(head, typeof(*pos), member); !list_entry_is_head(pos, head, member); \
+#define list_for_each_entry(pos, head, member)                   \
+	for (pos = list_first_entry(head, typeof(*pos), member); \
+	     !list_entry_is_head(pos, head, member);             \
 	     pos = list_next_entry(pos, member))
 
 /*
@@ -304,7 +317,8 @@ static inline void hlist_add_head(struct hlist_head* h, struct hlist_node* n)
  * @n: new entry to be added
  * @next: hlist node to add it before, which must be non-NULL
  */
-static inline void hlist_add_before(struct hlist_node* n, struct hlist_node* next)
+static inline void hlist_add_before(struct hlist_node* n,
+				    struct hlist_node* next)
 {
 	n->pprev = next->pprev;
 	n->next = next;
@@ -317,7 +331,8 @@ static inline void hlist_add_before(struct hlist_node* n, struct hlist_node* nex
  * @n: new entry to be added
  * @prev: hlist node to add it after, which must be non-NULL
  */
-static inline void hlist_add_behind(struct hlist_node* n, struct hlist_node* prev)
+static inline void hlist_add_behind(struct hlist_node* n,
+				    struct hlist_node* prev)
 {
 	n->next = prev->next;
 	prev->next = n;
@@ -330,7 +345,8 @@ static inline void hlist_add_behind(struct hlist_node* n, struct hlist_node* pre
 
 #define hlist_entry(ptr, type, member) container_of(ptr, type, member)
 
-#define hlist_for_each(pos, head) for (pos = (head)->first; pos; pos = pos->next)
+#define hlist_for_each(pos, head) \
+	for (pos = (head)->first; pos; pos = pos->next)
 
 #define hlist_entry_safe(ptr, type, member)                             \
 	({                                                              \
@@ -344,9 +360,10 @@ static inline void hlist_add_behind(struct hlist_node* n, struct hlist_node* pre
  * @head:	the head for your list.
  * @member:	the name of the hlist_node within the struct.
  */
-#define hlist_for_each_entry(pos, head, member)                                  \
-	for (pos = hlist_entry_safe((head)->first, typeof(*(pos)), member); pos; \
-	     pos = hlist_entry_safe((pos)->member.next, typeof(*(pos)), member))
+#define hlist_for_each_entry(pos, head, member)                              \
+	for (pos = hlist_entry_safe((head)->first, typeof(*(pos)), member);  \
+	     pos; pos = hlist_entry_safe((pos)->member.next, typeof(*(pos)), \
+					 member))
 
 /**
  * hlist_count_nodes - count nodes in the hlist

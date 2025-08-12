@@ -19,7 +19,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <kernel/tasks/scheduler.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -27,51 +26,65 @@
 #include <drivers/fs/ramfs.h>
 #include <drivers/fs/vfs.h>
 #include <kernel/panic.h>
+#include <kernel/tasks/scheduler.h>
 #include <mm/slab.h>
 #include <util/hashtable.h>
 #include <util/ht.h>
 #include <util/log.h>
 
-// TODO: Find a better way to handle some of these icky globals, also def need some locks
+// TODO: Find a better way to handle some of these icky globals, also def need
+// some locks
 
 /*******************************************************************************
-* Global Variable Definitions
-*******************************************************************************/
+ * Global Variable Definitions
+ *******************************************************************************/
 
 struct vfs_fs_type* fs_list = NULL;
 struct vfs_mount* mount_list = NULL;
-struct vfs_superblock* rootfs = NULL;
 struct vfs_superblock** sb_list;
 static uint8_t sb_idx = 0;
 
 struct slab_cache dentry_cache = { 0 };
 struct slab_cache file_cache = { 0 };
 
-// struct ht* dentry_ht;
 static constexpr int d_ht_bits = 12; // 4096 buckets
 DEFINE_HASHTABLE(d_ht, d_ht_bits);
 
+static constexpr int i_ht_bits = 12; // 4096 buckets
+DEFINE_HASHTABLE(i_ht, i_ht_bits);
+
 static struct vfs_mount* g_vfs_root_mount = nullptr;
 
+/**
+ * Lightweight iterator over slash-delimited path segments.
+ */
 struct path_tokenizer {
-	const char* path;
-	size_t offset;
+	const char* path; ///< NUL-terminated input path string
+			  ///< (not owned or modified).
+	size_t offset;	  ///< Current byte offset into path for the next
+			  ///< component.
 };
 
 /*******************************************************************************
-* Private Function Prototypes
-*******************************************************************************/
+ * Private Function Prototypes
+ *******************************************************************************/
 
 /**
- * @brief Trims triling characters from string by replacing with '\0'.
+ * trim_trailing - Remove trailing occurrences of a character from a string.
+ * @s: Mutable, NUL-terminated C string buffer to trim (modified in-place).
+ * @c: Character to remove from the end of @s.
  *
- * @param s string to trim
- * @param c character to trim
+ * Scans backward from the end of @s and truncates all trailing @c by
+ * writing a terminating NUL at the first non-@c position.
  */
 static void trim_trailing(char* s, char c);
 static const char* path_next_token(struct path_tokenizer* tok, size_t* out_len);
 static struct vfs_fs_type* find_filesystem(const char* fs_type);
 static void register_mount(struct vfs_mount* mnt);
+static inline int vfs_create_args_valid(const char* path,
+					uint16_t mode,
+					int flags,
+					struct vfs_dentry** out);
 
 static void add_superblock(struct vfs_superblock* sb)
 {
@@ -79,9 +92,14 @@ static void add_superblock(struct vfs_superblock* sb)
 	sb_list[sb_idx++] = sb;
 }
 
+static inline u32 inode_key(const struct vfs_superblock* sb, const size_t id)
+{
+	return (u32)((uptr)sb ^ id);
+}
+
 /*******************************************************************************
-* Public Function Definitions
-*******************************************************************************/
+ * Public Function Definitions
+ *******************************************************************************/
 
 /**
  * vfs_init - Initializes the virtual filesystem.
@@ -90,15 +108,29 @@ void vfs_init()
 {
 	sb_list = kmalloc(sizeof(uintptr_t) * 8);
 
-	int res = slab_cache_init(&dentry_cache, "VFS Dentry", sizeof(struct vfs_dentry), 0, NULL, NULL);
+	int res = slab_cache_init(&dentry_cache,
+				  "VFS Dentry",
+				  sizeof(struct vfs_dentry),
+				  0,
+				  NULL,
+				  NULL);
 	if (res < 0) {
-		log_error("Could not init dentry cache, slab_cache_init() returned %d", res);
+		log_error(
+			"Could not init dentry cache, slab_cache_init() returned %d",
+			res);
 		panic("Dentry cache init failure");
 	}
 
-	res = slab_cache_init(&file_cache, "VFS Filesystem", sizeof(struct vfs_file), 8, nullptr, nullptr);
+	res = slab_cache_init(&file_cache,
+			      "VFS Filesystem",
+			      sizeof(struct vfs_file),
+			      8,
+			      nullptr,
+			      nullptr);
 	if (res < 0) {
-		log_error("Could not init file cache, slab_cache_init() returned %d", res);
+		log_error(
+			"Could not init file cache, slab_cache_init() returned %d",
+			res);
 		panic("file cache init failure");
 	}
 
@@ -149,6 +181,193 @@ mount_point_fail:
 }
 
 /**
+ * @brief Creates a new, empty inode and adds it to the inode cache.
+ *
+ * This function is used when creating a new file or directory. It allocates
+ * a blank inode, initializes its basic VFS fields (sb, id, ref_count), and
+ * inserts it into the global inode hash table. It does NOT populate it
+ * with filesystem-specific data; that is the caller's responsibility.
+ *
+ * @param sb The superblock of the filesystem where the new inode belongs.
+ * @param id The unique ID for the new inode.
+ * @return A pointer to the new, locked vfs_inode, or NULL on failure.
+ */
+struct vfs_inode* new_inode(struct vfs_superblock* sb, size_t id)
+{
+	if (inode_ht_check(sb, id)) {
+		log_error(
+			"Inode %zu already exists in cache, cannot create new.",
+			id);
+		return nullptr;
+	}
+
+	// Ask the filesystem to allocate memory for the inode structure.
+	if (!sb->sops || !sb->sops->alloc_inode) {
+		return nullptr;
+	}
+	struct vfs_inode* inode = sb->sops->alloc_inode(sb);
+	if (!inode) {
+		return nullptr;
+	}
+
+	// Initialize the core VFS fields
+	inode->sb = sb;
+	inode->id = id;
+	inode->ref_count = 1;
+
+	// Add it to the cache so future lookups will find it.
+	inode_add(inode);
+
+	return inode;
+}
+
+/**
+ * @brief  Obtains an in-memory VFS inode from the global inode cache.
+ *
+ * This function is the primary way to get a pointer to an active `vfs_inode`.
+ * It uniquely identifies an inode using its superblock and on-disk inode
+ * number.
+ *
+ * The function first searches the global inode cache.
+ * - If the inode is found (a cache hit), its reference count is incremented,
+ * and a pointer to the existing in-memory inode is returned.
+ * - If the inode is not found (a cache miss), a new `vfs_inode` is allocated,
+ * and the filesystem-specific `read_inode` operation is called (via the
+ * superblock) to populate it with data from the underlying storage. The new
+ * inode is then added to the cache before being returned.
+ *
+ * @param sb    A pointer to the `vfs_superblock` of the filesystem where the
+ * inode resides. This provides the context for the filesystem type
+ * and its operations.
+ * @param id    The inode number, which is a unique identifier for the inode
+ * within its filesystem.
+ *
+ * @return      A pointer to the locked `vfs_inode` structure with an
+ * incremented reference count. Returns NULL if allocation or
+ * reading from disk fails.
+ *
+ * @note        Every successful call to `iget` must be paired with a
+ * corresponding call to `iput` to release the reference when the inode is no
+ * longer needed.
+ */
+struct vfs_inode* iget(struct vfs_superblock* sb, size_t id)
+{
+	struct vfs_inode* inode = inode_ht_check(sb, id);
+	if (inode) {
+		inode->ref_count++;
+		return inode;
+	}
+
+	if (sb->sops == nullptr || sb->sops->alloc_inode == nullptr) {
+		log_error("Superblock %p has no alloc_inode operation",
+			  (void*)sb);
+		return nullptr;
+	}
+
+	inode = sb->sops->alloc_inode(sb);
+
+	if (!inode) {
+		log_error("Failed to allocate inode for id %zu in sb %p",
+			  id,
+			  (void*)sb);
+		return nullptr;
+	}
+
+	inode->sb = sb;
+	inode->id = id;
+	inode->ref_count = 1;
+
+	if (sb->sops->read_inode(inode) < 0) {
+		log_error("Failed to read inode %zu from superblock %p",
+			  id,
+			  (void*)sb);
+		sb->sops->destroy_inode(inode);
+		return nullptr;
+	}
+
+	inode_add(inode);
+
+	return inode;
+}
+
+/**
+ * @brief  Releases a reference to an in-memory VFS inode.
+ *
+ * This function decrements the `ref_count` of an inode. It is the counterpart
+ * to `iget`. When the reference count drops to zero, it signifies that no part
+ * of the kernel is actively using the inode.
+ *
+ * An inode with a zero reference count becomes a candidate for being written
+ * back to disk if it is dirty (modified) and eventually being evicted from
+ * the inode cache to reclaim memory, especially under memory pressure.
+ *
+ * @param inode A pointer to the `vfs_inode` whose reference should be released.
+ * If the pointer is NULL, the function does nothing.
+ *
+ * @note        This function must be called to balance every call to `iget`
+ * to prevent inode reference leaks, which would result in memory
+ * leaks and prevent filesystems from being unmounted correctly.
+ */
+void iput(struct vfs_inode* inode)
+{
+	if (!inode) {
+		return;
+	}
+
+	inode->ref_count--;
+	log_debug("Inode %zu ref_count: %d", inode->id, inode->ref_count);
+
+	if (inode->ref_count > 0) {
+		return;
+	}
+
+	log_debug("Deallocating inode %zu", inode->id);
+	hash_del(&inode->hash);
+	if (inode->sb && inode->sb->sops && inode->sb->sops->destroy_inode) {
+		inode->sb->sops->destroy_inode(inode);
+	} else {
+		kfree(inode);
+	}
+}
+
+void inode_add(struct vfs_inode* inode)
+{
+	u32 key = inode_key(inode->sb, inode->id);
+	struct hlist_head* bucket = &i_ht[hash_min(key, HASH_BITS(i_ht))];
+	inode->bucket = bucket;
+
+	// hash_add(i_ht, &inode->hash, key);
+	hlist_add_head(bucket, &inode->hash);
+}
+
+/**
+ * inode_ht_check - Search for an existing inode in the hash table
+ * @sb: Superblock containing the filesystem instance
+ * @id: Unique inode identifier within the filesystem
+ *
+ * Return: Pointer to the existing inode if found, nullptr otherwise
+ */
+struct vfs_inode* inode_ht_check(struct vfs_superblock* sb, size_t id)
+{
+	// Early parameter validation
+	if (unlikely(!sb)) {
+		return nullptr;
+	}
+
+	u32 key = inode_key(sb, id);
+	struct vfs_inode* candidate;
+
+	hash_for_each_possible (i_ht, candidate, hash, key) {
+		// Compare inode ID first - most selective and cheapest comparison
+		if (likely(candidate->id == id) && candidate->sb == sb) {
+			return candidate;
+		}
+	}
+
+	return nullptr;
+}
+
+/**
  * dget - Increments the reference count of a dentry.
  * @dentry: Pointer to the vfs_dentry structure whose reference count is to be
  * incremented.
@@ -173,6 +392,7 @@ void dput(struct vfs_dentry* dentry)
 	log_debug("Dentry %s ref_count: %d", dentry->name, dentry->ref_count);
 	if (dentry->ref_count <= 0) {
 		log_debug("Deallocating dentry %s", dentry->name);
+		iput(dentry->inode);
 		dentry_dealloc(dentry);
 	}
 }
@@ -188,6 +408,7 @@ void dentry_add(struct vfs_dentry* dentry)
 	dentry->bucket = bucket;
 	hash_add(d_ht, &dentry->hash, hash);
 	dentry->inode->nlink++;
+	dget(dentry);
 }
 
 /**
@@ -227,15 +448,18 @@ struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
 
 	// Check hash table first
 	if ((found = dentry_ht_check(child))) {
-		// Since we found it, we free all the child init stuff then return found
+		// Since we found it, we free all the child init stuff then
+		// return found
 		dentry_dealloc(child);
 		return dget(found);
 	}
 
-	if (!parent->inode || !parent->inode->ops || !parent->inode->ops->lookup) {
+	if (!parent->inode || !parent->inode->ops ||
+	    !parent->inode->ops->lookup) {
 		log_error("Invalid inode operations");
 		dentry_dealloc(child);
-		return nullptr; // Handle invalid inode or missing lookup operation
+		return nullptr; // Handle invalid inode or missing lookup
+				// operation
 	}
 
 	// Can just return the end result, if not found then child is a negative
@@ -308,7 +532,8 @@ u32 dentry_hash(const struct vfs_dentry* key)
  */
 bool dentry_compare(const struct vfs_dentry* d1, const struct vfs_dentry* d2)
 {
-	return (strcmp(d1->name, d2->name) == 0) && (d1->parent->inode->id == d2->parent->inode->id);
+	return (strcmp(d1->name, d2->name) == 0) &&
+	       (d1->parent->inode->id == d2->parent->inode->id);
 }
 
 int vfs_open(const char* path, int flags)
@@ -318,7 +543,8 @@ int vfs_open(const char* path, int flags)
 	struct vfs_dentry* dentry = vfs_lookup(path);
 	if (!dentry || !dentry->inode) {
 		if (flags & O_CREAT) {
-			int res = vfs_create(path, VFS_PERM_ALL, flags, &dentry);
+			int res =
+				vfs_create(path, VFS_PERM_ALL, flags, &dentry);
 			if (res < 0) {
 				return res;
 			}
@@ -359,6 +585,12 @@ int vfs_open(const char* path, int flags)
 	return fd;
 }
 
+/**
+ * vfs_close - Close a file descriptor
+ * @fd: File descriptor to close
+ *
+ * Return: VFS_OK on success, -VFS_ERR_INVAL if the file descriptor is invalid
+ */
 int vfs_close(int fd)
 {
 	struct vfs_file* file = get_file(fd);
@@ -366,12 +598,18 @@ int vfs_close(int fd)
 		return -VFS_ERR_INVAL;
 	}
 
-	file->fops->close(file->dentry->inode, file);
 	file->ref_count--;
+	log_debug("File %s ref_count: %d", file->dentry->name, file->ref_count);
 	if (file->ref_count <= 0) {
+		if (file->fops->close) {
+			file->fops->close(file->dentry->inode, file);
+		}
 		dput(file->dentry);
 		slab_free(&file_cache, file);
 	}
+
+	// Clear the entry in the task's resource table
+	get_current_task()->resources[fd] = nullptr;
 
 	return VFS_OK;
 }
@@ -384,8 +622,16 @@ void vfs_dump_child(struct vfs_dentry* parent)
 	}
 }
 
-int vfs_create(const char* path, uint16_t mode, int flags, struct vfs_dentry** out_dentry)
+int vfs_create(const char* path,
+	       uint16_t mode,
+	       int flags,
+	       struct vfs_dentry** out_dentry)
 {
+	int arg_check = vfs_create_args_valid(path, mode, flags, out_dentry);
+	if (arg_check < 0) {
+		return arg_check;
+	}
+
 	// Split path into parent + basename
 	char* path_copy = strdup(path);
 	trim_trailing(path_copy, '/');
@@ -406,7 +652,8 @@ int vfs_create(const char* path, uint16_t mode, int flags, struct vfs_dentry** o
 	log_debug("Path: %s, p: %s, name: %s", path, parent, name);
 
 	struct vfs_dentry* pdentry = vfs_lookup(parent);
-	if (!pdentry || !pdentry->inode || !(pdentry->inode->filetype == FILETYPE_DIR)) {
+	if (!pdentry || !pdentry->inode ||
+	    !(pdentry->inode->filetype == FILETYPE_DIR)) {
 		kfree(path_copy);
 		return -VFS_ERR_NOTDIR;
 	}
@@ -438,7 +685,9 @@ int vfs_create(const char* path, uint16_t mode, int flags, struct vfs_dentry** o
 		return -VFS_ERR_NODEV;
 	}
 
-	int res = pdentry->inode->ops->create(pdentry->inode, child, mode); // or default mode
+	int res = pdentry->inode->ops->create(pdentry->inode,
+					      child,
+					      mode); // or default mode
 	if (res < 0) {
 		dentry_dealloc(child);
 		kfree(path_copy);
@@ -578,40 +827,51 @@ bool vfs_does_name_exist(struct vfs_dentry* parent, const char* name)
 	return false;
 }
 
-// source should be nullptr for ramfs/virual fs types
-int vfs_mount(const char* source, const char* target, const char* fstype, int flags)
+/**
+ * @param source device to mount at (`/dev/sda1`). Can be nullptr for
+ * ramfs/virtual devices
+ * @param target path to mount at
+ * @param fstype filesystem to mount
+ * @param flags mount flags
+ */
+int vfs_mount(const char* source,
+	      const char* target,
+	      const char* fstype,
+	      int flags)
 {
-	return -1;
-
-	// 1. Find the filesystem type (e.g., "fat32", "ramfs") in your list of registered filesystems.
+	// 1. Find the filesystem type (e.g., "fat32", "ramfs") in your list of
+	// registered filesystems.
 	struct vfs_fs_type* fs = find_filesystem(fstype);
 	if (!fs) {
-		return -ENODEV; // Filesystem not found
+		return -VFS_ERR_NODEV; // Filesystem not found
 	}
 
 	// 2. Find the directory in the VFS that we want to mount on.
-	//    You'll need a path walking function for this (e.g., vfs_lookup(target)).
+	//    You'll need a path walking function for this (e.g.,
+	//    vfs_lookup(target)).
 	struct vfs_dentry* mount_point_dentry = vfs_lookup(target);
 	if (!mount_point_dentry) {
-		return -ENOENT; // Mount point doesn't exist
+		return -VFS_ERR_NOENT; // Mount point doesn't exist
 	}
 	// TODO: Add a check to ensure mount_point_dentry is a directory.
 
 	// 3. Call the filesystem-specific mount function.
-	//    This is where the magic happens! It returns a fully formed superblock.
+	//    This is where the magic happens! It returns a fully formed
+	//    superblock.
 	struct vfs_superblock* sb = fs->mount(source, flags);
 	if (!sb) {
-		return -EFAULT; // The FS failed to mount
+		return -VFS_ERR_NODEV; // The FS failed to mount
 	}
 
 	// 4. "Graft" the new filesystem onto the mount point.
-	//    The dentry for the mount point should now point to the new superblock's root.
+	//    The dentry for the mount point should now point to the new
+	//    superblock's root.
 	// mount_point_dentry->inode = sb->root_dentry;
-	// You'll also want to link the mount information so you can unmount it later.
-	// Your vfs_mount struct is good for this.
+	// You'll also want to link the mount information so you can unmount it
+	// later. Your vfs_mount struct is good for this.
 
 	log_info("Mounted %s on %s type %s", source, target, fstype);
-	return 0; // Success!
+	return VFS_OK; // Success!
 }
 
 struct vfs_dentry* vfs_lookup(const char* path)
@@ -715,7 +975,8 @@ struct vfs_dentry* vfs_resolve_path(const char* path)
 	// Traverse mount_list
 	for (struct vfs_mount* m = mount_list; m; m = m->next) {
 		size_t len = strlen(m->mount_point);
-		if (strncmp(path, m->mount_point, len) == 0 && (path[len] == '/' || path[len] == '\0')) {
+		if (strncmp(path, m->mount_point, len) == 0 &&
+		    (path[len] == '/' || path[len] == '\0')) {
 			if (len > match_len) {
 				match = m;
 				match_len = len;
@@ -725,7 +986,8 @@ struct vfs_dentry* vfs_resolve_path(const char* path)
 
 	if (!match) {
 		// FIXME: Doesn't varify rootfs->root_dentry exists
-		return vfs_walk_path(g_vfs_root_mount->sb->root_dentry, path + 1);
+		return vfs_walk_path(g_vfs_root_mount->sb->root_dentry,
+				     path + 1);
 	}
 
 	// Now create relative path for further fs dentry walking
@@ -781,7 +1043,7 @@ struct vfs_dentry* dentry_alloc(struct vfs_dentry* parent, const char* name)
 	dentry->parent = parent;
 
 	dentry->inode = nullptr;
-	dentry->ref_count = 1;
+	dentry->ref_count = 0;
 	dentry->flags = 0; // The caller can set flags like DENTRY_DIR later
 
 	list_init(&dentry->children);
@@ -819,8 +1081,8 @@ void dentry_dealloc(struct vfs_dentry* d)
 }
 
 /*******************************************************************************
-* Private Function Definitions
-*******************************************************************************/
+ * Private Function Definitions
+ *******************************************************************************/
 
 static struct vfs_fs_type* find_filesystem(const char* fs_type)
 {
@@ -832,8 +1094,20 @@ static struct vfs_fs_type* find_filesystem(const char* fs_type)
 	return nullptr;
 }
 
+/**
+ * trim_trailing - Remove trailing occurrences of a character from a string.
+ * @s: Mutable, NUL-terminated C string buffer to trim (modified in-place).
+ * @c: Character to remove from the end of @s.
+ *
+ * Scans backward from the end of @s and truncates all trailing @c by
+ * writing a terminating NUL at the first non-@c position.
+ */
 static void trim_trailing(char* s, char c)
 {
+	if (!s || !*s) {
+		return; // Nothing to trim
+	}
+
 	size_t i = strlen(s);
 	while (i >= 0 && s[i - 1] == c) {
 		i--;
@@ -870,4 +1144,56 @@ static const char* path_next_token(struct path_tokenizer* tok, size_t* out_len)
 	tok->offset += *out_len;
 
 	return start;
+}
+
+// TODO: Finish implementing
+static inline int vfs_create_args_valid(const char* path,
+					uint16_t mode,
+					int flags,
+					struct vfs_dentry** out)
+{
+	// Early validation of non-path parameters
+	if (!out) {
+		return -VFS_ERR_INVAL;
+	}
+
+	static constexpr int FORBIDDEN_FLAG_MASK = O_TRUNC | O_APPEND |
+						   O_DIRECTORY;
+	if (flags & FORBIDDEN_FLAG_MASK) {
+		return -VFS_ERR_INVAL;
+	}
+
+	if ((mode & VFS_PERM_ALL) != mode) {
+		return -VFS_ERR_INVAL;
+	}
+
+	// Single-pass path validation
+	// NOTE: We only allow absolute paths for now
+	if (!path || *path != '/') {
+		return -VFS_ERR_INVAL;
+	}
+
+	// Skip leading slashes and validate path in one pass
+	const char* p = path;
+	while (*p == '/') {
+		p++;
+	}
+
+	// Check for any path that's only slashes (including root "/")
+	if (*p == '\0') {
+		return -VFS_ERR_INVAL; // Path contains only slashes
+	}
+
+	// Validate path length while checking for valid characters
+	size_t len = (size_t)(p - path); // Length of leading slashes
+	while (*p && len < VFS_MAX_PATH) {
+		p++;
+		len++;
+	}
+
+	if (len >= VFS_MAX_PATH) {
+		return -VFS_ERR_INVAL;
+	}
+
+	return VFS_OK;
 }

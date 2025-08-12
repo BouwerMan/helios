@@ -11,6 +11,7 @@
 
 static constexpr size_t FS_TYPE_LEN = 8;
 static constexpr size_t VFS_MAX_NAME = 255; // Not including null terminator
+static constexpr size_t VFS_MAX_PATH = 255; // Not inlcuding null terminator
 
 // TODO: Add more filesystems once drivers for them are supported
 enum FILESYSTEMS {
@@ -70,7 +71,7 @@ enum VFS_OPEN_FLAGS {
 	O_EXCL = 0x0020,   ///< Error if O_CREAT and file exists
 
 	O_DIRECTORY = 0x0040, ///< Fail if the path is not a directory
-	O_NOFOLLOW = 0x0080,  ///< Do not follow symlinks (when you support them)
+	O_NOFOLLOW = 0x0080, ///< Do not follow symlinks (when you support them)
 
 	O_CLOEXEC = 0x0100, ///< Set close-on-exec (if you do exec)
 };
@@ -118,11 +119,17 @@ enum vfs_err {
  * Array of error names corresponding to VFS error codes.
  * The index of each error name matches the absolute value of the error code.
  */
-static const char* vfs_err_names[] = { "VFS_OK",	 "VFS_ERR_EXIST", "VFS_ERR_NOTDIR",   "VFS_ERR_NAMETOOLONG",
-				       "VFS_ERR_NOENT",	 "VFS_ERR_NOSPC", "VFS_ERR_NOMEM",    "VFS_ERR_PERM",
-				       "VFS_ERR_IO",	 "VFS_ERR_NODEV", "VFS_ERR_NOTEMPTY", "VFS_ERR_ROFS",
-				       "VFS_ERR_FAULT",	 "VFS_ERR_BUSY",  "VFS_ERR_XDEV",     "VFS_ERR_INVAL",
-				       "VFS_ERR_UNKNOWN" };
+static const char* vfs_err_names[] = {
+	"VFS_OK",	    "VFS_ERR_EXIST",
+	"VFS_ERR_NOTDIR",   "VFS_ERR_NAMETOOLONG",
+	"VFS_ERR_NOENT",    "VFS_ERR_NOSPC",
+	"VFS_ERR_NOMEM",    "VFS_ERR_PERM",
+	"VFS_ERR_IO",	    "VFS_ERR_NODEV",
+	"VFS_ERR_NOTEMPTY", "VFS_ERR_ROFS",
+	"VFS_ERR_FAULT",    "VFS_ERR_BUSY",
+	"VFS_ERR_XDEV",	    "VFS_ERR_INVAL",
+	"VFS_ERR_UNKNOWN"
+};
 
 /**
  * Retrieves the name of a VFS error code.
@@ -138,9 +145,9 @@ static inline const char* vfs_get_err_name(enum vfs_err errno)
 // A more Unix-like vfs_file
 struct vfs_file {
 	struct vfs_dentry* dentry; // <-- THIS IS THE MAGIC LINK!
-	off_t f_pos;		   // The current read/write offset for this session
-	int flags;		   // Open flags (O_RDONLY, O_WRONLY, O_APPEND, etc.)
-	int ref_count;		   // How many file descriptors point to this?
+	off_t f_pos;   // The current read/write offset for this session
+	int flags;     // Open flags (O_RDONLY, O_WRONLY, O_APPEND, etc.)
+	int ref_count; // How many file descriptors point to this?
 	struct file_ops* fops;
 	void* private_data; // For filesystem-specific use
 };
@@ -152,7 +159,7 @@ struct vfs_mount {
 	uint32_t lba_start;	   // Optional: offset of the partition
 	int flags;		   // Optional: e.g., read-only
 	struct vfs_mount* next;	   // Linked list of active mounts
-	struct list_head* list;	   //Linked list of active mounts
+	struct list_head* list;	   // Linked list of active mounts
 };
 
 // TODO: Add timestamp stuff
@@ -166,18 +173,28 @@ struct vfs_inode {
 	struct inode_ops* ops; // What can you DO with this inode?
 	struct file_ops* fops; // Default file ops
 
-	struct vfs_superblock* sb; // A pointer back to the superblock of its filesystem
-	uint32_t nlink;		   // Number of hard links (dentries) pointing to this inode
+	struct vfs_superblock*
+		sb; // A pointer back to the superblock of its filesystem
+
+	struct hlist_node hash;	   /* list of hash table entries */
+	struct hlist_head* bucket; /* hash bucket */
+
+	uint32_t nlink; // Number of hard links (dentries) pointing to this inode
 
 	void* fs_data; // Filesystem specific, for FAT it stores fat_inode_info
 };
 
 struct inode_ops {
-	int (*mkdir)(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode);
-	int (*create)(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode);
+	int (*mkdir)(struct vfs_inode* dir,
+		     struct vfs_dentry* dentry,
+		     uint16_t mode);
+	int (*create)(struct vfs_inode* dir,
+		      struct vfs_dentry* dentry,
+		      uint16_t mode);
 
 	// This is for navigating directories
-	struct vfs_dentry* (*lookup)(struct vfs_inode* dir_inode, struct vfs_dentry* child);
+	struct vfs_dentry* (*lookup)(struct vfs_inode* dir_inode,
+				     struct vfs_dentry* child);
 };
 
 struct file_ops {
@@ -187,7 +204,9 @@ struct file_ops {
 
 	// These are for I/O!
 	ssize_t (*read)(struct vfs_file* file, char* buffer, size_t count);
-	ssize_t (*write)(struct vfs_file* file, const char* buffer, size_t count);
+	ssize_t (*write)(struct vfs_file* file,
+			 const char* buffer,
+			 size_t count);
 };
 
 // TODO: Make helper function for creating new dentries???
@@ -196,8 +215,10 @@ struct vfs_dentry {
 	struct vfs_inode* inode;
 	struct vfs_dentry* parent; // Reference to parent's directory
 
-	struct list_head children; // Points to the *first child* in this directory
-	struct list_head siblings; // Points to the *next child* in the parent's list
+	struct list_head
+		children; // Points to the *first child* in this directory
+	struct list_head
+		siblings; // Points to the *next child* in the parent's list
 
 	struct hlist_node hash;	   /* list of hash table entries */
 	struct hlist_head* bucket; /* hash bucket */
@@ -221,42 +242,76 @@ struct vfs_superblock {
 	struct sb_ops* sops;
 };
 
+/**
+ * struct sb_ops - Superblock operations
+ * @alloc_inode: Allocate and initialize a new inode for this superblock
+ * @destroy_inode: Free and cleanup an inode when no longer needed
+ * @read_inode: Read inode metadata from storage into memory
+ *
+ * This structure defines the filesystem-specific operations that can be
+ * performed on a superblock. These operations are typically implemented
+ * by individual filesystem drivers to handle inode management.
+ */
 struct sb_ops {
-	struct inode* (*alloc_inode)(struct vfs_superblock* sb);
+	struct vfs_inode* (*alloc_inode)(struct vfs_superblock* sb);
 	void (*destroy_inode)(struct vfs_inode* inode);
+	int (*read_inode)(struct vfs_inode* inode);
 };
 
+// =============================================================================
+// == Function Prototypes
+// =============================================================================
+
+static inline struct vfs_inode* inode_from_file(struct vfs_file* file)
+{
+	return file->dentry ? file->dentry->inode : nullptr;
+}
+
+// --- VFS Initialization and Mounting ---
 void vfs_init();
 int mount_initial_rootfs();
-
+int vfs_mount(const char* source,
+	      const char* target,
+	      const char* fstype,
+	      int flags);
 void register_filesystem(struct vfs_fs_type* fs);
-struct vfs_dentry* vfs_lookup(const char* path);
-
-int vfs_get_next_id();
-int vfs_get_id();
-void dentry_add(struct vfs_dentry* dentry);
-
 struct vfs_superblock* vfs_get_sb(int idx);
 
-struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name);
+// --- Path and Dentry Management ---
+struct vfs_dentry* vfs_lookup(const char* path);
 struct vfs_dentry* vfs_resolve_path(const char* path);
 struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path);
+struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name);
 struct vfs_dentry* dget(struct vfs_dentry* dentry);
 void dput(struct vfs_dentry* dentry);
+void dentry_add(struct vfs_dentry* dentry);
+struct vfs_dentry* dentry_alloc(struct vfs_dentry* parent, const char* name);
+void dentry_dealloc(struct vfs_dentry* d);
 
+// --- Inode Management ---
+struct vfs_inode* new_inode(struct vfs_superblock* sb, size_t id);
+struct vfs_inode* iget(struct vfs_superblock* sb, size_t id);
+void iput(struct vfs_inode* inode);
+void inode_add(struct vfs_inode* inode);
+
+// --- File Operations (Syscall Layer) ---
 int vfs_open(const char* path, int flags);
 int vfs_close(int fd);
 ssize_t vfs_write(int fd, const char* buffer, size_t count);
 ssize_t vfs_read(int fd, char* buffer, size_t count);
-int vfs_mkdir(const char* path, uint16_t mode);
-int vfs_create(const char* path, uint16_t mode, int flags, struct vfs_dentry** out_dentry);
 off_t vfs_lseek(int fd, off_t offset, int whence);
+int vfs_mkdir(const char* path, uint16_t mode);
+int vfs_create(const char* path,
+	       uint16_t mode,
+	       int flags,
+	       struct vfs_dentry** out_dentry);
 
+// --- Utility Functions ---
 struct vfs_file* get_file(int fd);
-
 bool vfs_does_name_exist(struct vfs_dentry* parent, const char* name);
 void vfs_dump_child(struct vfs_dentry* parent);
-struct vfs_dentry* dentry_alloc(struct vfs_dentry* parent, const char* name);
-void dentry_dealloc(struct vfs_dentry* d);
 u32 dentry_hash(const struct vfs_dentry* key);
+struct vfs_inode* inode_ht_check(struct vfs_superblock* sb, size_t id);
 bool dentry_compare(const struct vfs_dentry* d1, const struct vfs_dentry* d2);
+int vfs_get_next_id();
+int vfs_get_id();

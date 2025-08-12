@@ -13,8 +13,10 @@
 #include <private/string_64.h>
 #endif
 
-/// Checks the alignment of dest and src while making sure num can be evenly divisible
-#define __STRING_H_CHECK_ALIGN(num, dest, src, size) ((num % size == 0) && (dest % size == 0) && (src % size == 0))
+/// Checks the alignment of dest and src while making sure num can be evenly
+/// divisible
+#define __STRING_H_CHECK_ALIGN(num, dest, src, size) \
+	((num % size == 0) && (dest % size == 0) && (src % size == 0))
 
 #ifdef __cplusplus
 extern "C" {
@@ -67,10 +69,10 @@ size_t strlen(const char*);
 
 extern void* memset(void* s, int c, size_t n);
 
-#ifdef __STDC_WANT_LIB_EXT1__
+// #ifdef __STDC_WANT_LIB_EXT1__
 size_t strnlen_s(const char* s, size_t n);
 size_t strnlen(const char* s, size_t n);
-#endif
+// #endif
 
 #ifdef __cplusplus
 }

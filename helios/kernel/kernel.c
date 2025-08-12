@@ -44,7 +44,8 @@
 #include <string.h>
 
 [[noreturn]]
-extern void __switch_to_new_stack(void* new_stack_top, void (*entrypoint)(void));
+extern void __switch_to_new_stack(void* new_stack_top,
+				  void (*entrypoint)(void));
 
 struct limine_framebuffer* framebuffer;
 
@@ -90,17 +91,10 @@ void kernel_main()
 	vfs_init();
 	mount_initial_rootfs();
 
-	vfs_mkdir("/test", VFS_PERM_ALL);
-	vfs_mkdir("/subdir", VFS_PERM_ALL);
-	vfs_mkdir("/test/test2", VFS_PERM_ALL);
-	vfs_dump_child(vfs_lookup("/"));
-	vfs_dump_child(vfs_lookup("/test/"));
-
-	int fd = vfs_open("/test/testfile", O_CREAT | O_RDWR);
+	int fd = vfs_open("/testfile", O_CREAT | O_RDWR);
 	if (fd < 0) {
 		panic("Couldn't open file");
 	}
-	vfs_dump_child(vfs_lookup("/test/"));
 
 	char buffer[] = "Hello how are you doing. Don't care fuck you";
 	ssize_t w = vfs_write(fd, buffer, strlen(buffer));
@@ -116,9 +110,14 @@ void kernel_main()
 
 	vfs_close(fd);
 
+	vfs_mkdir("/dev", VFS_PERM_ALL);
+	vfs_dump_child(vfs_lookup("/"));
+
+	// vfs_mount(,"/dev");
+
 #if 0
 
-slab_test();
+	slab_test();
 	struct limine_module_response* mod = mod_request.response;
 
 	struct task* task = new_task("Hello world userspace", NULL);
@@ -128,10 +127,6 @@ slab_test();
 	execve(task, mod->modules[0]->address);
 
 	// We're done, just hang...
-	log_warn("Shutting down in 3 seconds");
-	sleep(1000);
-	log_warn("Shutting down in 2 seconds");
-	sleep(1000);
 #endif
 	log_warn("Shutting down in 1 second");
 	sleep(1000);

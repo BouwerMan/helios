@@ -10,7 +10,7 @@ ObjCBlockIndentWidth: 8
 ConstructorInitializerIndentWidth: 8
 ContinuationIndentWidth: 8
 UseTab: Always
-ColumnLimit: 120
+ColumnLimit: 80
 AlignConsecutiveMacros: Consecutive
 AlignTrailingComments: true
 AlignAfterOpenBracket: Align
@@ -29,8 +29,8 @@ AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: false
-BinPackParameters: true
-BinPackArguments: true
+BinPackParameters: false
+BinPackArguments: false
 
 BreakBeforeBinaryOperators: None
 BreakBeforeInheritanceComma: false
