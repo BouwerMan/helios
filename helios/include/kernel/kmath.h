@@ -25,7 +25,7 @@ static inline int ilog2(unsigned long v)
  */
 static inline unsigned long roundup_pow_of_two(unsigned long v)
 {
-	if (v == 0) return 1;
+	if (v == 0 || v == 1) return 1;
 	return 1ULL << ((int)__BIT_WIDTH(v) - __builtin_clzll(v - 1));
 }
 

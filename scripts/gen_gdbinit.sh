@@ -7,14 +7,13 @@ true >.gdbinit
 
 # Find the kernel file (assuming only one exists)
 kernel_file=$(find helios -name "*.kernel" | head -n 1)
-user_file=sysroot/usr/bin/hello_world
+# user_file=sysroot/usr/bin/hello_world
 
 echo "Generating .gdbinit for kernel: $kernel_file"
 
 # Write initial GDB configuration to .gdbinit
 cat >.gdbinit <<EOL
 file $kernel_file
-file $user_file
 target remote localhost:1234
 set print pretty on
 
