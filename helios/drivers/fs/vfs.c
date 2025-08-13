@@ -19,15 +19,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <stdlib.h>
-#include <string.h>
-
+#include <drivers/fs/devfs.h>
 #include <drivers/fs/fat.h>
 #include <drivers/fs/ramfs.h>
 #include <drivers/fs/vfs.h>
 #include <kernel/panic.h>
 #include <kernel/tasks/scheduler.h>
 #include <mm/slab.h>
+#include <stdlib.h>
+#include <string.h>
 #include <util/hashtable.h>
 #include <util/ht.h>
 #include <util/log.h>
@@ -135,6 +135,7 @@ void vfs_init()
 	}
 
 	ramfs_init();
+	devfs_init();
 }
 
 int mount_initial_rootfs()
@@ -164,6 +165,7 @@ int mount_initial_rootfs()
 	log_debug("Ramfs mounted successfully at '/'.");
 
 	g_vfs_root_mount->sb = sb;
+	sb->mount_point = g_vfs_root_mount->mount_point;
 	register_mount(g_vfs_root_mount);
 	add_superblock(sb);
 
@@ -443,6 +445,8 @@ struct vfs_dentry* dentry_ht_check(struct vfs_dentry* d)
  */
 struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
 {
+	log_debug("dentry_lookup: parent=%p, name=%s", (void*)parent, name);
+
 	struct vfs_dentry* found;
 	struct vfs_dentry* child = dentry_alloc(parent, name);
 
@@ -450,6 +454,7 @@ struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
 	if ((found = dentry_ht_check(child))) {
 		// Since we found it, we free all the child init stuff then
 		// return found
+		log_debug("Found dentry %s in hash table", name);
 		dentry_dealloc(child);
 		return dget(found);
 	}
@@ -542,6 +547,7 @@ int vfs_open(const char* path, int flags)
 
 	struct vfs_dentry* dentry = vfs_lookup(path);
 	if (!dentry || !dentry->inode) {
+		log_debug("Dentry not found for path: %s", path);
 		if (flags & O_CREAT) {
 			int res =
 				vfs_create(path, VFS_PERM_ALL, flags, &dentry);
@@ -618,7 +624,12 @@ void vfs_dump_child(struct vfs_dentry* parent)
 {
 	struct vfs_dentry* child;
 	list_for_each_entry (child, &parent->children, siblings) {
-		log_debug("%s - type: %d", child->name, child->inode->filetype);
+		struct vfs_superblock* sb = child->inode->sb;
+		log_debug("%s - type: %d, sb: '%s'(%p)",
+			  child->name,
+			  child->inode->filetype,
+			  sb->mount_point,
+			  (void*)sb);
 	}
 }
 
@@ -866,9 +877,16 @@ int vfs_mount(const char* source,
 	// 4. "Graft" the new filesystem onto the mount point.
 	//    The dentry for the mount point should now point to the new
 	//    superblock's root.
-	// mount_point_dentry->inode = sb->root_dentry;
+	mount_point_dentry->inode = sb->root_dentry->inode;
 	// You'll also want to link the mount information so you can unmount it
 	// later. Your vfs_mount struct is good for this.
+	struct vfs_mount* new_mount =
+		(struct vfs_mount*)kmalloc(sizeof(struct vfs_mount));
+	new_mount->mount_point = strdup(target);
+	sb->mount_point = new_mount->mount_point;
+	new_mount->sb = sb;
+	new_mount->flags = flags;
+	register_mount(new_mount);
 
 	log_info("Mounted %s on %s type %s", source, target, fstype);
 	return VFS_OK; // Success!
@@ -883,7 +901,7 @@ struct vfs_dentry* vfs_lookup(const char* path)
 
 	// Is the path just "/"? Easy! Return the root dentry.
 	if (path[0] == '/' && path[1] == '\0') {
-		return g_vfs_root_mount->sb->root_dentry;
+		return dget(g_vfs_root_mount->sb->root_dentry);
 	}
 
 	char* buf = strdup(path);
@@ -1019,7 +1037,10 @@ struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path)
 	struct vfs_dentry* parent = root;
 
 	while ((token = path_next_token(&tok, &len))) {
-		parent = dentry_lookup(parent, token);
+		char token_buf[len + 1];
+		memcpy(token_buf, token, len);
+		token_buf[len] = '\0';
+		parent = dentry_lookup(parent, token_buf);
 		if (!parent) {
 			return nullptr;
 		}
@@ -1080,6 +1101,28 @@ void dentry_dealloc(struct vfs_dentry* d)
 	slab_free(&dentry_cache, d);
 }
 
+void test_tokenizer()
+{
+
+	size_t len = 0;
+	const char* path = "/foo/bar/baz/qux";
+	struct path_tokenizer tok = { .path = path };
+	const char* token;
+
+	log_info(TESTING_HEADER, "Path Tokenizer");
+
+	log_debug("Testing path tokenizer with path: %s", path);
+
+	while ((token = path_next_token(&tok, &len))) {
+		char token_buf[len + 1];
+		memcpy(token_buf, token, len);
+		token_buf[len] = '\0';
+		log_debug("Token: '%s', len: %zu", token_buf, len);
+	}
+
+	log_info(TESTING_FOOTER, "Path Tokenizer");
+}
+
 /*******************************************************************************
  * Private Function Definitions
  *******************************************************************************/
@@ -1132,18 +1175,19 @@ static const char* path_next_token(struct path_tokenizer* tok, size_t* out_len)
 		return nullptr;
 	}
 
-	const char* start = &tok->path[tok->offset];
-	const char* end = strchr(start, '/');
+	size_t start_offset = tok->offset;
+	// const char* start = &tok->path[tok->offset];
+	const char* token_start = &tok->path[tok->offset];
 
-	if (end) {
-		*out_len = (size_t)(end - start);
-	} else {
-		*out_len = strlen(start);
+	// Scan forward to find the end of the current token
+	while (tok->path[tok->offset] != '/' &&
+	       tok->path[tok->offset] != '\0') {
+		tok->offset++;
 	}
 
-	tok->offset += *out_len;
+	*out_len = tok->offset - start_offset;
 
-	return start;
+	return token_start;
 }
 
 // TODO: Finish implementing

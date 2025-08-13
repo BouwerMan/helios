@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 #include <drivers/fs/vfs.h>
+#include <util/hashtable.h>
+
+static constexpr size_t RAMFS_HASH_BITS = 9; // 512 buckets
 
 struct ramfs_file {
 	char* data;
@@ -26,7 +29,23 @@ struct ramfs_inode_info {
 	};
 };
 
-#define RAMFS_FILE(pdata) ((struct ramfs_inode_info*)(pdata))->file
+struct ramfs_sb_info {
+	size_t next_inode_id;
+	int flags;
+	DECLARE_HASHTABLE(ht, RAMFS_HASH_BITS);
+};
+
+static inline struct ramfs_file* RAMFS_FILE(struct vfs_inode* inode)
+{
+	return inode->fs_data ?
+		       ((struct ramfs_inode_info*)inode->fs_data)->file :
+		       nullptr;
+}
+
+static inline struct ramfs_sb_info* RAMFS_SB_INFO(struct vfs_superblock* sb)
+{
+	return sb->fs_data ? (struct ramfs_sb_info*)sb->fs_data : nullptr;
+}
 
 void ramfs_init();
 struct vfs_superblock* ramfs_mount(const char* source, int flags);

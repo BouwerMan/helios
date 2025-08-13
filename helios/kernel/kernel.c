@@ -23,6 +23,7 @@
 #include <drivers/fs/vfs.h>
 #include <drivers/pci/pci.h>
 #include <drivers/serial.h>
+#include <drivers/tty.h>
 #include <kernel/dmesg.h>
 #include <kernel/exec.h>
 #include <kernel/helios.h>
@@ -110,10 +111,34 @@ void kernel_main()
 
 	vfs_close(fd);
 
-	vfs_mkdir("/dev", VFS_PERM_ALL);
-	vfs_dump_child(vfs_lookup("/"));
+	test_tokenizer();
 
-	// vfs_mount(,"/dev");
+	vfs_mkdir("/dev", VFS_PERM_ALL);
+	vfs_mkdir("/test", VFS_PERM_ALL);
+	vfs_mkdir("/test/testdir", VFS_PERM_ALL);
+	vfs_mkdir("/test/testdir/testdir2", VFS_PERM_ALL);
+	vfs_dump_child(vfs_lookup("/"));
+	vfs_dump_child(vfs_lookup("/test"));
+	vfs_dump_child(vfs_lookup("/test/testdir"));
+
+	log_info("Mounting /dev");
+	vfs_mount(nullptr, "/dev", "devfs", 0);
+
+	tty_init();
+	int stdout = vfs_open("/dev/stdout", O_RDWR);
+	if (stdout < 0) {
+		log_error("Failed to get stdout: %s",
+			  vfs_get_err_name(-stdout));
+		goto end_stdout; // jump past our other testing
+	}
+
+	log_debug("Got stdout fd: %d", stdout);
+
+	vfs_write(stdout,
+		  "Hello from the kernel! This is a test of the TTY driver.\n",
+		  58);
+
+end_stdout:
 
 #if 0
 

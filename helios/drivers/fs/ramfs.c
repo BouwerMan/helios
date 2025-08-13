@@ -12,11 +12,6 @@
  * Global Variable Definitions
  *******************************************************************************/
 
-static constexpr int ramfs_i_ht_bits = 9; // 512 buckets
-static DEFINE_HASHTABLE(ramfs_i_ht, ramfs_i_ht_bits);
-
-static size_t inode_id = 1;
-
 struct vfs_fs_type ramfs_fs_type = {
 	.fs_type = "ramfs",
 	.mount = ramfs_mount,
@@ -55,17 +50,13 @@ static int add_child_to_list(struct vfs_dentry* parent,
 /**
  * Finds inode by id in the hashtable.
  */
-static struct ramfs_inode_info* find_private_inode(size_t id);
+static struct ramfs_inode_info* find_private_inode(struct vfs_superblock* sb,
+						   size_t id);
 
 /**
  * Adds info to the hashtable.
  */
-static void info_add(struct ramfs_inode_info* info);
-
-static inline u32 info_hash(struct ramfs_inode_info* info)
-{
-	return hash_32((u32)((uptr)info ^ info->id), HASH_BITS(ramfs_i_ht));
-}
+static void info_add(struct vfs_superblock* sb, struct ramfs_inode_info* info);
 
 /*******************************************************************************
  * Public Function Definitions
@@ -81,19 +72,33 @@ void ramfs_init()
 
 struct vfs_superblock* ramfs_mount(const char* source, int flags)
 {
-	(void)flags; // Temporary until I actually support flags
-	extern struct slab_cache dentry_cache;
+	(void)source; // should always be nullptr for ramfs
 
-	struct vfs_superblock* sb = kmalloc(sizeof(struct vfs_superblock));
+	struct vfs_superblock* sb = kzmalloc(sizeof(struct vfs_superblock));
 	if (!sb) {
 		log_error("Failed to allocate superblock");
 		return nullptr;
 	}
 
-	struct vfs_dentry* root_dentry = dentry_alloc(nullptr, source);
+	struct ramfs_sb_info* info = kzmalloc(sizeof(struct ramfs_sb_info));
+	if (!info) {
+		log_error("Failed to allocate superblock info");
+		goto clean_sb;
+	}
+
+	info->next_inode_id = 1;
+	info->flags = flags;
+	hash_init(info->ht);
+
+	sb->fs_data = info;
+
+	// The root dentry of this new ramfs instance is always named "/",
+	// regardless of where it's being mounted in the larger VFS tree.
+	// The 'source' argument is just a label for this instance.
+	struct vfs_dentry* root_dentry = dentry_alloc(nullptr, "/");
 	if (!root_dentry) {
 		log_error("Failed to allocate root dentry");
-		goto clean_sb;
+		goto clean_info;
 	}
 
 	root_dentry->flags = DENTRY_DIR | DENTRY_ROOT;
@@ -111,6 +116,8 @@ struct vfs_superblock* ramfs_mount(const char* source, int flags)
 
 	return sb;
 
+clean_info:
+	kfree(info);
 clean_dentry:
 	dentry_dealloc(root_dentry);
 clean_sb:
@@ -144,6 +151,7 @@ clean_sb:
  */
 int ramfs_mkdir(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode)
 {
+	// TODO: Make sure we put some sort of info into our hashtable
 	if (!dir || !dentry || !dentry->parent ||
 	    dentry->parent->inode != dir) {
 		log_error("mkdir: failed to create dir '%s': %s",
@@ -175,8 +183,8 @@ int ramfs_mkdir(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode)
 		return -VFS_ERR_EXIST;
 	}
 
-	// TODO: per fs inode creation
-	struct vfs_inode* node = new_inode(dir->sb, inode_id++);
+	struct vfs_inode* node =
+		new_inode(dir->sb, RAMFS_SB_INFO(dir->sb)->next_inode_id++);
 	if (!node) {
 		log_error("failed to create dir '%s': %s",
 			  dentry->name,
@@ -202,7 +210,7 @@ int ramfs_mkdir(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode)
 
 int ramfs_open(struct vfs_inode* inode, struct vfs_file* file)
 {
-	file->private_data = RAMFS_FILE(inode->fs_data);
+	file->private_data = RAMFS_FILE(inode);
 
 	return VFS_OK;
 }
@@ -285,6 +293,7 @@ struct vfs_dentry* ramfs_lookup(struct vfs_inode* dir_inode,
 		return dget(child);
 	}
 
+	// TODO: Should always return a dentry, just negative if doesn't exist
 	return nullptr;
 }
 
@@ -292,7 +301,8 @@ int ramfs_create(struct vfs_inode* dir,
 		 struct vfs_dentry* dentry,
 		 uint16_t mode)
 {
-	struct vfs_inode* inode = new_inode(dir->sb, inode_id++);
+	struct vfs_inode* inode =
+		new_inode(dir->sb, RAMFS_SB_INFO(dir->sb)->next_inode_id++);
 	if (!inode) {
 		return -VFS_ERR_NOMEM;
 	}
@@ -310,16 +320,16 @@ int ramfs_create(struct vfs_inode* dir,
 	inode->nlink = 1;
 
 	struct ramfs_inode_info* info = inode->fs_data;
+	log_debug("info: %p", inode->fs_data);
 	info->file = rfile;
+
+	info_add(dir->sb, info);
 
 	dentry->inode = inode;
 
 	add_child_to_list(dentry->parent, dentry);
 
 	log_debug("Created file '%s' (inode %zu)", dentry->name, inode->id);
-	log_debug("pdata: %p, rfile: %p",
-		  inode->fs_data,
-		  (void*)RAMFS_FILE(inode->fs_data));
 
 	return VFS_OK;
 }
@@ -353,7 +363,8 @@ struct vfs_inode* ramfs_alloc_inode(struct vfs_superblock* sb)
 
 int ramfs_read_inode(struct vfs_inode* inode)
 {
-	struct ramfs_inode_info* info = find_private_inode(inode->id);
+	struct ramfs_inode_info* info =
+		find_private_inode(inode->sb, inode->id);
 	if (!info) {
 		log_error("inode %zu not found", inode->id);
 		return -VFS_ERR_NOENT;
@@ -372,7 +383,7 @@ int ramfs_read_inode(struct vfs_inode* inode)
 void ramfs_destroy_inode(struct vfs_inode* inode)
 {
 	hash_del(&inode->hash);
-	struct ramfs_file* file = RAMFS_FILE(inode->fs_data);
+	struct ramfs_file* file = RAMFS_FILE(inode);
 	if (file) {
 		kfree(file->data);
 		kfree(file);
@@ -434,10 +445,11 @@ static struct vfs_dentry* scan_dir(struct vfs_dentry* dir, const char* name)
 	return nullptr;
 }
 
-static struct ramfs_inode_info* find_private_inode(size_t id)
+static struct ramfs_inode_info* find_private_inode(struct vfs_superblock* sb,
+						   size_t id)
 {
 	struct ramfs_inode_info* candidate;
-	hash_for_each_possible (ramfs_i_ht, candidate, hash, id) {
+	hash_for_each_possible (RAMFS_SB_INFO(sb)->ht, candidate, hash, id) {
 		if (candidate->id == id) {
 			return candidate;
 		}
@@ -446,10 +458,11 @@ static struct ramfs_inode_info* find_private_inode(size_t id)
 	return nullptr;
 }
 
-static void info_add(struct ramfs_inode_info* info)
+static void info_add(struct vfs_superblock* sb, struct ramfs_inode_info* info)
 {
+	struct ramfs_sb_info* sb_info = RAMFS_SB_INFO(sb);
 	struct hlist_head* bucket =
-		&ramfs_i_ht[hash_min(info->id, HASH_BITS(ramfs_i_ht))];
+		&sb_info->ht[hash_min(info->id, RAMFS_HASH_BITS)];
 	info->bucket = bucket;
 	// hash_add(i_ht, &info->hash, info->id);
 	hlist_add_head(bucket, &info->hash);

@@ -26,6 +26,7 @@ enum FILETYPE {
 	FILETYPE_UNKNOWN,
 	FILETYPE_FILE,
 	FILETYPE_DIR,
+	FILETYPE_CHAR_DEV,
 };
 
 enum DENTRY_FLAGS {
@@ -237,9 +238,9 @@ struct vfs_fs_type {
 struct vfs_superblock {
 	struct vfs_dentry* root_dentry;
 	struct vfs_fs_type* fs_type;
-	void* fs_data;
 	char* mount_point;
 	struct sb_ops* sops;
+	void* fs_data;
 };
 
 /**
@@ -315,3 +316,5 @@ struct vfs_inode* inode_ht_check(struct vfs_superblock* sb, size_t id);
 bool dentry_compare(const struct vfs_dentry* d1, const struct vfs_dentry* d2);
 int vfs_get_next_id();
 int vfs_get_id();
+
+void test_tokenizer();
