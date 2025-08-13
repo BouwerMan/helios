@@ -7,10 +7,11 @@ INCLUDEDIR?=$(PREFIX)/include
 LIBDIR?=$(EXEC_PREFIX)/lib
 
 ARCHDIR=arch/$(HOSTARCH)
+KARCHDIR=$(PWD)/helios/$(ARCHDIR)
 include $(ARCHDIR)/make.config
 
 CFLAGS:=$(CFLAGS) $(ARCH_CFLAGS) -ffreestanding -Wall -Wextra -pedantic -Werror -isystem$(ARCHDIR)/include -isysteminclude
-CPPFLAGS:=$(CPPFLAGS) $(ARCH_CPPFLAGS) -isysteminclude -isystem$(ARCHDIR)/include
+CPPFLAGS:=$(CPPFLAGS) $(ARCH_CPPFLAGS) -isysteminclude -isystem$(ARCHDIR)/include -isystem$(KARCHDIR)/include
 
 LIBK_CFLAGS:=$(CFLAGS) $(KERNEL_ARCH_CFLAGS) -I$(PWD)/helios/include -D__is_libk
 LIBK_CPPFLAGS:=$(CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS) -D__is_libk

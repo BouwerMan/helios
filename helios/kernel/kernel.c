@@ -86,7 +86,6 @@ void kernel_main()
 	log_info("Initializing dmesg");
 	dmesg_init();
 
-	// GDB BREAKPOINT
 	log_info("Initializing Timer");
 	timer_init();
 
@@ -133,7 +132,7 @@ void kernel_main()
 	vfs_mount(nullptr, "/dev", "devfs", 0);
 
 	tty_init();
-	int stdout = vfs_open("/dev/stdout", O_RDWR);
+	int stdout = vfs_open("/dev/ttyS0", O_RDWR);
 	if (stdout < 0) {
 		log_error("Failed to get stdout: %s",
 			  vfs_get_err_name(-stdout));

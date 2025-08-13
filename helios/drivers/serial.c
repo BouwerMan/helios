@@ -21,6 +21,10 @@
 
 #include <arch/ports.h>
 #include <drivers/serial.h>
+#include <drivers/tty.h>
+#include <kernel/panic.h>
+#include <mm/page_alloc.h>
+#include <stdlib.h>
 
 /**
  * @brief Initializes the serial port for communication.
@@ -40,10 +44,12 @@ int init_serial(void)
 	outb(COM1_PORT + 0, 0x03); // Set divisor to 3 (lo byte) 38400 baud
 	outb(COM1_PORT + 1, 0x00); //                  (hi byte)
 	outb(COM1_PORT + 3, 0x03); // 8 bits, no parity, one stop bit
-	outb(COM1_PORT + 2, 0xC7); // Enable FIFO, clear them, with 14-byte threshold
+	outb(COM1_PORT + 2,
+	     0xC7); // Enable FIFO, clear them, with 14-byte threshold
 	outb(COM1_PORT + 4, 0x0B); // IRQs enabled, RTS/DSR set
 	outb(COM1_PORT + 4, 0x1E); // Set in loopback mode, test the serial chip
-	outb(COM1_PORT + 0, 0xAE); // Test serial chip (send byte 0xAE and check if serial returns same byte)
+	outb(COM1_PORT + 0,
+	     0xAE); // Test serial chip (send byte 0xAE and check if serial returns same byte)
 
 	// Check if serial is faulty (i.e: not same byte as sent)
 	if (inb(COM1_PORT + 0) != 0xAE) {
@@ -56,7 +62,7 @@ int init_serial(void)
 	return 0;
 }
 
-static int is_transmit_empty(void)
+static inline int is_transmit_empty(void)
 {
 	return inb(COM1_PORT + 5) & 0x20;
 }
@@ -88,4 +94,52 @@ void write_serial_string(const char* s)
 {
 	while (*s)
 		write_serial(*s++);
+}
+
+ssize_t serial_write(struct tty* tty)
+{
+	struct ring_buffer* rb = &tty->output_buffer;
+	ssize_t bytes_written = 0;
+
+	spinlock_acquire(&rb->lock);
+
+	while (rb->head != rb->tail) {
+		while (is_transmit_empty() == 0) {
+			__builtin_ia32_pause();
+		}
+		outb(COM1_PORT, (u8)rb->buffer[rb->tail]);
+		rb->tail = (rb->tail + 1) % rb->size;
+		bytes_written++;
+	}
+
+	spinlock_release(&rb->lock);
+
+	return bytes_written;
+}
+
+struct tty_driver serial_driver = {
+	.write = serial_write,
+};
+
+static constexpr size_t RING_BUFFER_SIZE_PAGES = 1;
+static constexpr size_t RING_BUFFER_SIZE = RING_BUFFER_SIZE_PAGES * PAGE_SIZE;
+
+void serial_tty_init()
+{
+	// GDB BREAKPOINT
+	struct tty* tty = kzmalloc(sizeof(struct tty));
+	tty->driver = &serial_driver;
+	strncpy(tty->name, "ttyS0", 32);
+
+	struct ring_buffer* rb = &tty->output_buffer;
+	// log_debug("Trying to get a buffer of %zu pages",
+	// 	  RING_BUFFER_SIZE_PAGES);
+	rb->buffer = get_free_pages(AF_KERNEL, RING_BUFFER_SIZE_PAGES);
+	if (!rb->buffer) {
+		panic("Didn't get free pages");
+	}
+	rb->size = RING_BUFFER_SIZE;
+	spinlock_init(&rb->lock);
+
+	register_tty(tty);
 }

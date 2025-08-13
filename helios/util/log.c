@@ -22,11 +22,30 @@
 #include <drivers/serial.h>
 #include <kernel/dmesg.h>
 #include <kernel/screen.h>
+#include <kernel/work_queue.h>
+#include <liballoc.h>
 #include <util/log.h>
 
 #include <printf.h>
+#include <stdlib.h>
 #define __STDC_WANT_LIB_EXT1__
 #include <string.h>
+
+struct log_msg {
+	const char* msg;
+	size_t len;
+};
+
+void log_worker(void* data)
+{
+	struct log_msg* msg = data;
+
+	write_serial_string(msg->msg);
+	screen_putstring(msg->msg);
+
+	kfree((void*)msg->msg);
+	kfree(msg);
+}
 
 static enum LOG_MODE current_mode = LOG_DIRECT;
 void set_log_mode(enum LOG_MODE mode)
@@ -34,6 +53,7 @@ void set_log_mode(enum LOG_MODE mode)
 	current_mode = mode;
 }
 
+[[deprecated]]
 void log_putchar(const char c)
 {
 	if (current_mode == LOG_DIRECT) {
@@ -54,6 +74,10 @@ void log_output(const char* msg, int len)
 #endif
 		screen_putstring(msg);
 	} else if (current_mode == LOG_BUFFERED) {
-		dmesg_enqueue(msg, (size_t)len);
+		// dmesg_enqueue(msg, (size_t)len);
+		struct log_msg* item = kmalloc(sizeof(struct log_msg));
+		item->msg = strdup(msg);
+		item->len = (size_t)len;
+		add_work_item(log_worker, item);
 	}
 }

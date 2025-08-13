@@ -32,6 +32,7 @@ void panic(const char* message)
 {
 	__asm__ volatile("cli");
 	dmesg_flush_raw();
+	set_log_mode(LOG_DIRECT);
 	set_color(COLOR_RED, COLOR_BLACK);
 	log_error("KERNEL PANIC!\n%s", message);
 	QEMU_SHUTDOWN();

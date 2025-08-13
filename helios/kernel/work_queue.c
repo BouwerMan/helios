@@ -19,11 +19,14 @@ int add_work_item(work_func_t func, void* data)
 	item->data = data;
 
 	spinlock_acquire(&g_work_queue.lock);
-	list_add(&g_work_queue.queue, &item->list);
+	list_add_tail(&g_work_queue.queue, &item->list);
 	spinlock_release(&g_work_queue.lock);
 
-	// log_debug(
-	// 	"Added work item with func %p and data %p", (void*)func, data);
+	// TODO: make this a proper wake queue
+	if (wq_task->state == BLOCKED) {
+		wq_task->state = READY;
+	}
+
 	return 0;
 }
 
@@ -66,7 +69,6 @@ void work_queue_init()
 {
 	list_init(&g_work_queue.queue);
 	spinlock_init(&g_work_queue.lock);
-	// TODO: Add task
 	wq_task =
 		new_task("Worker Queue task", (entry_func)worker_thread_entry);
 	log_debug("Initialized work queues");
