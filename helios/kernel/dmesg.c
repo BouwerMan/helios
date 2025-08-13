@@ -26,6 +26,7 @@
 #include <kernel/spinlock.h>
 #include <kernel/tasks/scheduler.h>
 
+#include <kernel/work_queue.h>
 #include <util/log.h>
 
 static constexpr int DMESG_BUFFER_SIZE = 0x10000;
@@ -40,7 +41,7 @@ struct task* dmesg_task = nullptr;
 void dmesg_init()
 {
 	spinlock_init(&log_lock);
-	dmesg_task = new_task("DMESG task", (entry_func)dmesg_task_entry);
+	// dmesg_task = new_task("DMESG task", (entry_func)dmesg_task_entry);
 
 	log_debug("Setting log mode to use dmesg (LOG_BUFFERED)");
 	set_log_mode(LOG_BUFFERED);
@@ -61,10 +62,11 @@ void dmesg_enqueue(const char* str, size_t len)
 	}
 	spinlock_release(&log_lock);
 
-	dmesg_wake();
+	add_work_item(dmesg_flush, nullptr);
+	// dmesg_wake();
 }
 
-void dmesg_flush(void)
+void dmesg_flush(void* data)
 {
 	spinlock_acquire(&log_lock);
 
@@ -98,7 +100,7 @@ void dmesg_flush_raw(void)
 void dmesg_task_entry(void)
 {
 	while (1) {
-		dmesg_flush();
+		// dmesg_flush();
 		dmesg_wait();
 	}
 }

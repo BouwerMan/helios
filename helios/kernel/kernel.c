@@ -33,6 +33,7 @@
 #include <kernel/syscall.h>
 #include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
+#include <kernel/work_queue.h>
 #include <limine.h>
 #include <mm/bootmem.h>
 #include <mm/page.h>
@@ -59,6 +60,12 @@ void init_kernel_structure()
 	list_init(&kernel.slab_caches);
 }
 
+void wq_test(void* data)
+{
+	log_debug("Did a work item and got passed this string: %s",
+		  (char*)data);
+}
+
 void kernel_main()
 {
 	log_info("Successfully got out of bootstrapping hell");
@@ -75,6 +82,7 @@ void kernel_main()
 	scheduler_init();
 	log_info("Initalizing syscalls");
 	syscall_init();
+	work_queue_init();
 	log_info("Initializing dmesg");
 	dmesg_init();
 
@@ -153,6 +161,11 @@ end_stdout:
 
 	// We're done, just hang...
 #endif
+	char* wq_data = kzmalloc(16);
+	strcpy(wq_data, "string");
+	add_work_item(wq_test, wq_data);
+	scheduler_dump();
+
 	log_warn("Shutting down in 1 second");
 	sleep(1000);
 

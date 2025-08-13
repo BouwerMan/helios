@@ -26,9 +26,21 @@ enum TASK_TYPE {
 	USER_TASK,
 };
 
+static const char* task_type_names[] = {
+	"Kernel Task",
+	"User Task",
+};
+
+static inline const char* get_task_name(enum TASK_TYPE type)
+{
+	if (type < 0) type = -type;
+	return task_type_names[type];
+}
+
 // Any changes to this structure needs to be reflected in switch.asm
 struct task {
-	struct registers* regs; // Full CPU context, this address is loaded into rsp on switch
+	struct registers*
+		regs; // Full CPU context, this address is loaded into rsp on switch
 	uintptr_t cr3;		// pml4
 	uintptr_t kernel_stack; // Not super sure abt this one
 	enum TASK_STATE state;

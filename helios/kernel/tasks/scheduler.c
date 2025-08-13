@@ -176,9 +176,16 @@ void scheduler_init(void)
 	}
 	list_init(&squeue.task_list);
 
-	int res = slab_cache_init(squeue.cache, "Scheduler Tasks", sizeof(struct task), 0, NULL, NULL);
+	int res = slab_cache_init(squeue.cache,
+				  "Scheduler Tasks",
+				  sizeof(struct task),
+				  0,
+				  NULL,
+				  NULL);
 	if (res < 0) {
-		log_error("Could not init scheduler tasks cache, slab_cache_init() returned %d", res);
+		log_error(
+			"Could not init scheduler tasks cache, slab_cache_init() returned %d",
+			res);
 		panic("Scheduler tasks cache init failure");
 	}
 
@@ -250,7 +257,11 @@ void scheduler_dump()
 	log_info("Scheduler Tasks:");
 	struct task* pos;
 	list_for_each_entry (pos, &squeue.task_list, list) {
-		log_info("  %lu: %s, state=%d", pos->PID, pos->name, pos->state);
+		log_info("  %lu: %s, type='%s', state=%d",
+			 pos->PID,
+			 pos->name,
+			 get_task_name(pos->type),
+			 pos->state);
 	}
 }
 
@@ -344,7 +355,8 @@ static int create_kernel_stack(struct task* task)
 	uintptr_t stack_top = (uintptr_t)stack + STACK_SIZE_PAGES * PAGE_SIZE;
 
 	task->kernel_stack = stack_top;
-	task->regs = (struct registers*)(uintptr_t)(stack_top - sizeof(struct registers));
+	task->regs = (struct registers*)(uintptr_t)(stack_top -
+						    sizeof(struct registers));
 	// Simulate interrupt frame
 	task->regs->ss = 0x10; // optional for ring 0
 	task->regs->rsp = stack_top;
@@ -355,8 +367,11 @@ static int create_kernel_stack(struct task* task)
 	task->regs->ds = 0x10;
 	task->regs->saved_rflags = 0x202;
 
-	log_debug("Created stack for task %lu, kernel_stack: %lx, regs addr: %p", task->PID, task->kernel_stack,
-		  (void*)task->regs);
+	log_debug(
+		"Created stack for task %lu, kernel_stack: %lx, regs addr: %p",
+		task->PID,
+		task->kernel_stack,
+		(void*)task->regs);
 
 	return 0;
 }

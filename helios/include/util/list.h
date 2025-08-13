@@ -193,6 +193,14 @@ static inline void list_del(struct list_head* entry)
 
 #define list_entry(link, type, member) container_of(link, type, member)
 
+/**
+ * list_first_entry - get the first element from a list
+ * @link: the list head to take the element from
+ * @type: the type of the struct this is embedded in
+ * @member: the name of the list_head within the struct
+ *
+ * Note, that list is expected to be not empty.
+ */
 #define list_first_entry(link, type, member) \
 	list_entry((link)->next, type, member)
 
@@ -360,10 +368,11 @@ static inline void hlist_add_behind(struct hlist_node* n,
  * @head:	the head for your list.
  * @member:	the name of the hlist_node within the struct.
  */
-#define hlist_for_each_entry(pos, head, member)                              \
-	for (pos = hlist_entry_safe((head)->first, typeof(*(pos)), member);  \
-	     pos; pos = hlist_entry_safe((pos)->member.next, typeof(*(pos)), \
-					 member))
+#define hlist_for_each_entry(pos, head, member)                             \
+	for (pos = hlist_entry_safe((head)->first, typeof(*(pos)), member); \
+	     pos;                                                           \
+	     pos = hlist_entry_safe(                                        \
+		     (pos)->member.next, typeof(*(pos)), member))
 
 /**
  * hlist_count_nodes - count nodes in the hlist

@@ -5,7 +5,7 @@
 
 void dmesg_init();
 void dmesg_enqueue(const char* str, size_t len);
-void dmesg_flush(void);
+void dmesg_flush(void* data);
 void dmesg_flush_raw(void);
 void dmesg_wait();
 void dmesg_wake();
