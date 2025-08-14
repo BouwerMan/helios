@@ -4,7 +4,6 @@
 
 #if defined(__is_libk)
 #include <drivers/serial.h>
-#include <kernel/dmesg.h>
 #include <kernel/screen.h>
 #else
 #include <arch/syscall.h>

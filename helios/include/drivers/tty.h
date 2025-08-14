@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
+#include <drivers/fs/vfs.h>
 #include <kernel/spinlock.h>
 #include <kernel/tasks/scheduler.h>
 #include <sys/types.h>
 
-// A generic ring buffer structure
 struct ring_buffer {
 	char* buffer;
 	size_t size;
@@ -32,5 +32,15 @@ struct tty_driver {
 };
 
 void tty_init();
+
+/**
+ * register_tty - Register a TTY device with the system
+ * @tty: Pointer to the TTY device structure to register
+ *
+ * Adds the specified TTY device to the global list of available TTY devices.
+ * This makes the TTY accessible for use by the system and applications.
+ * The TTY structure must be properly initialized before calling this function.
+ */
 void register_tty(struct tty* tty);
 ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count);
+int tty_open(struct vfs_inode* inode, struct vfs_file* file);

@@ -12,45 +12,74 @@
 #include <sys/types.h>
 #include <util/log.h>
 
-static struct tty* g_active_tty = nullptr;
+/*******************************************************************************
+ * Global Variable Definitions
+ *******************************************************************************/
+
 static LIST_HEAD(g_ttys);
 
 struct file_ops tty_device_fops = {
 	.write = tty_write,
-	.read = NULL,
-	.open = nullptr, // TODO: needed?
-	.close = NULL,
+	.read = nullptr,
+	.open = tty_open,
+	.close = nullptr,
 };
 
 // The collection of operations for our TTY device
 struct inode_ops tty_device_ops = {
-	.lookup = NULL,
+	.lookup = nullptr,
 };
 
+/*******************************************************************************
+ * Private Function Prototypes
+ *******************************************************************************/
+
+/**
+ * find_tty_by_name - Find a TTY device by its name
+ * @name: The name of the TTY device to search for
+ *
+ * Return: Pointer to the TTY device if found, nullptr otherwise
+ */
+static struct tty* find_tty_by_name(const char* name);
+
+/**
+ * tty_fill_buffer - Fill a ring buffer with data from a source buffer
+ * @rb: Pointer to the ring buffer to fill
+ * @buffer: Source buffer containing data to copy
+ * @count: Number of bytes to copy from the source buffer
+ *
+ * Return: Number of bytes successfully copied to the ring buffer
+ */
+static ssize_t tty_fill_buffer(struct ring_buffer* rb,
+			       const char* buffer,
+			       size_t count);
+
+/*******************************************************************************
+ * Public Function Definitions
+ *******************************************************************************/
+
+/**
+ * register_tty - Register a TTY device with the system
+ * @tty: Pointer to the TTY device structure to register
+ *
+ * Adds the specified TTY device to the global list of available TTY devices.
+ * This makes the TTY accessible for use by the system and applications.
+ * The TTY structure must be properly initialized before calling this function.
+ */
 void register_tty(struct tty* tty)
 {
 	log_debug("Registered tty: '%s'", tty->name);
 	list_add(&g_ttys, &tty->list);
 }
 
-static struct tty* find_tty_by_name(const char* name)
-{
-	struct tty* tty = nullptr;
-	list_for_each_entry (tty, &g_ttys, list) {
-		if (!strcmp(tty->name, name)) {
-			return tty;
-		}
-	}
-	return nullptr;
-}
-
 void tty_init()
 {
 	serial_tty_init();
 
-	g_active_tty = find_tty_by_name("ttyS0");
-	register_device("ttyS0", &tty_device_fops);
-	// register_device("stdout", &tty_device_fops);
+	struct tty* tty = nullptr;
+	list_for_each_entry (tty, &g_ttys, list) {
+		register_device(tty->name, &tty_device_fops);
+	}
 }
 
 void tty_drain_output_buffer(void* data)
@@ -65,11 +94,6 @@ void tty_drain_output_buffer(void* data)
 	}
 }
 
-// void tty_fill_buffer(const char* )
-// {
-//
-// }
-
 // This is the implementation for writing to the screen
 ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count)
 {
@@ -77,11 +101,52 @@ ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count)
 		  (void*)file,
 		  (void*)buffer,
 		  count);
-	// TODO: Find tty device from file. Probably by linking the 2 when
-	// tty_open is called.
-	(void)file;
 
-	struct ring_buffer* rb = &g_active_tty->output_buffer;
+	struct tty* tty = file->private_data;
+	struct ring_buffer* rb = &tty->output_buffer;
+
+	ssize_t written = tty_fill_buffer(rb, buffer, count);
+
+	add_work_item(tty_drain_output_buffer, tty);
+
+	return written;
+}
+
+int tty_open(struct vfs_inode* inode, struct vfs_file* file)
+{
+	(void)inode;
+	file->private_data = find_tty_by_name(file->dentry->name);
+	return VFS_OK;
+}
+
+/*******************************************************************************
+ * Private Function Definitions
+ *******************************************************************************/
+
+static struct tty* find_tty_by_name(const char* name)
+{
+	struct tty* tty = nullptr;
+	list_for_each_entry (tty, &g_ttys, list) {
+		if (!strcmp(tty->name, name)) {
+			return tty;
+		}
+	}
+	return nullptr;
+}
+
+/**
+ * tty_fill_buffer - Fill a ring buffer with data from a source buffer
+ * @rb: Pointer to the ring buffer to fill
+ * @buffer: Source buffer containing data to copy
+ * @count: Number of bytes to copy from the source buffer
+ *
+ * Return: Number of bytes successfully copied to the ring buffer
+ */
+static ssize_t tty_fill_buffer(struct ring_buffer* rb,
+			       const char* buffer,
+			       size_t count)
+{
+
 	size_t i = 0;
 	spinlock_acquire(&rb->lock);
 
@@ -99,9 +164,5 @@ ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count)
 
 	spinlock_release(&rb->lock);
 
-	add_work_item(tty_drain_output_buffer, g_active_tty);
-
-	return (ssize_t)i; // Return the number of bytes written
+	return (ssize_t)i;
 }
-
-// TODO: Implement a tty_read that gets keyboard input

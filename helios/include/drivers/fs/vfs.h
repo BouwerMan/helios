@@ -77,11 +77,13 @@ enum VFS_OPEN_FLAGS {
 	O_CLOEXEC = 0x0100, ///< Set close-on-exec (if you do exec)
 };
 
+#ifndef SEEK_SET
 enum VFS_SEEK_TYPES {
 	SEEK_SET, // From beginning of file
 	SEEK_CUR, // From f_pos
 	SEEK_END, // From end of file
 };
+#endif
 
 enum MOUNT_FLAGS {
 	MOUNT_PRESENT = 0x1,
