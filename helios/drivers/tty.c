@@ -1,7 +1,9 @@
+#include <drivers/console.h>
 #include <drivers/device.h>
 #include <drivers/fs/vfs.h>
 #include <drivers/serial.h>
 #include <drivers/tty.h>
+#include <drivers/vconsole.h>
 #include <kernel/dmesg.h>
 #include <kernel/screen.h>
 #include <kernel/spinlock.h>
@@ -25,7 +27,6 @@ struct file_ops tty_device_fops = {
 	.close = nullptr,
 };
 
-// The collection of operations for our TTY device
 struct inode_ops tty_device_ops = {
 	.lookup = nullptr,
 };
@@ -33,14 +34,6 @@ struct inode_ops tty_device_ops = {
 /*******************************************************************************
  * Private Function Prototypes
  *******************************************************************************/
-
-/**
- * find_tty_by_name - Find a TTY device by its name
- * @name: The name of the TTY device to search for
- *
- * Return: Pointer to the TTY device if found, nullptr otherwise
- */
-static struct tty* find_tty_by_name(const char* name);
 
 /**
  * tty_fill_buffer - Fill a ring buffer with data from a source buffer
@@ -54,9 +47,35 @@ static ssize_t tty_fill_buffer(struct ring_buffer* rb,
 			       const char* buffer,
 			       size_t count);
 
+/**
+ * tty_drain_output_buffer - Work item function to drain TTY output buffer
+ * @data: Void pointer to the TTY device structure to drain
+ */
+static void tty_drain_output_buffer(void* data);
+
 /*******************************************************************************
  * Public Function Definitions
  *******************************************************************************/
+
+/**
+ * tty_init - Initialize the TTY subsystem
+ *
+ * Initializes all TTY drivers and registers their devices with the VFS.
+ * This function sets up the serial and VGA console TTY devices, then
+ * registers each TTY as a character device so applications can access
+ * them through the filesystem. This is the main entry point for TTY
+ * subsystem initialization during kernel boot.
+ */
+void tty_init()
+{
+	serial_tty_init();
+	vconsole_tty_init();
+
+	struct tty* tty = nullptr;
+	list_for_each_entry (tty, &g_ttys, list) {
+		register_device(tty->name, &tty_device_fops);
+	}
+}
 
 /**
  * register_tty - Register a TTY device with the system
@@ -72,37 +91,21 @@ void register_tty(struct tty* tty)
 	list_add(&g_ttys, &tty->list);
 }
 
-void tty_init()
+/**
+ * __write_to_tty - Write data to a TTY device's output buffer
+ * @tty: Pointer to the TTY device to write to
+ * @buffer: Source buffer containing data to write
+ * @count: Number of bytes to write from the buffer
+ *
+ * Writes data to the TTY's output buffer and schedules the buffer to be
+ * drained (transmitted to the actual output device). This is an internal
+ * function that handles the core TTY write operation by filling the output
+ * ring buffer and queuing work to process the buffered data.
+ *
+ * Return: Number of bytes successfully written to the output buffer
+ */
+ssize_t __write_to_tty(struct tty* tty, const char* buffer, size_t count)
 {
-	serial_tty_init();
-
-	struct tty* tty = nullptr;
-	list_for_each_entry (tty, &g_ttys, list) {
-		register_device(tty->name, &tty_device_fops);
-	}
-}
-
-void tty_drain_output_buffer(void* data)
-{
-	struct tty* tty_to_drain = (struct tty*)data;
-
-	// Check if the TTY has a driver and a write function
-	if (tty_to_drain && tty_to_drain->driver &&
-	    tty_to_drain->driver->write) {
-		// Call the specific driver's write function (e.g., serial_write)
-		tty_to_drain->driver->write(tty_to_drain);
-	}
-}
-
-// This is the implementation for writing to the screen
-ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count)
-{
-	log_debug("tty_write: file=%p, buffer=%p, count=%zu",
-		  (void*)file,
-		  (void*)buffer,
-		  count);
-
-	struct tty* tty = file->private_data;
 	struct ring_buffer* rb = &tty->output_buffer;
 
 	ssize_t written = tty_fill_buffer(rb, buffer, count);
@@ -112,6 +115,28 @@ ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count)
 	return written;
 }
 
+/**
+ * tty_write - Write data to a TTY device through the VFS interface
+ * @file: VFS file handle containing the TTY device in private_data
+ * @buffer: Source buffer containing data to write
+ * @count: Number of bytes to write from the buffer
+ *
+ * Return: Number of bytes successfully written to the TTY
+ */
+ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count)
+{
+	struct tty* tty = file->private_data;
+
+	return __write_to_tty(tty, buffer, count);
+}
+
+/**
+ * tty_open - Open a TTY device through the VFS interface
+ * @inode: VFS inode representing the TTY device (unused)
+ * @file: VFS file structure to initialize for TTY access
+ *
+ * Return: VFS_OK on success
+ */
 int tty_open(struct vfs_inode* inode, struct vfs_file* file)
 {
 	(void)inode;
@@ -119,11 +144,13 @@ int tty_open(struct vfs_inode* inode, struct vfs_file* file)
 	return VFS_OK;
 }
 
-/*******************************************************************************
- * Private Function Definitions
- *******************************************************************************/
-
-static struct tty* find_tty_by_name(const char* name)
+/**
+ * find_tty_by_name - Find a TTY device by its name
+ * @name: The name of the TTY device to search for
+ *
+ * Return: Pointer to the TTY device if found, nullptr otherwise
+ */
+struct tty* find_tty_by_name(const char* name)
 {
 	struct tty* tty = nullptr;
 	list_for_each_entry (tty, &g_ttys, list) {
@@ -133,6 +160,10 @@ static struct tty* find_tty_by_name(const char* name)
 	}
 	return nullptr;
 }
+
+/*******************************************************************************
+ * Private Function Definitions
+ *******************************************************************************/
 
 /**
  * tty_fill_buffer - Fill a ring buffer with data from a source buffer
@@ -157,7 +188,6 @@ static ssize_t tty_fill_buffer(struct ring_buffer* rb,
 		rb->head = (rb->head + 1) % rb->size;
 
 		if (rb->head == rb->tail) {
-			// optional: drop oldest char or pause until consumed
 			rb->tail = (rb->tail + 1) % rb->size;
 		}
 	}
@@ -165,4 +195,24 @@ static ssize_t tty_fill_buffer(struct ring_buffer* rb,
 	spinlock_release(&rb->lock);
 
 	return (ssize_t)i;
+}
+
+/**
+ * tty_drain_output_buffer - Work item function to drain TTY output buffer
+ * @data: Void pointer to the TTY device structure to drain
+ *
+ * This function is executed as a work item to process buffered output data
+ * for a TTY device. It verifies the TTY has a valid driver with a write
+ * function, then calls the driver-specific write implementation (e.g.,
+ * serial_write or vconsole_write) to transmit the buffered data to the
+ * actual output device.
+ */
+static void tty_drain_output_buffer(void* data)
+{
+	struct tty* tty_to_drain = (struct tty*)data;
+
+	if (tty_to_drain && tty_to_drain->driver &&
+	    tty_to_drain->driver->write) {
+		tty_to_drain->driver->write(tty_to_drain);
+	}
 }

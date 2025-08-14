@@ -26,6 +26,30 @@
 #include <mm/page_alloc.h>
 #include <stdlib.h>
 
+/*******************************************************************************
+ * Global Variable Definitions
+ *******************************************************************************/
+
+struct tty_driver serial_driver = {
+	.write = serial_tty_write,
+};
+
+static constexpr size_t RING_BUFFER_SIZE_PAGES = 1;
+static constexpr size_t RING_BUFFER_SIZE = RING_BUFFER_SIZE_PAGES * PAGE_SIZE;
+
+/*******************************************************************************
+ * Private Function Prototypes
+ *******************************************************************************/
+
+static inline int is_transmit_empty(void)
+{
+	return inb(COM1_PORT + 5) & 0x20;
+}
+
+/*******************************************************************************
+ * Public Function Definitions
+ *******************************************************************************/
+
 /**
  * @brief Initializes the serial port for communication.
  *
@@ -34,10 +58,10 @@
  * test to verify the functionality of the serial port. If the test fails,
  * the function returns an error code.
  *
- * @return 0 if the serial port is initialized successfully, 1 if the loopback
+ * @return 0 if the serial port is initialized successfully, -1 if the loopback
  *         test fails.
  */
-int init_serial(void)
+int serial_port_init()
 {
 	outb(COM1_PORT + 1, 0x00); // Disable all interrupts
 	outb(COM1_PORT + 3, 0x80); // Enable DLAB (set baud rate divisor)
@@ -53,7 +77,7 @@ int init_serial(void)
 
 	// Check if serial is faulty (i.e: not same byte as sent)
 	if (inb(COM1_PORT + 0) != 0xAE) {
-		return 1;
+		return -1;
 	}
 
 	// If serial is not faulty set it in normal operation mode
@@ -62,9 +86,32 @@ int init_serial(void)
 	return 0;
 }
 
-static inline int is_transmit_empty(void)
+/**
+ * serial_tty_init - Initialize the serial port TTY device
+ *
+ * Creates and registers a TTY device named "ttyS0" that outputs to the
+ * serial port. Allocates memory for the output ring buffer and initializes
+ * all necessary data structures. This TTY provides serial console access
+ * for debugging and remote system administration.
+ *
+ * Panics if memory allocation for the ring buffer fails, as the serial
+ * TTY is essential for system debugging and logging.
+ */
+void serial_tty_init()
 {
-	return inb(COM1_PORT + 5) & 0x20;
+	struct tty* tty = kzmalloc(sizeof(struct tty));
+	tty->driver = &serial_driver;
+	strncpy(tty->name, "ttyS0", 32);
+
+	struct ring_buffer* rb = &tty->output_buffer;
+	rb->buffer = get_free_pages(AF_KERNEL, RING_BUFFER_SIZE_PAGES);
+	if (!rb->buffer) {
+		panic("Didn't get free pages");
+	}
+	rb->size = RING_BUFFER_SIZE;
+	spinlock_init(&rb->lock);
+
+	register_tty(tty);
 }
 
 /**
@@ -78,8 +125,8 @@ static inline int is_transmit_empty(void)
 void write_serial(char a)
 {
 	while (is_transmit_empty() == 0)
-		;
-	outb(COM1_PORT, (uint8_t)a);
+		__builtin_ia32_pause();
+	outb(COM1_PORT, (u8)a);
 }
 
 /**
@@ -96,7 +143,18 @@ void write_serial_string(const char* s)
 		write_serial(*s++);
 }
 
-ssize_t serial_write(struct tty* tty)
+/**
+ * serial_tty_write - Drain the TTY output buffer to the serial port
+ * @tty: Pointer to the TTY device whose output buffer to drain
+ *
+ * Reads all available characters from the TTY's output ring buffer and
+ * transmits them through the serial port. This function is typically called
+ * as a work item to process buffered output. The operation is atomic and
+ * protected by the ring buffer's spinlock to ensure thread safety.
+ *
+ * Return: Number of characters written to the serial port
+ */
+ssize_t serial_tty_write(struct tty* tty)
 {
 	struct ring_buffer* rb = &tty->output_buffer;
 	ssize_t bytes_written = 0;
@@ -104,10 +162,7 @@ ssize_t serial_write(struct tty* tty)
 	spinlock_acquire(&rb->lock);
 
 	while (rb->head != rb->tail) {
-		while (is_transmit_empty() == 0) {
-			__builtin_ia32_pause();
-		}
-		outb(COM1_PORT, (u8)rb->buffer[rb->tail]);
+		write_serial(rb->buffer[rb->tail]);
 		rb->tail = (rb->tail + 1) % rb->size;
 		bytes_written++;
 	}
@@ -115,31 +170,4 @@ ssize_t serial_write(struct tty* tty)
 	spinlock_release(&rb->lock);
 
 	return bytes_written;
-}
-
-struct tty_driver serial_driver = {
-	.write = serial_write,
-};
-
-static constexpr size_t RING_BUFFER_SIZE_PAGES = 1;
-static constexpr size_t RING_BUFFER_SIZE = RING_BUFFER_SIZE_PAGES * PAGE_SIZE;
-
-void serial_tty_init()
-{
-	// GDB BREAKPOINT
-	struct tty* tty = kzmalloc(sizeof(struct tty));
-	tty->driver = &serial_driver;
-	strncpy(tty->name, "ttyS0", 32);
-
-	struct ring_buffer* rb = &tty->output_buffer;
-	// log_debug("Trying to get a buffer of %zu pages",
-	// 	  RING_BUFFER_SIZE_PAGES);
-	rb->buffer = get_free_pages(AF_KERNEL, RING_BUFFER_SIZE_PAGES);
-	if (!rb->buffer) {
-		panic("Didn't get free pages");
-	}
-	rb->size = RING_BUFFER_SIZE;
-	spinlock_init(&rb->lock);
-
-	register_tty(tty);
 }

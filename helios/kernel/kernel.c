@@ -20,6 +20,7 @@
 
 #include <arch/mmu/vmm.h>
 #include <drivers/ata/controller.h>
+#include <drivers/console.h>
 #include <drivers/fs/vfs.h>
 #include <drivers/pci/pci.h>
 #include <drivers/serial.h>
@@ -45,48 +46,60 @@
 #define __STDC_WANT_LIB_EXT1__
 #include <string.h>
 
-[[noreturn]]
-extern void __switch_to_new_stack(void* new_stack_top,
-				  void (*entrypoint)(void));
-
 struct limine_framebuffer* framebuffer;
 
 struct kernel_context kernel = { 0 };
 
-/// Initializes the lists in the kernel_context struct
-/// A lot of the entries actually get inited by other functions
+struct vfs_file* g_kernel_console = nullptr;
+
+/**
+ * init_kernel_structure - Initialize core kernel data structures
+ */
 void init_kernel_structure()
 {
 	list_init(&kernel.slab_caches);
 }
 
-void wq_test(void* data)
+/**
+ * kernel_console_init - Initialize the kernel console for logging
+ *
+ * Sets up the kernel console by opening /dev/console and configuring
+ * it as the primary output destination for kernel messages. This enables
+ * kernel logging to be displayed on the system console.
+ *
+ * The function:
+ * - Looks up the /dev/console device node in the VFS
+ * - Allocates and initializes a file structure for the console
+ * - Calls the TTY's open function to prepare the device
+ * - Switches logging to buffered mode
+ */
+void kernel_console_init()
 {
-	log_debug("Did a work item and got passed this string: %s",
-		  (char*)data);
+	struct vfs_dentry* dentry = vfs_lookup("/dev/console");
+	if (dentry && dentry->inode) {
+		g_kernel_console = kzmalloc(sizeof(struct vfs_file));
+		g_kernel_console->dentry = dget(dentry);
+		g_kernel_console->fops = dentry->inode->fops;
+		g_kernel_console->ref_count = 1;
+
+		// Call the TTY's open function
+		if (g_kernel_console->fops->open) {
+			g_kernel_console->fops->open(dentry->inode,
+						     g_kernel_console);
+		}
+		set_log_mode(LOG_BUFFERED);
+	}
 }
 
 void kernel_main()
 {
-	log_info("Successfully got out of bootstrapping hell");
-	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
 	// FIXME: Once we get module loading working I will uncomment this
 	// bootmem_reclaim_bootloader();
 
 	liballoc_init(); // Just initializes the liballoc spinlock
-	int* test = kmalloc(141);
-	*test = 513;
-
-	log_debug("kmalloc returned %p, stored %d in it", (void*)test, *test);
-
 	scheduler_init();
-	log_info("Initalizing syscalls");
 	syscall_init();
 	work_queue_init();
-	log_info("Initializing dmesg");
-	dmesg_init();
-
-	log_info("Initializing Timer");
 	timer_init();
 
 	// list_devices();
@@ -97,7 +110,19 @@ void kernel_main()
 
 	log_info("Initializing VFS and mounting root ramfs");
 	vfs_init();
-	mount_initial_rootfs();
+
+	log_info("Mounting /dev");
+	vfs_mkdir("/dev", VFS_PERM_ALL);
+	vfs_mount(nullptr, "/dev", "devfs", 0);
+
+	tty_init();
+	console_init();
+	attach_tty_to_console("ttyS0");
+	attach_tty_to_console("tty0");
+	kernel_console_init();
+
+	log_debug("Successfully got out of bootstrapping hell");
+	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
 
 	int fd = vfs_open("/testfile", O_CREAT | O_RDWR);
 	if (fd < 0) {
@@ -120,7 +145,6 @@ void kernel_main()
 
 	test_tokenizer();
 
-	vfs_mkdir("/dev", VFS_PERM_ALL);
 	vfs_mkdir("/test", VFS_PERM_ALL);
 	vfs_mkdir("/test/testdir", VFS_PERM_ALL);
 	vfs_mkdir("/test/testdir/testdir2", VFS_PERM_ALL);
@@ -128,11 +152,7 @@ void kernel_main()
 	vfs_dump_child(vfs_lookup("/test"));
 	vfs_dump_child(vfs_lookup("/test/testdir"));
 
-	log_info("Mounting /dev");
-	vfs_mount(nullptr, "/dev", "devfs", 0);
-
-	tty_init();
-	int stdout = vfs_open("/dev/ttyS0", O_RDWR);
+	int stdout = vfs_open("/dev/console", O_RDWR);
 	if (stdout < 0) {
 		log_error("Failed to get stdout: %s",
 			  vfs_get_err_name(-stdout));
@@ -160,10 +180,10 @@ end_stdout:
 
 	// We're done, just hang...
 #endif
-	char* wq_data = kzmalloc(16);
-	strcpy(wq_data, "string");
-	add_work_item(wq_test, wq_data);
 	scheduler_dump();
+
+	log_info("Successfully got out of bootstrapping hell");
+	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
 
 	log_warn("Shutting down in 1 second");
 	sleep(1000);

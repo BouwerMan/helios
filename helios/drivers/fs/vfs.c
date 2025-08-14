@@ -136,6 +136,8 @@ void vfs_init()
 
 	ramfs_init();
 	devfs_init();
+
+	mount_initial_rootfs();
 }
 
 int mount_initial_rootfs()
@@ -1040,6 +1042,7 @@ struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path)
 		char token_buf[len + 1];
 		memcpy(token_buf, token, len);
 		token_buf[len] = '\0';
+		log_debug("%s", token_buf);
 		parent = dentry_lookup(parent, token_buf);
 		if (!parent) {
 			return nullptr;
@@ -1151,7 +1154,7 @@ static void trim_trailing(char* s, char c)
 		return; // Nothing to trim
 	}
 
-	size_t i = strlen(s);
+	ssize_t i = (ssize_t)strlen(s);
 	while (i >= 0 && s[i - 1] == c) {
 		i--;
 	}

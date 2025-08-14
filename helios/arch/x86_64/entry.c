@@ -33,7 +33,8 @@
 #include <util/log.h>
 
 [[noreturn]]
-extern void __switch_to_new_stack(void* new_stack_top, void (*entrypoint)(void));
+extern void __switch_to_new_stack(void* new_stack_top,
+				  void (*entrypoint)(void));
 
 /**
  * @brief Architecture-specific kernel entry point.
@@ -59,7 +60,7 @@ void __arch_entry()
 
 	// Stage 1: Initialize logging and framebuffer
 
-	init_serial();
+	serial_port_init();
 	screen_init(COLOR_WHITE, COLOR_BLACK);
 
 	// Stage 2: Initialize descriptor tables
@@ -96,9 +97,12 @@ void __arch_entry()
 
 	// Stage 6: Initialize kernel stack and jump to kernel_main
 
-	log_init("Init Stage 6: Initializing kernel stack and jumping to kernel_main");
+	log_init(
+		"Init Stage 6: Initializing kernel stack and jumping to kernel_main");
 
 	void* kernel_stack = get_free_pages(AF_KERNEL, KERNEL_STACK_SIZE_PAGES);
-	__switch_to_new_stack((void*)((uptr)kernel_stack + KERNEL_STACK_SIZE_PAGES * PAGE_SIZE), kernel_main);
+	__switch_to_new_stack((void*)((uptr)kernel_stack +
+				      KERNEL_STACK_SIZE_PAGES * PAGE_SIZE),
+			      kernel_main);
 	__builtin_unreachable();
 }

@@ -31,53 +31,25 @@
 #define __STDC_WANT_LIB_EXT1__
 #include <string.h>
 
-struct log_msg {
-	const char* msg;
-	size_t len;
-};
-
-void log_worker(void* data)
-{
-	struct log_msg* msg = data;
-
-	write_serial_string(msg->msg);
-	screen_putstring(msg->msg);
-
-	kfree((void*)msg->msg);
-	kfree(msg);
-}
-
 static enum LOG_MODE current_mode = LOG_DIRECT;
+
 void set_log_mode(enum LOG_MODE mode)
 {
 	current_mode = mode;
 }
 
-[[deprecated]]
-void log_putchar(const char c)
-{
-	if (current_mode == LOG_DIRECT) {
-#if ENABLE_SERIAL_LOGGING
-		write_serial(c);
-#endif
-		screen_putchar(c);
-	} else if (current_mode == LOG_BUFFERED) {
-		dmesg_enqueue(&c, 1);
-	}
-}
-
 void log_output(const char* msg, int len)
 {
-	if (current_mode == LOG_DIRECT) {
-#if ENABLE_SERIAL_LOGGING
-		write_serial_string(msg); // Custom serial output
-#endif
+	extern struct vfs_file* g_kernel_console;
+
+	switch (current_mode) {
+	case LOG_DIRECT:
+		write_serial_string(msg);
 		screen_putstring(msg);
-	} else if (current_mode == LOG_BUFFERED) {
-		// dmesg_enqueue(msg, (size_t)len);
-		struct log_msg* item = kmalloc(sizeof(struct log_msg));
-		item->msg = strdup(msg);
-		item->len = (size_t)len;
-		add_work_item(log_worker, item);
+		break;
+	case LOG_BUFFERED:
+		g_kernel_console->fops->write(
+			g_kernel_console, msg, (size_t)len);
+		break;
 	}
 }

@@ -41,31 +41,42 @@ enum LOG_MODE {
 // This internal macro handles the heavy lifting of formatting the log message.
 // It captures the length from snprintf and passes it to log_output to avoid a strlen call.
 // It also now checks for and reports buffer truncation.
-#define _LOG_IMPL(level_str, color, fmt, ...)                                                                          \
-	do {                                                                                                           \
-		char __log_buf[LOG_BUFFER_SIZE];                                                                       \
-		int __log_len = snprintf(__log_buf, sizeof(__log_buf),                                                 \
-					 color level_str LOG_COLOR_RESET " %s:%d:%s(): " fmt "\n", __FILE__, __LINE__, \
-					 __func__ __VA_OPT__(, ) __VA_ARGS__);                                         \
-                                                                                                                       \
-		if (__log_len > 0) {                                                                                   \
-			/* Output the original message (which might be truncated). */                                  \
-			/* We must ensure the length passed to log_output doesn't exceed the actual buffer size. */    \
-			int __len_to_write = (__log_len < (int)sizeof(__log_buf)) ? __log_len :                        \
-										    ((int)sizeof(__log_buf) - 1);      \
-			log_output(__log_buf, __len_to_write);                                                         \
-		}                                                                                                      \
-                                                                                                                       \
-		/* If snprintf's return value indicates the buffer was too small, print a warning. */                  \
-		if (__log_len >= (int)sizeof(__log_buf)) {                                                             \
-			static const char __trunc_msg[] = LOG_COLOR_RED "[LOG TRUNCATED]\n" LOG_COLOR_RESET;           \
-			log_output(__trunc_msg, sizeof(__trunc_msg) - 1); /* -1 to exclude null terminator */          \
-		}                                                                                                      \
+#define _LOG_IMPL(level_str, color, fmt, ...)                                                                       \
+	do {                                                                                                        \
+		char __log_buf[LOG_BUFFER_SIZE];                                                                    \
+		int __log_len = snprintf(__log_buf,                                                                 \
+					 sizeof(__log_buf),                                                         \
+					 color level_str LOG_COLOR_RESET                                            \
+					 " %s:%d:%s(): " fmt "\n",                                                  \
+					 __FILE__,                                                                  \
+					 __LINE__,                                                                  \
+					 __func__ __VA_OPT__(, ) __VA_ARGS__);                                      \
+                                                                                                                    \
+		if (__log_len > 0) {                                                                                \
+			/* Output the original message (which might be truncated). */                               \
+			/* We must ensure the length passed to log_output doesn't exceed the actual buffer size. */ \
+			int __len_to_write =                                                                        \
+				(__log_len < (int)sizeof(__log_buf)) ?                                              \
+					__log_len :                                                                 \
+					((int)sizeof(__log_buf) - 1);                                               \
+			log_output(__log_buf, __len_to_write);                                                      \
+		}                                                                                                   \
+                                                                                                                    \
+		/* If snprintf's return value indicates the buffer was too small, print a warning. */               \
+		if (__log_len >= (int)sizeof(__log_buf)) {                                                          \
+			static const char __trunc_msg[] = LOG_COLOR_RED                                             \
+				"[LOG TRUNCATED]\n" LOG_COLOR_RESET;                                                \
+			log_output(                                                                                 \
+				__trunc_msg,                                                                        \
+				sizeof(__trunc_msg) -                                                               \
+					1); /* -1 to exclude null terminator */                                     \
+		}                                                                                                   \
 	} while (0)
 
 #if !defined(log_debug) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_DEBUG
-#define log_debug(fmt, ...) _LOG_IMPL("[DEBUG]", "", fmt __VA_OPT__(, ) __VA_ARGS__)
+#define log_debug(fmt, ...) \
+	_LOG_IMPL("[DEBUG]", "", fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_debug(fmt, ...) ((void)0)
 #endif
@@ -73,7 +84,8 @@ enum LOG_MODE {
 
 #if !defined(log_info) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_INFO
-#define log_info(fmt, ...) _LOG_IMPL("[INFO] ", LOG_COLOR_CYAN, fmt __VA_OPT__(, ) __VA_ARGS__)
+#define log_info(fmt, ...) \
+	_LOG_IMPL("[INFO] ", LOG_COLOR_CYAN, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_info(fmt, ...) ((void)0)
 #endif
@@ -81,7 +93,8 @@ enum LOG_MODE {
 
 #if !defined(log_warn) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_WARN
-#define log_warn(fmt, ...) _LOG_IMPL("[WARN] ", LOG_COLOR_YELLOW, fmt __VA_OPT__(, ) __VA_ARGS__)
+#define log_warn(fmt, ...) \
+	_LOG_IMPL("[WARN] ", LOG_COLOR_YELLOW, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_warn(fmt, ...) ((void)0)
 #endif
@@ -89,7 +102,8 @@ enum LOG_MODE {
 
 #if !defined(log_error) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_ERROR
-#define log_error(fmt, ...) _LOG_IMPL("[ERROR]", LOG_COLOR_RED, fmt __VA_OPT__(, ) __VA_ARGS__)
+#define log_error(fmt, ...) \
+	_LOG_IMPL("[ERROR]", LOG_COLOR_RED, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_error(fmt, ...) ((void)0)
 #endif
@@ -97,7 +111,8 @@ enum LOG_MODE {
 
 #if !defined(log_init) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_INFO
-#define log_init(fmt, ...) _LOG_IMPL("[INIT] ", LOG_COLOR_GREEN, fmt __VA_OPT__(, ) __VA_ARGS__)
+#define log_init(fmt, ...) \
+	_LOG_IMPL("[INIT] ", LOG_COLOR_GREEN, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_init(fmt, ...) ((void)0)
 #endif
@@ -115,10 +130,3 @@ void set_log_mode(enum LOG_MODE mode);
  * @param len The length of the message string.
  */
 void log_output(const char* msg, int len);
-
-/**
- * @brief Outputs a single character based on the current log mode.
- * Useful as a backend for a custom printf implementation.
- * @param c The character to output.
- */
-void log_putchar(const char c);
