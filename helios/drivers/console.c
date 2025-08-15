@@ -80,3 +80,14 @@ ssize_t console_write(struct vfs_file* file, const char* buffer, size_t count)
 
 	return (ssize_t)count;
 }
+
+/**
+ * console_flush - Flush output buffers for all registered console sinks
+ */
+void console_flush()
+{
+	struct console_sink* sink;
+	list_for_each_entry (sink, &g_console_sinks, list) {
+		tty_drain_output_buffer(sink->tty);
+	}
+}

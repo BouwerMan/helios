@@ -3,7 +3,19 @@
 #include <drivers/fs/vfs.h>
 #include <util/hashtable.h>
 
+// TODO: Make sure when things are fully deallocated we can still find the data later.
+
 static constexpr size_t RAMFS_HASH_BITS = 9; // 512 buckets
+static constexpr size_t RAMFS_MAX_NAME = 31;
+
+// TODO: Enforce name length or make dynamic
+struct ramfs_dentry {
+	char name[RAMFS_MAX_NAME + 1];	     // Name of the file/directory
+	struct ramfs_inode_info* inode_info; // Pointer to the inode info
+
+	struct list_head children; // List of child dentries (files/directories)
+	struct list_head siblings; // Sibling directories
+};
 
 struct ramfs_file {
 	char* data;
@@ -12,20 +24,22 @@ struct ramfs_file {
 	size_t size;	 // Actual size of file
 };
 
+/**
+ * Private inode information for ramfs.
+ * It will be persistant in memory so we can re-open files after inode deallocation.
+ */
 struct ramfs_inode_info {
 	size_t id; // Unique identifier for the inode
 	uint16_t permissions;
 	uint8_t flags;
 	uint8_t filetype;
+	size_t f_size;
 
 	struct hlist_node hash;	   /* list of hash table entries */
 	struct hlist_head* bucket; /* hash bucket */
 
-	// For a file, this would point to the ramfs_file struct
-	// For a directory, it could be null or point to a list of children
 	union {
 		struct ramfs_file* file;
-		// struct ramfs_dir* dir;
 	};
 };
 
@@ -35,12 +49,27 @@ struct ramfs_sb_info {
 	DECLARE_HASHTABLE(ht, RAMFS_HASH_BITS);
 };
 
+static inline struct ramfs_inode_info* RAMFS_INODE_INFO(struct vfs_inode* inode)
+{
+	return inode->fs_data ? (struct ramfs_inode_info*)inode->fs_data :
+				nullptr;
+}
+
 static inline struct ramfs_file* RAMFS_FILE(struct vfs_inode* inode)
 {
-	return inode->fs_data ?
-		       ((struct ramfs_inode_info*)inode->fs_data)->file :
-		       nullptr;
+	return RAMFS_INODE_INFO(inode) ? RAMFS_INODE_INFO(inode)->file :
+					 nullptr;
 }
+
+static inline struct ramfs_dentry* RAMFS_DENTRY(struct vfs_dentry* dentry)
+{
+	return dentry ? (struct ramfs_dentry*)dentry->fs_data : nullptr;
+}
+
+// static inline struct ramfs_dir* RAMFS_DIR(struct vfs_inode* inode)
+// {
+// 	return RAMFS_INODE_INFO(inode) ? RAMFS_INODE_INFO(inode)->dir : nullptr;
+// }
 
 static inline struct ramfs_sb_info* RAMFS_SB_INFO(struct vfs_superblock* sb)
 {

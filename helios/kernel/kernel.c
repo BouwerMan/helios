@@ -119,10 +119,9 @@ void kernel_main()
 	console_init();
 	attach_tty_to_console("ttyS0");
 	attach_tty_to_console("tty0");
+	log_info("Init kernel console");
 	kernel_console_init();
-
-	log_debug("Successfully got out of bootstrapping hell");
-	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
+	log_debug("Kernel console initialized");
 
 	int fd = vfs_open("/testfile", O_CREAT | O_RDWR);
 	if (fd < 0) {
@@ -165,6 +164,8 @@ void kernel_main()
 		  "Hello from the kernel! This is a test of the TTY driver.\n",
 		  58);
 
+	vfs_close(stdout);
+
 end_stdout:
 
 #if 0
@@ -182,6 +183,18 @@ end_stdout:
 #endif
 	scheduler_dump();
 
+	fd = vfs_open("/testfile", O_RDWR);
+	if (fd < 0) {
+		log_error("Couldn't open file: %s", vfs_get_err_name(-fd));
+	} else {
+		log_debug("Opened /testfile with fd %d", fd);
+		memset(rbuf, 0, sizeof(rbuf));
+		n = vfs_read(fd, rbuf, sizeof(rbuf) - 1);
+		rbuf[n] = '\0';
+		log_debug("Read %zd chars: '%s'", n, rbuf);
+		vfs_close(fd);
+	}
+
 	log_info("Successfully got out of bootstrapping hell");
 	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
 
@@ -189,6 +202,7 @@ end_stdout:
 	sleep(1000);
 
 	// QEMU shutdown command
+	console_flush();
 	outword(0x604, 0x2000);
 	for (;;)
 		halt();

@@ -87,3 +87,9 @@ struct tty* find_tty_by_name(const char* name);
  * Return: Number of bytes successfully written to the output buffer
  */
 ssize_t __write_to_tty(struct tty* tty, const char* buffer, size_t count);
+
+/**
+ * tty_drain_output_buffer - Work item function to drain TTY output buffer
+ * @data: Void pointer to the TTY device structure to drain
+ */
+void tty_drain_output_buffer(void* data);

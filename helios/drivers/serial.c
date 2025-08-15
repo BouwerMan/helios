@@ -34,7 +34,7 @@ struct tty_driver serial_driver = {
 	.write = serial_tty_write,
 };
 
-static constexpr size_t RING_BUFFER_SIZE_PAGES = 1;
+static constexpr size_t RING_BUFFER_SIZE_PAGES = 8;
 static constexpr size_t RING_BUFFER_SIZE = RING_BUFFER_SIZE_PAGES * PAGE_SIZE;
 
 /*******************************************************************************

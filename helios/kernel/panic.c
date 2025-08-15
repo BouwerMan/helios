@@ -20,6 +20,7 @@
  */
 
 #include <arch/ports.h>
+#include <drivers/console.h>
 #include <kernel/dmesg.h>
 #include <kernel/helios.h>
 #include <kernel/panic.h>
@@ -31,7 +32,7 @@
 void panic(const char* message)
 {
 	__asm__ volatile("cli");
-	dmesg_flush_raw();
+	console_flush();
 	set_log_mode(LOG_DIRECT);
 	set_color(COLOR_RED, COLOR_BLACK);
 	log_error("KERNEL PANIC!\n%s", message);

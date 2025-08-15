@@ -47,12 +47,6 @@ static ssize_t tty_fill_buffer(struct ring_buffer* rb,
 			       const char* buffer,
 			       size_t count);
 
-/**
- * tty_drain_output_buffer - Work item function to drain TTY output buffer
- * @data: Void pointer to the TTY device structure to drain
- */
-static void tty_drain_output_buffer(void* data);
-
 /*******************************************************************************
  * Public Function Definitions
  *******************************************************************************/
@@ -161,6 +155,26 @@ struct tty* find_tty_by_name(const char* name)
 	return nullptr;
 }
 
+/**
+ * tty_drain_output_buffer - Work item function to drain TTY output buffer
+ * @data: Void pointer to the TTY device structure to drain
+ *
+ * This function is executed as a work item to process buffered output data
+ * for a TTY device. It verifies the TTY has a valid driver with a write
+ * function, then calls the driver-specific write implementation (e.g.,
+ * serial_write or vconsole_write) to transmit the buffered data to the
+ * actual output device.
+ */
+void tty_drain_output_buffer(void* data)
+{
+	struct tty* tty_to_drain = (struct tty*)data;
+
+	if (tty_to_drain && tty_to_drain->driver &&
+	    tty_to_drain->driver->write) {
+		tty_to_drain->driver->write(tty_to_drain);
+	}
+}
+
 /*******************************************************************************
  * Private Function Definitions
  *******************************************************************************/
@@ -195,24 +209,4 @@ static ssize_t tty_fill_buffer(struct ring_buffer* rb,
 	spinlock_release(&rb->lock);
 
 	return (ssize_t)i;
-}
-
-/**
- * tty_drain_output_buffer - Work item function to drain TTY output buffer
- * @data: Void pointer to the TTY device structure to drain
- *
- * This function is executed as a work item to process buffered output data
- * for a TTY device. It verifies the TTY has a valid driver with a write
- * function, then calls the driver-specific write implementation (e.g.,
- * serial_write or vconsole_write) to transmit the buffered data to the
- * actual output device.
- */
-static void tty_drain_output_buffer(void* data)
-{
-	struct tty* tty_to_drain = (struct tty*)data;
-
-	if (tty_to_drain && tty_to_drain->driver &&
-	    tty_to_drain->driver->write) {
-		tty_to_drain->driver->write(tty_to_drain);
-	}
 }

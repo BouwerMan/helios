@@ -372,21 +372,32 @@ struct vfs_inode* inode_ht_check(struct vfs_superblock* sb, size_t id)
 }
 
 /**
- * dget - Increments the reference count of a dentry.
- * @dentry: Pointer to the vfs_dentry structure whose reference count is to be
- * incremented.
+ * @brief Acquires a new reference to a dentry.
  *
- * This function increases the reference count of the specified dentry,
- * indicating that it is being used by another entity. It ensures that the
- * dentry is not prematurely freed while still in use.
+ * Increments the reference count of the specified dentry, signifying that a
+ * new part of the kernel is now using it. This function acts as a "lease,"
+ * protecting the dentry from being deallocated while the reference is held.
  *
- * Return:
- *  - Pointer to the same dentry structure.
+ * It is part of the VFS contract: any function that provides a dentry
+ * pointer to a new user (e.g., a successful lookup) is responsible for
+ * calling dget() on it first. The caller that receives the dentry is then
+ * responsible for eventually releasing this reference by calling dput().
+ *
+ * @param dentry Pointer to the vfs_dentry to acquire a reference to.
+ * This function safely handles a NULL input.
+ *
+ * @return       Returns a pointer to the same dentry, allowing for easy
+ * assignment like `my_dentry = dget(dentry_from_lookup);`.
+ * Returns NULL if the input `dentry` was NULL.
  */
 struct vfs_dentry* dget(struct vfs_dentry* dentry)
 {
-	dentry->ref_count++;
-	log_debug("Dentry %s ref_count: %d", dentry->name, dentry->ref_count);
+	if (dentry) {
+		dentry->ref_count++;
+		log_debug("Dentry '%s' ref_count: %d",
+			  dentry->name,
+			  dentry->ref_count);
+	}
 	return dentry;
 }
 
@@ -469,8 +480,8 @@ struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
 				// operation
 	}
 
-	// Can just return the end result, if not found then child is a negative
-	// dentry (inode == NULL). Otherwise it was properly found.
+	// If we haven't found it above, it must be on disk or not exist.
+	// So we query the filesystem via the parent inode's lookup op.
 	return parent->inode->ops->lookup(parent->inode, child);
 }
 
@@ -570,7 +581,7 @@ int vfs_open(const char* path, int flags)
 		return -VFS_ERR_NOMEM;
 	}
 
-	file->dentry = dget(dentry);
+	file->dentry = dentry;
 	file->f_pos = (flags & O_APPEND) ? (off_t)dentry->inode->f_size : 0;
 	file->flags = flags;
 	file->ref_count = 1;
@@ -589,6 +600,10 @@ int vfs_open(const char* path, int flags)
 		slab_free(&file_cache, file);
 		return -VFS_ERR_NOSPC; // Is this the right code?
 	}
+	log_debug("Opened file %s with fd %d and dref_count %d",
+		  dentry->name,
+		  fd,
+		  dentry->ref_count);
 
 	return fd;
 }
@@ -1042,7 +1057,6 @@ struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path)
 		char token_buf[len + 1];
 		memcpy(token_buf, token, len);
 		token_buf[len] = '\0';
-		log_debug("%s", token_buf);
 		parent = dentry_lookup(parent, token_buf);
 		if (!parent) {
 			return nullptr;
@@ -1067,7 +1081,7 @@ struct vfs_dentry* dentry_alloc(struct vfs_dentry* parent, const char* name)
 	dentry->parent = parent;
 
 	dentry->inode = nullptr;
-	dentry->ref_count = 0;
+	dentry->ref_count = 1;
 	dentry->flags = 0; // The caller can set flags like DENTRY_DIR later
 
 	list_init(&dentry->children);

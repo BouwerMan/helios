@@ -13,7 +13,7 @@ struct tty_driver vconsole_driver = {
 	.write = vconsole_tty_write,
 };
 
-static constexpr size_t RING_BUFFER_SIZE_PAGES = 1;
+static constexpr size_t RING_BUFFER_SIZE_PAGES = 8;
 static constexpr size_t RING_BUFFER_SIZE = RING_BUFFER_SIZE_PAGES * PAGE_SIZE;
 
 /*******************************************************************************

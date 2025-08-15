@@ -28,3 +28,8 @@ void attach_tty_to_console(const char* name);
  * @name: Name of the TTY device to detach
  */
 void detach_tty(const char* name);
+
+/**
+ * console_flush - Flush output buffers for all registered console sinks
+ */
+void console_flush();

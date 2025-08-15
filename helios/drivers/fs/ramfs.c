@@ -43,10 +43,12 @@ static struct sb_ops ramfs_sb_ops = {
 /**
  * Scans dir for name in it's child list.
  */
-static struct vfs_dentry* scan_dir(struct vfs_dentry* dir, const char* name);
+static struct ramfs_dentry* scan_dir(struct ramfs_dentry* dir,
+				     const char* name);
+static bool does_name_exist(struct ramfs_dentry* dir, const char* name);
 static struct vfs_inode* get_root_inode(struct vfs_superblock* sb);
-static int add_child_to_list(struct vfs_dentry* parent,
-			     struct vfs_dentry* child);
+static int add_child_to_list(struct ramfs_dentry* parent,
+			     struct ramfs_dentry* child);
 /**
  * Finds inode by id in the hashtable.
  */
@@ -57,6 +59,17 @@ static struct ramfs_inode_info* find_private_inode(struct vfs_superblock* sb,
  * Adds info to the hashtable.
  */
 static void info_add(struct vfs_superblock* sb, struct ramfs_inode_info* info);
+
+/**
+ * Syncronizes the inode's state with the filesystem's private data.
+ */
+static void sync_to_inode(struct vfs_inode* inode);
+static void sync_to_info(struct vfs_inode* inode);
+
+/**
+ * Just allocates main inode and op pointers.
+ */
+static struct vfs_inode* _alloc_inode_raw(struct vfs_superblock* sb);
 
 /*******************************************************************************
  * Public Function Definitions
@@ -103,10 +116,21 @@ struct vfs_superblock* ramfs_mount(const char* source, int flags)
 
 	root_dentry->flags = DENTRY_DIR | DENTRY_ROOT;
 
+	struct ramfs_dentry* rdent = kzmalloc(sizeof(struct ramfs_dentry));
+	if (!rdent) {
+		log_error("Failed to allocate root ramfs dentry");
+		goto clean_dentry;
+	}
+	memcpy(rdent->name, root_dentry->name, RAMFS_MAX_NAME);
+	list_init(&rdent->children);
+	list_init(&rdent->siblings);
+
+	root_dentry->fs_data = rdent;
+
 	root_dentry->inode = get_root_inode(sb);
 	if (!root_dentry->inode) {
 		log_error("Failed to allocate root inode");
-		goto clean_dentry;
+		goto clean_rdent;
 	}
 
 	dentry_add(root_dentry);
@@ -116,10 +140,12 @@ struct vfs_superblock* ramfs_mount(const char* source, int flags)
 
 	return sb;
 
-clean_info:
-	kfree(info);
+clean_rdent:
+	kfree(rdent);
 clean_dentry:
 	dentry_dealloc(root_dentry);
+clean_info:
+	kfree(info);
 clean_sb:
 	kfree(sb);
 	return nullptr;
@@ -176,7 +202,7 @@ int ramfs_mkdir(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode)
 
 	struct vfs_dentry* parent = dentry->parent;
 
-	if (vfs_does_name_exist(parent, dentry->name)) {
+	if (does_name_exist(RAMFS_DENTRY(parent), dentry->name)) {
 		log_error("mkdir: failed to create dir '%s': %s",
 			  dentry->name,
 			  vfs_get_err_name(VFS_ERR_EXIST));
@@ -192,11 +218,28 @@ int ramfs_mkdir(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode)
 		return -VFS_ERR_NOMEM;
 	}
 
-	node->filetype = FILETYPE_DIR;
-	node->permissions = mode;
-	node->flags = 0;
+	struct ramfs_dentry* rdent = kzmalloc(sizeof(struct ramfs_dentry));
+	if (!rdent) {
+		log_error("failed to create dir '%s': %s",
+			  dentry->name,
+			  vfs_get_err_name(VFS_ERR_NOMEM));
+		// kfree(node);
+		return -VFS_ERR_NOMEM;
+	}
 
-	add_child_to_list(parent, dentry);
+	rdent->inode_info = RAMFS_INODE_INFO(node);
+	memcpy(rdent->name, dentry->name, RAMFS_MAX_NAME);
+	list_init(&rdent->children);
+	list_init(&rdent->siblings);
+
+	dentry->fs_data = rdent;
+
+	node->filetype = FILETYPE_DIR;
+	// node->permissions = mode;
+	node->flags = 0;
+	sync_to_info(node);
+
+	add_child_to_list(RAMFS_DENTRY(parent), RAMFS_DENTRY(dentry));
 
 	dentry->inode = node;
 	dentry->flags = DENTRY_DIR;
@@ -217,9 +260,8 @@ int ramfs_open(struct vfs_inode* inode, struct vfs_file* file)
 
 int ramfs_close(struct vfs_inode* inode, struct vfs_file* file)
 {
-	// TODO: Update inode fields
-	(void)inode;
 	(void)file;
+	sync_to_info(inode);
 	return VFS_OK;
 }
 
@@ -286,9 +328,14 @@ struct vfs_dentry* ramfs_lookup(struct vfs_inode* dir_inode,
 		return nullptr;
 	}
 
-	struct vfs_dentry* found = scan_dir(parent, child->name);
+	struct ramfs_dentry* found =
+		scan_dir(RAMFS_DENTRY(parent), child->name);
 	if (found) {
-		child->inode = found->inode;
+		// We use _alloc_inode_raw here so we don't allocate a new
+		// inode_info struct since we have it saved in the dentry.
+		child->inode = _alloc_inode_raw(parent->inode->sb);
+		child->inode->fs_data = found->inode_info;
+		sync_to_inode(child->inode);
 		dentry_add(child);
 		return dget(child);
 	}
@@ -319,17 +366,36 @@ int ramfs_create(struct vfs_inode* dir,
 	inode->permissions = mode;
 	inode->nlink = 1;
 
-	struct ramfs_inode_info* info = inode->fs_data;
-	log_debug("info: %p", inode->fs_data);
+	sync_to_info(inode);
+
+	struct ramfs_inode_info* info = RAMFS_INODE_INFO(inode);
 	info->file = rfile;
 
 	info_add(dir->sb, info);
 
 	dentry->inode = inode;
 
-	add_child_to_list(dentry->parent, dentry);
+	struct ramfs_dentry* rdent = kzmalloc(sizeof(struct ramfs_dentry));
+	if (!rdent) {
+		log_error("failed to create dir '%s': %s",
+			  dentry->name,
+			  vfs_get_err_name(VFS_ERR_NOMEM));
+		// kfree(node);
+		return -VFS_ERR_NOMEM;
+	}
+
+	rdent->inode_info = info;
+	memcpy(rdent->name, dentry->name, RAMFS_MAX_NAME);
+	list_init(&rdent->children);
+	list_init(&rdent->siblings);
+
+	dentry->fs_data = rdent;
+
+	add_child_to_list(RAMFS_DENTRY(dentry->parent), RAMFS_DENTRY(dentry));
 
 	log_debug("Created file '%s' (inode %zu)", dentry->name, inode->id);
+	log_debug(
+		"fs_data: %p, rfile: %p", (void*)inode->fs_data, (void*)rfile);
 
 	return VFS_OK;
 }
@@ -341,7 +407,7 @@ struct vfs_inode* ramfs_alloc_inode(struct vfs_superblock* sb)
 {
 	(void)sb;
 
-	struct vfs_inode* inode = kzmalloc(sizeof(struct vfs_inode));
+	struct vfs_inode* inode = _alloc_inode_raw(sb);
 	if (!inode) {
 		return nullptr;
 	}
@@ -349,14 +415,11 @@ struct vfs_inode* ramfs_alloc_inode(struct vfs_superblock* sb)
 	struct ramfs_inode_info* rinode =
 		kzmalloc(sizeof(struct ramfs_inode_info));
 	if (!rinode) {
+		kfree(inode);
 		return nullptr;
 	}
 
 	inode->fs_data = rinode;
-
-	// Set the operation pointers.
-	inode->ops = &ramfs_ops;
-	inode->fops = &ramfs_fops;
 
 	return inode;
 }
@@ -383,12 +446,14 @@ int ramfs_read_inode(struct vfs_inode* inode)
 void ramfs_destroy_inode(struct vfs_inode* inode)
 {
 	hash_del(&inode->hash);
-	struct ramfs_file* file = RAMFS_FILE(inode);
-	if (file) {
-		kfree(file->data);
-		kfree(file);
-	}
-	kfree(inode->fs_data);
+	// TODO: Need to rework our directory management so in the future if
+	// we deallocate a dentry we can find the data again
+	// struct ramfs_file* file = RAMFS_FILE(inode);
+	// if (file) {
+	// 	kfree(file->data);
+	// 	kfree(file);
+	// }
+	// kfree(inode->fs_data);
 	kfree(inode);
 }
 
@@ -406,6 +471,14 @@ static struct vfs_inode* get_root_inode(struct vfs_superblock* sb)
 		return nullptr;
 	}
 
+	struct ramfs_inode_info* r_info =
+		kzmalloc(sizeof(struct ramfs_inode_info));
+	if (!r_info) {
+		log_error("Failed to allocate root inode info");
+		kfree(r_node);
+		return nullptr;
+	}
+
 	r_node->sb = sb;
 	r_node->id = 0;
 	r_node->ref_count = 1;
@@ -414,16 +487,20 @@ static struct vfs_inode* get_root_inode(struct vfs_superblock* sb)
 	r_node->permissions =
 		VFS_PERM_ALL; // TODO: use stricter perms once supported.
 	r_node->flags = 0;
+	r_node->fs_data = r_info;
+
+	sync_to_info(r_node);
 
 	// Add it to the cache so future lookups will find it.
 	inode_add(r_node);
+	info_add(sb, r_info);
 
 	return r_node;
 }
 
 // Adds child to parent's children list
-static int add_child_to_list(struct vfs_dentry* parent,
-			     struct vfs_dentry* child)
+static int add_child_to_list(struct ramfs_dentry* parent,
+			     struct ramfs_dentry* child)
 {
 	if (!parent || !child) {
 		return -VFS_ERR_INVAL;
@@ -434,9 +511,9 @@ static int add_child_to_list(struct vfs_dentry* parent,
 	return 0;
 }
 
-static struct vfs_dentry* scan_dir(struct vfs_dentry* dir, const char* name)
+static struct ramfs_dentry* scan_dir(struct ramfs_dentry* dir, const char* name)
 {
-	struct vfs_dentry* child;
+	struct ramfs_dentry* child;
 	list_for_each_entry (child, &dir->children, siblings) {
 		if (!strcmp(child->name, name)) {
 			return child;
@@ -445,11 +522,17 @@ static struct vfs_dentry* scan_dir(struct vfs_dentry* dir, const char* name)
 	return nullptr;
 }
 
+static bool does_name_exist(struct ramfs_dentry* dir, const char* name)
+{
+	return scan_dir(dir, name) != nullptr;
+}
+
 static struct ramfs_inode_info* find_private_inode(struct vfs_superblock* sb,
 						   size_t id)
 {
 	struct ramfs_inode_info* candidate;
 	hash_for_each_possible (RAMFS_SB_INFO(sb)->ht, candidate, hash, id) {
+		log_debug("Checking candidate inode %zu", candidate->id);
 		if (candidate->id == id) {
 			return candidate;
 		}
@@ -466,4 +549,42 @@ static void info_add(struct vfs_superblock* sb, struct ramfs_inode_info* info)
 	info->bucket = bucket;
 	// hash_add(i_ht, &info->hash, info->id);
 	hlist_add_head(bucket, &info->hash);
+}
+
+static void sync_to_inode(struct vfs_inode* inode)
+{
+	struct ramfs_inode_info* info = RAMFS_INODE_INFO(inode);
+
+	inode->id = info->id;
+	inode->permissions = info->permissions;
+	inode->flags = info->flags;
+	inode->filetype = info->filetype;
+	inode->f_size = info->f_size;
+}
+
+static void sync_to_info(struct vfs_inode* inode)
+{
+	struct ramfs_inode_info* info = RAMFS_INODE_INFO(inode);
+
+	info->id = inode->id;
+	info->permissions = inode->permissions;
+	info->flags = inode->flags;
+	info->filetype = inode->filetype;
+	info->f_size = inode->f_size;
+}
+
+static struct vfs_inode* _alloc_inode_raw(struct vfs_superblock* sb)
+{
+	(void)sb;
+
+	struct vfs_inode* inode = kzmalloc(sizeof(struct vfs_inode));
+	if (!inode) {
+		log_error("Failed to allocate raw inode");
+		return nullptr;
+	}
+
+	inode->ops = &ramfs_ops;
+	inode->fops = &ramfs_fops;
+
+	return inode;
 }

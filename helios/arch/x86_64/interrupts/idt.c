@@ -19,20 +19,21 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <string.h>
-
 #include <arch/gdt/gdt.h>
 #include <arch/idt.h>
 #include <arch/ports.h>
+#include <drivers/console.h>
 #include <kernel/dmesg.h>
 #include <kernel/screen.h>
+#include <string.h>
 #include <util/log.h>
 
 /*******************************************************************************
 * Global Variable Definitions
 *******************************************************************************/
 
-__attribute__((aligned(0x10))) static idt_entry_t idt[256]; // Create an array of IDT entries; aligned for performance
+__attribute__((aligned(0x10))) static idt_entry_t
+	idt[256]; // Create an array of IDT entries; aligned for performance
 static idtr_t idtr;
 
 // ISR Stuff
@@ -177,7 +178,9 @@ void idt_init()
  */
 void isr_install_handler(int isr, void (*handler)(struct registers* r))
 {
-	log_debug("Installing ISR handler (%p) for interrupt %d", (void*)handler, isr);
+	log_debug("Installing ISR handler (%p) for interrupt %d",
+		  (void*)handler,
+		  isr);
 	interrupt_handlers[isr] = handler;
 }
 
@@ -342,7 +345,9 @@ void interrupt_handler(struct registers* r)
 		handler(r);
 	} else if (r->int_no < 32) {
 		// If the interrupt is an exception, log the error and halt
-		log_error("%s\n%s", (char*)exception_messages[r->int_no], "Exception. System Halted!");
+		log_error("%s\n%s",
+			  (char*)exception_messages[r->int_no],
+			  "Exception. System Halted!");
 		for (;;)
 			;
 	}
@@ -383,18 +388,36 @@ static void set_descriptor(uint8_t vector, uint64_t isr, uint8_t flags)
 static void default_exception_handler(struct registers* registers)
 {
 	set_log_mode(LOG_DIRECT);
-	dmesg_flush_raw();
-	log_error("Recieved interrupt #%lx with error code %lx on the default handler!", registers->int_no,
-		  registers->err_code);
+	console_flush();
+	log_error(
+		"Recieved interrupt #%lx with error code %lx on the default handler!",
+		registers->int_no,
+		registers->err_code);
 	log_error("Exception: %s", exception_messages[registers->int_no]);
-	log_error("RIP: %lx, RSP: %lx, RBP: %lx", registers->rip, registers->rsp, registers->rbp);
-	log_error("RAX: %lx, RBX: %lx, RCX: %lx, RDX: %lx", registers->rax, registers->rbx, registers->rcx,
+	log_error("RIP: %lx, RSP: %lx, RBP: %lx",
+		  registers->rip,
+		  registers->rsp,
+		  registers->rbp);
+	log_error("RAX: %lx, RBX: %lx, RCX: %lx, RDX: %lx",
+		  registers->rax,
+		  registers->rbx,
+		  registers->rcx,
 		  registers->rdx);
-	log_error("RDI: %lx, RSI: %lx, RFLAGS: %lx, DS: %lx", registers->rdi, registers->rsi, registers->rflags,
+	log_error("RDI: %lx, RSI: %lx, RFLAGS: %lx, DS: %lx",
+		  registers->rdi,
+		  registers->rsi,
+		  registers->rflags,
 		  registers->ds);
 	log_error("CS: %lx, SS: %lx", registers->cs, registers->ss);
-	log_error("R8: %lx, R9: %lx, R10: %lx, R11: %lx", registers->r8, registers->r9, registers->r10, registers->r11);
-	log_error("R12: %lx, R13: %lx, R14: %lx, R15: %lx", registers->r12, registers->r13, registers->r14,
+	log_error("R8: %lx, R9: %lx, R10: %lx, R11: %lx",
+		  registers->r8,
+		  registers->r9,
+		  registers->r10,
+		  registers->r11);
+	log_error("R12: %lx, R13: %lx, R14: %lx, R15: %lx",
+		  registers->r12,
+		  registers->r13,
+		  registers->r14,
 		  registers->r15);
 	uint64_t fault_addr;
 	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
