@@ -358,13 +358,13 @@ static int create_kernel_stack(struct task* task)
 	task->regs = (struct registers*)(uintptr_t)(stack_top -
 						    sizeof(struct registers));
 	// Simulate interrupt frame
-	task->regs->ss = 0x10; // optional for ring 0
+	task->regs->ss = KERNEL_DS; // optional for ring 0
 	task->regs->rsp = stack_top;
 	task->regs->rflags = 0x202;
 	task->regs->cs = KERNEL_CS; // kernel code segment
 
 	// Other important registers, all other registers set to 0
-	task->regs->ds = 0x10;
+	task->regs->ds = KERNEL_DS;
 	task->regs->saved_rflags = 0x202;
 
 	log_debug(
