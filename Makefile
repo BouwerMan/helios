@@ -10,7 +10,20 @@ export OSNAME=HeliOS
 export AR:=$(PREFIX)/$(HOST)-ar
 export AS:=$(PREFIX)/$(HOST)-as
 export CC:=$(PREFIX)/$(HOST)-gcc
-# export CC:=clang
+
+TOOLCHAIN_BINS := $(AR) $(AS) $(CC)
+
+# Use 'wildcard' to find which of the required tools actually exist
+EXISTING_TOOLS := $(wildcard $(TOOLCHAIN_BINS))
+
+# Compare the list of required tools with the list of existing ones.
+# If they don't match, something is missing.
+ifneq ($(TOOLCHAIN_BINS),$(EXISTING_TOOLS))
+    # For a better error message, figure out exactly which tools are missing
+    MISSING_TOOLS := $(filter-out $(EXISTING_TOOLS),$(TOOLCHAIN_BINS))
+    # Stop make and print a descriptive error
+    $(error Missing required tools: $(MISSING_TOOLS). Please check your cross-compiler installation and PREFIX.)
+endif
 
 $(info Using cross-compiler: $(CC))
 

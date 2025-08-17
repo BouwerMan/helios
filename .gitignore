@@ -15,7 +15,7 @@ limine/
 *.d
 *.kernel
 build/
-tools/
 .gdbinit
+tools/
 .cache/
 compile_commands.json
