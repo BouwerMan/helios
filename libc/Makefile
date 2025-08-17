@@ -1,4 +1,5 @@
 BUILDDIR=build
+HOSTARCH?=x86_64
 
 DESTDIR?=
 PREFIX?=/usr/local
@@ -40,17 +41,22 @@ $(ARCH_HOSTEDOBJS) \
 OBJS=\
 $(FREEOBJS) \
 $(HOSTEDOBJS) \
-$(BUILDDIR)/crt0.o
 
 LIBK_OBJS=$(FREEOBJS:.o=.libk.o)
 LIBC_OBJS=$(OBJS:.o=.libc.o)
 
 BINARIES=$(BUILDDIR)/libc.a $(BUILDDIR)/libk.a # Not ready for libc yet.
 
-.PHONY: all clean install install-headers install-libs
+.PHONY: all clean install install-headers install-libs libc libk
 .SUFFIXES: .o .libk.o .libc.o .c .S .asm
 
-all: $(BINARIES)
+all: libc libk
+
+libc: $(BUILDDIR)/libc.a
+	@echo "Libc built successfully."
+
+libk: $(BUILDDIR)/libk.a
+	@echo "Libk built successfully."
 
 $(BUILDDIR)/libc.a: $(LIBC_OBJS)
 	@$(AR) rcs $@ $(LIBC_OBJS)

@@ -13,6 +13,7 @@ __attribute__((__noreturn__)) void abort(void);
 int atexit(void (*func)(void));
 int atoi(const char* nptr);
 char* getenv(const char* name);
+[[noreturn]] void exit(int status);
 
 #include <liballoc.h>
 #if defined(__is_libk)
