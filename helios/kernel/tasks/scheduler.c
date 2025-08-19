@@ -19,24 +19,25 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <kernel/exec.h>
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
 #include <util/log.h>
 #undef FORCE_LOG_REDEF
 
-#include <stdlib.h>
-#include <string.h>
-
 #include <arch/gdt/gdt.h>
 #include <arch/idt.h>
 #include <arch/mmu/vmm.h>
 #include <arch/regs.h>
+#include <kernel/limine_requests.h>
 #include <kernel/panic.h>
 #include <kernel/tasks/scheduler.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
+#include <stdlib.h>
+#include <string.h>
 #include <util/list.h>
 
 /*******************************************************************************
@@ -76,9 +77,10 @@ static void task_add(struct task* task);
  * @brief Creates a kernel stack an imitates an interrupt frame for the given task.
  *
  * @param task Pointer to the task structure.
+ * @param entry Pointer to entry function for kernel tasks
  * @return 0 on success, 1 on failure.
  */
-static int create_kernel_stack(struct task* task);
+static int create_kernel_stack(struct task* task, entry_func entry);
 
 /**
  * Entry point for the idle task. This task halts the CPU in an infinite loop.
@@ -189,51 +191,157 @@ void scheduler_init(void)
 		panic("Scheduler tasks cache init failure");
 	}
 
-	idle_task = new_task("Idle task", (entry_func)idle_task_entry);
-	idle_task->cr3 = vmm_read_cr3();
+	// Because we are not fully inited, we have to bootstrap these a bit
+
+	idle_task = kthread_create("Idle task", (entry_func)idle_task_entry);
+	kernel_task = kthread_create("Kernel Task", nullptr);
+
 	idle_task->parent = kernel_task;
 	idle_task->state = IDLE;
+	task_add(idle_task);
 
-	kernel_task = new_task("Kernel task", NULL);
-	kernel_task->cr3 = vmm_read_cr3();
 	kernel_task->parent = kernel_task;
+	kernel_task->state = RUNNING;
+	task_add(kernel_task);
+
 	squeue.current_task = kernel_task;
 	log_debug("Probably inited the scheduler");
 	enable_preemption();
 }
 
 /**
- * Creates a new task with the given entry point.
+ * kthread_create - Creates new kernel thread
+ * @name: Name of thread
+ * @entry: Entry function to execute on first run
  *
- * @param entry Pointer to the entry function for the task.
- * @return Pointer to the newly created task structure, or NULL on failure.
+ * User must call kthread_run after this function for the scheduler
+ * to schedule it.
+ *
+ * Return: Task that was created, nullptr if error
  */
-struct task* new_task(const char* name, entry_func entry)
+struct task* kthread_create(const char* name, entry_func entry)
 {
 	disable_preemption();
-	struct task* task = kmalloc(sizeof(struct task));
-	if (task == NULL) return NULL;
-	memset(task, 0, sizeof(struct task));
-
-	create_kernel_stack(task);
-	task->PID = squeue.pid_i++;
-	task->cr3 = HHDM_TO_PHYS((uptr)vmm_create_address_space());
-	// task->cr3    = vmm_read_cr3();
-	task->parent = kernel_task;
-	if (entry) {
-		task->entry = entry;
-		task->regs->rip = (uintptr_t)entry;
-		// We only set the task to ready if we have an entry point
-		// otherwise we wait until execve() is called
-		task->state = READY;
+	struct task* task = __alloc_task();
+	if (!task) {
+		enable_preemption();
+		log_error("Failed to allocate task structure");
+		return nullptr;
 	}
+	if (create_kernel_stack(task, entry) < 0) {
+		enable_preemption();
+		log_error("Failed to create kernel stack");
+		slab_free(squeue.cache, task);
+		return nullptr;
+	}
+
+	task->type = KERNEL_TASK;
+	task->parent = kernel_task;
+
+	// Kernel threads don't get their own address space
+	task->cr3 = vmm_read_cr3();
 
 	strncpy(task->name, name, MAX_TASK_NAME_LEN);
 	task->name[MAX_TASK_NAME_LEN - 1] = '\0';
 
-	task_add(task);
+	enable_preemption();
+	return task;
+}
+
+void kthread_destroy(struct task* task)
+{
+	disable_preemption();
+
+	// TODO: Free page tables
+
+	// TODO: Do we need to make sure the list is initialized?
+	list_del(&task->list);
+	free_pages((void*)task->kernel_stack, STACK_SIZE_PAGES);
+	slab_free(squeue.cache, task);
 
 	enable_preemption();
+}
+
+/**
+ * kthread_run - Start execution of a kernel thread
+ * @task: Pointer to the task structure representing the kernel thread
+ *
+ * Return: 0 on success, -1 if task has no entry point specified
+ */
+int kthread_run(struct task* task)
+{
+	if (!task->regs->rip) {
+		log_error("Could not run kthread: no entry was specified");
+		return -1;
+	}
+	disable_preemption();
+	task->state = READY;
+	task_add(task);
+	enable_preemption();
+	return 0;
+}
+
+int launch_init()
+{
+	disable_preemption();
+
+	// We are going to use kthread_create to bootstrap this.
+	struct task* task = kthread_create("Init", nullptr);
+	if (!task) {
+		return -1;
+	}
+
+	task->type = USER_TASK;
+	task->cr3 = HHDM_TO_PHYS((uptr)vmm_create_address_space());
+
+	struct limine_module_response* mod = mod_request.response;
+
+	int res = load_elf(task, mod->modules[0]->address);
+	if (res < 0) {
+		kthread_destroy(task);
+		return res;
+	}
+
+	kthread_run(task);
+
+	enable_preemption();
+	return 0;
+}
+
+int copy_thread_state(struct task* child, struct registers* parent_regs)
+{
+	void* stack = (void*)get_free_pages(AF_KERNEL, STACK_SIZE_PAGES);
+	if (!stack) return -EOOM;
+
+	uptr stack_top = (uptr)stack + (STACK_SIZE_PAGES * PAGE_SIZE);
+	child->kernel_stack = stack_top;
+	child->regs = (struct registers*)(uintptr_t)(stack_top -
+						     sizeof(struct registers));
+
+	memcpy(child->regs, parent_regs, sizeof(struct registers));
+
+	return 0;
+}
+
+/**
+ * __alloc_task - Allocate and initialize a new task structure
+ * 
+ * Return: Pointer to initialized task structure on success, nullptr on OOM
+ */
+struct task* __alloc_task()
+{
+	struct task* task = slab_alloc(squeue.cache);
+	if (!task) {
+		log_error("OOM error from slab_alloc");
+		return nullptr;
+	}
+
+	memset(task, 0, sizeof(struct task));
+	task->PID = squeue.pid_i++;
+
+	// Init lists, maybe default resources (stdio)
+	list_init(&task->list);
+
 	return task;
 }
 
@@ -345,9 +453,8 @@ static struct task* pick_next()
 	return squeue.current_task;
 }
 
-static int create_kernel_stack(struct task* task)
+static int create_kernel_stack(struct task* task, entry_func entry)
 {
-	constexpr size_t STACK_SIZE_PAGES = 1;
 	void* stack = (void*)get_free_pages(AF_KERNEL, STACK_SIZE_PAGES);
 	log_debug("Allocated stack at %p", stack);
 	if (!stack) return -EOOM;
@@ -366,6 +473,10 @@ static int create_kernel_stack(struct task* task)
 	// Other important registers, all other registers set to 0
 	task->regs->ds = KERNEL_DS;
 	task->regs->saved_rflags = 0x202;
+
+	// A null entry doesn't matter as long as we are not doing a first run
+	// with a null entry
+	task->regs->rip = (uptr)entry;
 
 	log_debug(
 		"Created stack for task %lu, kernel_stack: %lx, regs addr: %p",

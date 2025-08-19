@@ -8,6 +8,7 @@
 
 typedef void (*entry_func)(void);
 
+static constexpr size_t STACK_SIZE_PAGES = 1;
 static constexpr int MAX_TASK_NAME_LEN = 32;
 
 static constexpr int SCHEDULER_TIME = 20; // ms per preemptive tick
@@ -38,6 +39,7 @@ static inline const char* get_task_name(enum TASK_TYPE type)
 }
 
 // Any changes to this structure needs to be reflected in switch.asm
+// This represents ANY schedulable task
 struct task {
 	struct registers*
 		regs; // Full CPU context, this address is loaded into rsp on switch
@@ -48,7 +50,6 @@ struct task {
 	uint8_t priority;
 	uint64_t PID;
 	volatile uint64_t sleep_ticks;
-	entry_func entry;
 	struct vfs_file* resources[MAX_RESOURCES];
 	struct task* parent; // Should this just be parent PID?
 	struct list_head list;
@@ -66,7 +67,17 @@ struct scheduler_queue {
 struct waitqueue {
 	struct list_head list;
 };
+/**
+ * __alloc_task - Allocate and initialize a new task structure
+ * 
+ * Return: Pointer to initialized task structure on success, nullptr on OOM
+ */
+struct task* __alloc_task();
+int copy_thread_state(struct task* child, struct registers* parent_regs);
+int launch_init();
 
+int kthread_run(struct task* task);
+struct task* kthread_create(const char* name, entry_func entry);
 struct task* new_task(const char* name, entry_func entry);
 void schedule(struct registers* regs);
 void scheduler_init(void);

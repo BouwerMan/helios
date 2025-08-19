@@ -49,7 +49,9 @@ static bool validate(struct elf_file_header* header);
  * @param prog Pointer to the ELF program header.
  * @return 0 on success, -1 on failure.
  */
-static int load_program_header(struct task* task, void* elf, struct elf_program_header* prog);
+static int load_program_header(struct task* task,
+			       void* elf,
+			       struct elf_program_header* prog);
 
 /**
  * @brief Sets up the user stack for the task.
@@ -59,13 +61,15 @@ static int load_program_header(struct task* task, void* elf, struct elf_program_
  * @param stack_pages The number of pages to allocate for the stack.
  * @return 0 on success, -1 on failure.
  */
-static int setup_user_stack(struct task* task, uptr stack_base, size_t stack_pages);
+static int setup_user_stack(struct task* task,
+			    uptr stack_base,
+			    size_t stack_pages);
 
 /*******************************************************************************
 * Public Function Definitions
 *******************************************************************************/
 
-int execve(struct task* task, struct elf_file_header* header)
+int load_elf(struct task* task, struct elf_file_header* header)
 {
 	kassert(header != NULL && "execve: header is NULL");
 
@@ -83,13 +87,21 @@ int execve(struct task* task, struct elf_file_header* header)
 	log_debug("Valid type, reading program headers");
 
 	uptr highest = 0;
-	struct elf_program_header* prog = (struct elf_program_header*)((uintptr_t)header + header->header_size);
+	struct elf_program_header* prog =
+		(struct elf_program_header*)((uintptr_t)header +
+					     header->header_size);
 	for (size_t i = 0; i < header->program_header_entry_count; i++) {
 
-		log_debug("ELF Program Header: type=0x%x, flags=0x%x, offset=0x%lx,"
-			  " virtual_address=0x%lx, size_in_file=0x%lx, size_in_memory=0x%lx, align=0x%lx",
-			  prog->type, prog->flags, prog->offset, prog->virtual_address, prog->size_in_file,
-			  prog->size_in_memory, prog->align);
+		log_debug(
+			"ELF Program Header: type=0x%x, flags=0x%x, offset=0x%lx,"
+			" virtual_address=0x%lx, size_in_file=0x%lx, size_in_memory=0x%lx, align=0x%lx",
+			prog->type,
+			prog->flags,
+			prog->offset,
+			prog->virtual_address,
+			prog->size_in_file,
+			prog->size_in_memory,
+			prog->align);
 
 		switch (prog->type) {
 		case PT_LOAD:
@@ -117,13 +129,10 @@ int execve(struct task* task, struct elf_file_header* header)
 	}
 
 	task->regs->rip = header->entry; // Set the entry point
-	task->entry = (entry_func)header->entry;
 
 	task->regs->cs = USER_CS;
 	task->regs->ds = USER_DS;
 	task->regs->ss = USER_DS;
-
-	task->state = READY;
 	return 0;
 }
 
@@ -159,7 +168,9 @@ static bool validate(struct elf_file_header* header)
 	return true;
 }
 
-static int load_program_header(struct task* task, void* elf, struct elf_program_header* prog)
+static int load_program_header(struct task* task,
+			       void* elf,
+			       struct elf_program_header* prog)
 {
 	u64* pml4 = (u64*)PHYS_TO_HHDM(task->cr3);
 
@@ -177,6 +188,7 @@ static int load_program_header(struct task* task, void* elf, struct elf_program_
 	page_flags |= (prog->flags & PF_WRITE) ? PAGE_WRITE : 0;
 	page_flags |= (prog->flags & PF_EXEC) ? 0 : PAGE_NO_EXECUTE;
 
+	// GDB BREAKPOINT
 	for (size_t i = 0; i < pages; i++) {
 		uptr vaddr = vaddr_start + i * PAGE_SIZE;
 		uptr paddr = paddr_start + i * PAGE_SIZE;
@@ -193,18 +205,26 @@ static int load_program_header(struct task* task, void* elf, struct elf_program_
 	void* kvaddr = (void*)free_pages;
 
 	void* data = (void*)((uptr)elf + prog->offset);
-	log_debug("Copying data at %p to vaddr %p, size: %zu", data, kvaddr, prog->size_in_file);
+	log_debug("Copying data at %p to vaddr %p, size: %zu",
+		  data,
+		  kvaddr,
+		  prog->size_in_file);
 	memcpy(kvaddr, data, prog->size_in_file);
 
 	return 0;
 }
 
-static int setup_user_stack(struct task* task, uptr stack_base, size_t stack_pages)
+static int setup_user_stack(struct task* task,
+			    uptr stack_base,
+			    size_t stack_pages)
 {
-	constexpr flags_t page_flags = PAGE_PRESENT | PAGE_WRITE | PAGE_USER | PAGE_NO_EXECUTE;
+	constexpr flags_t page_flags = PAGE_PRESENT | PAGE_WRITE | PAGE_USER |
+				       PAGE_NO_EXECUTE;
 	u64* pml4 = (u64*)PHYS_TO_HHDM(task->cr3);
 	uptr stack_top = stack_base + stack_pages * PAGE_SIZE;
-	log_debug("Setting up user stack at base: 0x%lx, top: 0x%lx", stack_base, stack_top);
+	log_debug("Setting up user stack at base: 0x%lx, top: 0x%lx",
+		  stack_base,
+		  stack_top);
 
 	uptr stack = HHDM_TO_PHYS(get_free_pages(AF_KERNEL, stack_pages));
 	for (size_t i = 0; i < stack_pages; i++) {
@@ -219,6 +239,7 @@ static int setup_user_stack(struct task* task, uptr stack_base, size_t stack_pag
 		log_debug("Mapped vaddr: %lx, to paddr: %lx", vaddr, paddr);
 	}
 
-	task->regs->rsp = stack_top; // Set the stack pointer to the top of the stack
+	task->regs->rsp =
+		stack_top; // Set the stack pointer to the top of the stack
 	return 0;
 }

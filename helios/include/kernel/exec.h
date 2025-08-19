@@ -12,8 +12,6 @@
 #define ELFDATA2LSB (1) // Little Endian
 #define ELFCLASS32  (1) // 32-bit Architecture
 
-static constexpr size_t STACK_SIZE_PAGES = 1;
-
 enum elf_id {
 	EI_MAG0 = 0,	   // 0x7F
 	EI_MAG1 = 1,	   // 'E'
@@ -75,4 +73,4 @@ struct elf_program_header {
 	u64 align;
 } __attribute__((packed));
 
-int execve(struct task* task, struct elf_file_header* header);
+int load_elf(struct task* task, struct elf_file_header* header);
