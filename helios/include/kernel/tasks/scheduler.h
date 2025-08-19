@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
+#include <mm/address_space.h>
 #include <stddef.h>
 #include <stdint.h>
-
 #include <util/list.h>
 
 typedef void (*entry_func)(void);
@@ -43,7 +43,7 @@ static inline const char* get_task_name(enum TASK_TYPE type)
 struct task {
 	struct registers*
 		regs; // Full CPU context, this address is loaded into rsp on switch
-	uintptr_t cr3;		// pml4
+	struct address_space* vas;
 	uintptr_t kernel_stack; // Not super sure abt this one
 	enum TASK_STATE state;
 	enum TASK_TYPE type;
@@ -78,6 +78,7 @@ int launch_init();
 
 int kthread_run(struct task* task);
 struct task* kthread_create(const char* name, entry_func entry);
+void kthread_destroy(struct task* task);
 struct task* new_task(const char* name, entry_func entry);
 void schedule(struct registers* regs);
 void scheduler_init(void);

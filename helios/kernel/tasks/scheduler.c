@@ -19,7 +19,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <kernel/exec.h>
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
@@ -30,9 +29,11 @@
 #include <arch/idt.h>
 #include <arch/mmu/vmm.h>
 #include <arch/regs.h>
+#include <kernel/exec.h>
 #include <kernel/limine_requests.h>
 #include <kernel/panic.h>
 #include <kernel/tasks/scheduler.h>
+#include <mm/address_space.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
@@ -193,15 +194,16 @@ void scheduler_init(void)
 
 	// Because we are not fully inited, we have to bootstrap these a bit
 
-	idle_task = kthread_create("Idle task", (entry_func)idle_task_entry);
 	kernel_task = kthread_create("Kernel Task", nullptr);
-
-	idle_task->parent = kernel_task;
-	idle_task->state = IDLE;
-	task_add(idle_task);
+	idle_task = kthread_create("Idle task", (entry_func)idle_task_entry);
 
 	kernel_task->parent = kernel_task;
 	kernel_task->state = RUNNING;
+
+	idle_task->parent = kernel_task;
+	idle_task->state = IDLE;
+
+	task_add(idle_task);
 	task_add(kernel_task);
 
 	squeue.current_task = kernel_task;
@@ -239,7 +241,8 @@ struct task* kthread_create(const char* name, entry_func entry)
 	task->parent = kernel_task;
 
 	// Kernel threads don't get their own address space
-	task->cr3 = vmm_read_cr3();
+	// Nor do they get any regions (for now)
+	task->vas->pml4_phys = vmm_read_cr3();
 
 	strncpy(task->name, name, MAX_TASK_NAME_LEN);
 	task->name[MAX_TASK_NAME_LEN - 1] = '\0';
@@ -253,6 +256,7 @@ void kthread_destroy(struct task* task)
 	disable_preemption();
 
 	// TODO: Free page tables
+	// TODO: Free vm_mm
 
 	// TODO: Do we need to make sure the list is initialized?
 	list_del(&task->list);
@@ -292,7 +296,8 @@ int launch_init()
 	}
 
 	task->type = USER_TASK;
-	task->cr3 = HHDM_TO_PHYS((uptr)vmm_create_address_space());
+	task->vas->pml4_phys = HHDM_TO_PHYS((uptr)vmm_create_address_space());
+	// task->cr3 = HHDM_TO_PHYS((uptr)vmm_create_address_space());
 
 	struct limine_module_response* mod = mod_request.response;
 
@@ -335,12 +340,20 @@ struct task* __alloc_task()
 		log_error("OOM error from slab_alloc");
 		return nullptr;
 	}
+	struct address_space* vas = kzmalloc(sizeof(struct address_space));
+	if (!vas) {
+		log_error("OOM error from kzmalloc");
+		slab_free(squeue.cache, task);
+		return nullptr;
+	}
 
 	memset(task, 0, sizeof(struct task));
+	task->vas = vas;
 	task->PID = squeue.pid_i++;
 
 	// Init lists, maybe default resources (stdio)
 	list_init(&task->list);
+	list_init(&task->vas->mr_list);
 
 	return task;
 }

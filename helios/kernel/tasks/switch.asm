@@ -22,7 +22,7 @@
 
 extern interrupt_return
 
-%define CR3_OFF 8
+%define VM_MM_OFF 8
 
 ; __switch_to: Switches execution context to the next task.
 ; Parameters:
@@ -30,7 +30,8 @@ extern interrupt_return
 global __switch_to
 __switch_to:
 	; Load new cr3 if needed
-	mov rax, [rdi + CR3_OFF]
+	mov rax, [rdi + VM_MM_OFF]
+	mov rax, [rax]
 	mov rcx, cr3
 	cmp rax, rcx
 	je .no_cr3_switch

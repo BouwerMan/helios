@@ -219,10 +219,29 @@ static inline void list_del(struct list_head* entry)
 #define list_for_each(pos, head) \
 	for (pos = (head)->next; !list_is_head((head), pos); pos = pos->next)
 
+/**
+ * list_for_each_entry	-	iterate over list of given type
+ * @pos:	the type * to use as a loop cursor.
+ * @head:	the head for your list.
+ * @member:	the name of the list_head within the struct.
+ */
 #define list_for_each_entry(pos, head, member)                   \
 	for (pos = list_first_entry(head, typeof(*pos), member); \
 	     !list_entry_is_head(pos, head, member);             \
 	     pos = list_next_entry(pos, member))
+
+/**
+ * list_for_each_entry_safe - iterate over list of given type safe against removal of list entry
+ * @pos:	the type * to use as a loop cursor.
+ * @n:		another type * to use as temporary storage
+ * @head:	the head for your list.
+ * @member:	the name of the list_head within the struct.
+ */
+#define list_for_each_entry_safe(pos, n, head, member)           \
+	for (pos = list_first_entry(head, typeof(*pos), member), \
+	    n = list_next_entry(pos, member);                    \
+	     !list_entry_is_head(pos, head, member);             \
+	     pos = n, n = list_next_entry(n, member))
 
 /*
  * Double linked lists with a single pointer list head.

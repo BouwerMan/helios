@@ -19,8 +19,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <string.h>
-
 #include <arch/gdt/gdt.h>
 #include <arch/mmu/vmm.h>
 #include <arch/regs.h>
@@ -30,6 +28,7 @@
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/page_alloc_flags.h>
+#include <string.h>
 
 /*******************************************************************************
 * Private Function Prototypes
@@ -172,7 +171,7 @@ static int load_program_header(struct task* task,
 			       void* elf,
 			       struct elf_program_header* prog)
 {
-	u64* pml4 = (u64*)PHYS_TO_HHDM(task->cr3);
+	u64* pml4 = (u64*)PHYS_TO_HHDM(task->vas->pml4_phys);
 
 	size_t pages = CEIL_DIV(prog->size_in_memory, PAGE_SIZE);
 	void* free_pages = get_free_pages(AF_KERNEL, pages);
@@ -185,10 +184,19 @@ static int load_program_header(struct task* task,
 	uptr vaddr_start = (uptr)prog->virtual_address;
 
 	flags_t page_flags = PAGE_PRESENT | PAGE_USER;
-	page_flags |= (prog->flags & PF_WRITE) ? PAGE_WRITE : 0;
-	page_flags |= (prog->flags & PF_EXEC) ? 0 : PAGE_NO_EXECUTE;
+	page_flags |= prog->flags & PF_WRITE ? PAGE_WRITE : 0;
+	page_flags |= prog->flags & PF_EXEC ? 0 : PAGE_NO_EXECUTE;
 
-	// GDB BREAKPOINT
+	unsigned long prot = (prog->flags & PF_EXEC) ? PROT_EXEC : 0;
+	prot |= prog->flags & PF_WRITE ? PROT_WRITE : 0;
+	prot |= prog->flags & PF_READ ? PROT_READ : 0;
+
+	map_region(task->vas,
+		   vaddr_start,
+		   vaddr_start + (pages * PAGE_SIZE),
+		   prot,
+		   prog->flags);
+
 	for (size_t i = 0; i < pages; i++) {
 		uptr vaddr = vaddr_start + i * PAGE_SIZE;
 		uptr paddr = paddr_start + i * PAGE_SIZE;
@@ -220,7 +228,7 @@ static int setup_user_stack(struct task* task,
 {
 	constexpr flags_t page_flags = PAGE_PRESENT | PAGE_WRITE | PAGE_USER |
 				       PAGE_NO_EXECUTE;
-	u64* pml4 = (u64*)PHYS_TO_HHDM(task->cr3);
+	u64* pml4 = (u64*)PHYS_TO_HHDM(task->vas->pml4_phys);
 	uptr stack_top = stack_base + stack_pages * PAGE_SIZE;
 	log_debug("Setting up user stack at base: 0x%lx, top: 0x%lx",
 		  stack_base,
