@@ -235,6 +235,9 @@ static int setup_user_stack(struct task* task,
 		  stack_top);
 
 	uptr stack = HHDM_TO_PHYS(get_free_pages(AF_KERNEL, stack_pages));
+
+	map_region(task->vas, stack_base, stack_top, PROT_READ | PROT_WRITE, 0);
+
 	for (size_t i = 0; i < stack_pages; i++) {
 		uptr vaddr = stack_base + i * PAGE_SIZE;
 		uptr paddr = stack + i * PAGE_SIZE;
