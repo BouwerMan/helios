@@ -200,7 +200,7 @@ static int load_program_header(struct task* task,
 	for (size_t i = 0; i < pages; i++) {
 		uptr vaddr = vaddr_start + i * PAGE_SIZE;
 		uptr paddr = paddr_start + i * PAGE_SIZE;
-		int err = vmm_map_page(pml4, vaddr, paddr, page_flags);
+		int err = vmm_map_page((pgd_t*)pml4, vaddr, paddr, page_flags);
 
 		if (err) {
 			log_error("Failed to map page");
@@ -241,7 +241,7 @@ static int setup_user_stack(struct task* task,
 	for (size_t i = 0; i < stack_pages; i++) {
 		uptr vaddr = stack_base + i * PAGE_SIZE;
 		uptr paddr = stack + i * PAGE_SIZE;
-		int err = vmm_map_page(pml4, vaddr, paddr, page_flags);
+		int err = vmm_map_page((pgd_t*)pml4, vaddr, paddr, page_flags);
 
 		if (err) {
 			log_error("Failed to map stack page at: 0x%lx", paddr);

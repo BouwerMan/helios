@@ -77,7 +77,8 @@ static void page_fault(struct registers* r);
  *               virtual address, or NULL if the entry does not exist and
  *               @create is false.
  */
-static u64* walk_page_table(u64* pml4, uptr vaddr, bool create, flags_t flags);
+static pte_t*
+walk_page_table(pgd_t* pml4, uptr vaddr, bool create, flags_t flags);
 
 static void log_page_table_walk(u64* pml4, uptr vaddr);
 
@@ -208,7 +209,7 @@ uint64_t* vmm_create_address_space()
  *
  * @return       0 on success, -1 on failure (e.g., misalignment or mapping issues).
  */
-int vmm_map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
+int vmm_map_page(pgd_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
 {
 	if (!is_page_aligned(vaddr) || !is_page_aligned(paddr)) {
 		log_error(
@@ -220,14 +221,15 @@ int vmm_map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags
 
 	// We want PAGE_PRESENT and PAGE_WRITE on almost all the higher levels
 	flags_t walk_flags = flags & (PAGE_USER | PAGE_PRESENT | PAGE_WRITE);
-	uint64_t* pte = walk_page_table(
+	pte_t* pte = walk_page_table(
 		pml4, vaddr, true, walk_flags | PAGE_PRESENT | PAGE_WRITE);
-	if (!pte || *pte & PAGE_PRESENT) {
+
+	if (!pte || pte->pte & PAGE_PRESENT) {
 		log_warn("Could not find pte or pte is already present");
 		return -1;
 	}
 
-	*pte = paddr | flags;
+	pte->pte = paddr | flags;
 	return 0;
 }
 
@@ -245,22 +247,23 @@ int vmm_map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags
  * @return       0 on success, -1 on failure (e.g., misalignment).
  *               Returns 0 if the page was already unmapped.
  */
-int vmm_unmap_page(uint64_t* pml4, uintptr_t vaddr)
+int vmm_unmap_page(pgd_t* pml4, uintptr_t vaddr)
 {
 	if (!is_page_aligned(vaddr)) {
 		log_error("Something isn't aligned right, vaddr: %lx", vaddr);
 		return -1;
 	}
 
-	uint64_t* pte = walk_page_table(pml4, vaddr, false, 0);
+	pte_t* pte = walk_page_table(pml4, vaddr, false, 0);
 
-	if (!pte || !(*pte & PAGE_PRESENT)) {
+	if (!pte || !(pte->pte & PAGE_PRESENT)) {
 		return 0; // Already unmapped, nothing to do
 	}
 
-	*pte = 0;
+	pte->pte = 0;
 
-	prune_page_tables(pml4, vaddr);
+	// TODO: Rework this to use the new typedefs (I am lazy)
+	prune_page_tables((uint64_t*)pml4, vaddr);
 	invalidate(vaddr);
 
 	return 0;
@@ -309,7 +312,7 @@ void vmm_test_prune_single_mapping(void)
 	uintptr_t paddr = (uintptr_t)HHDM_TO_PHYS(get_free_page(AF_KERNEL));
 
 	log_info("Mapping page: virt=0x%lx -> phys=0x%lx", vaddr, paddr);
-	int result = vmm_map_page(pml4,
+	int result = vmm_map_page((pgd_t*)pml4,
 				  vaddr,
 				  paddr,
 				  PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK);
@@ -320,7 +323,7 @@ void vmm_test_prune_single_mapping(void)
 
 	// 3. Unmap the virtual address
 	log_info("Unmapping page: 0x%lx", vaddr);
-	result = vmm_unmap_page(pml4, vaddr);
+	result = vmm_unmap_page((pgd_t*)pml4, vaddr);
 	if (result != 0) {
 		log_error("Failed to unmap test page");
 		return;
@@ -416,7 +419,8 @@ static bool prune_page_table_recursive(uint64_t* table,
 	return is_table_empty(table);
 }
 
-static u64* walk_page_table(u64* pml4, uptr vaddr, bool create, flags_t flags)
+static pte_t*
+walk_page_table(pgd_t* pml4, uptr vaddr, bool create, flags_t flags)
 {
 	if ((flags & PAGE_PRESENT) == 0) {
 		log_warn(
@@ -424,40 +428,42 @@ static u64* walk_page_table(u64* pml4, uptr vaddr, bool create, flags_t flags)
 			flags);
 	}
 	// Ensure the virtual address is canonical
-	if ((vaddr >> 48) != 0 && (vaddr >> 48) != 0xFFFF) return NULL;
+	if ((vaddr >> 48) != 0 && (vaddr >> 48) != 0xFFFF) return nullptr;
 
 	// Mask the flags to ensure only valid bits are used
 	flags &= FLAGS_MASK;
 
 	// Get the PML4 index for the virtual address
 	uint64_t pml4_i = _pml4_index(vaddr);
-	if ((pml4[pml4_i] & PAGE_PRESENT) == 0) {
+	if ((pml4[pml4_i].pgd & PAGE_PRESENT) == 0) {
 		if (!create) return NULL;
-		pml4[pml4_i] = HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) |
-			       flags;
+		// NOTE: We are casting to a u64 here because that is what the HHDM_TO_PHYS macro expects
+		pml4[pml4_i].pgd =
+			(u64)HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
 	}
 
 	// Get the PDPT from the PML4 entry
-	uint64_t* pdpt = (uint64_t*)PHYS_TO_HHDM(pml4[pml4_i] &
-						 ~FLAGS_MASK); // Mask off flags
+	pud_t* pdpt = (pud_t*)PHYS_TO_HHDM(pml4[pml4_i].pgd &
+					   ~FLAGS_MASK); // Mask off flags
 	uint64_t pdpt_i = _pdpt_index(vaddr);
-	if ((pdpt[pdpt_i] & PAGE_PRESENT) == 0) {
+	if ((pdpt[pdpt_i].pud & PAGE_PRESENT) == 0) {
 		if (!create) return NULL;
-		pdpt[pdpt_i] = HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) |
-			       flags;
+		pdpt[pdpt_i].pud =
+			(u64)HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
 	}
 
 	// Get the PD from the PDPT entry
-	uint64_t* pd = (uint64_t*)PHYS_TO_HHDM(pdpt[pdpt_i] &
-					       ~FLAGS_MASK); // Mask off flags
+	pmd_t* pd = (pmd_t*)PHYS_TO_HHDM(pdpt[pdpt_i].pud &
+					 ~FLAGS_MASK); // Mask off flags
 	uint64_t pd_i = _pd_index(vaddr);
-	if ((pd[pd_i] & PAGE_PRESENT) == 0) {
+	if ((pd[pd_i].pmd & PAGE_PRESENT) == 0) {
 		if (!create) return NULL;
-		pd[pd_i] = HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
+		pd[pd_i].pmd = (u64)HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) |
+			       flags;
 	}
 
 	// Get the PT from the PD entry
-	uint64_t* pt = (uint64_t*)PHYS_TO_HHDM(pd[pd_i] & ~FLAGS_MASK);
+	pte_t* pt = (pte_t*)PHYS_TO_HHDM(pd[pd_i].pmd & ~FLAGS_MASK);
 	uint64_t pt_i = _pt_index(vaddr);
 
 	// Return the pointer to the page table entry
@@ -490,13 +496,14 @@ static void map_memmap_entry(uint64_t* pml4,
 	uintptr_t end = entry->base + entry->length;
 	log_debug("Mapping [%lx-%lx), type: %lu", start, end, entry->type);
 	for (size_t phys = start; phys < end; phys += PAGE_SIZE) {
-		vmm_map_page(pml4, PHYS_TO_HHDM(phys), phys, flags);
+		vmm_map_page((pgd_t*)pml4, PHYS_TO_HHDM(phys), phys, flags);
 
 		// Manually map executable areas
 		if (entry->type != LIMINE_MEMMAP_EXECUTABLE_AND_MODULES)
 			continue;
 		uintptr_t exe_virt = (phys - start) + exe_virt_base;
-		vmm_map_page(pml4, exe_virt, phys, flags & ~PAGE_NO_EXECUTE);
+		vmm_map_page(
+			(pgd_t*)pml4, exe_virt, phys, flags & ~PAGE_NO_EXECUTE);
 	}
 }
 

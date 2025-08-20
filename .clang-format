@@ -12,7 +12,9 @@ ContinuationIndentWidth: 8
 UseTab: Always
 ColumnLimit: 80
 AlignConsecutiveMacros: Consecutive
-AlignTrailingComments: true
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 2
 AlignAfterOpenBracket: Align
 PointerAlignment: Left
 

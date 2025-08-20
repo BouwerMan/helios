@@ -12,24 +12,72 @@ static constexpr int PML4_ENTRIES = 512;
 
 static constexpr u64 FLAGS_MASK = 0xFFF;
 static constexpr u64 PAGE_FRAME_MASK = ~FLAGS_MASK;
-static constexpr u64 PAGE_PRESENT = 1ULL << 0;	   // Page is present in memory
-static constexpr u64 PAGE_WRITE = 1ULL << 1;	   // Writable
-static constexpr u64 PAGE_USER = 1ULL << 2;	   // Accessible from user-mode
-static constexpr u64 PAGE_PWT = 1ULL << 3;	   // Write-through caching enabled
-static constexpr u64 PAGE_PCD = 1ULL << 4;	   // Disable caching
-static constexpr u64 PAGE_ACCESSED = 1ULL << 5;	   // Set by CPU when page is read/written
-static constexpr u64 PAGE_DIRTY = 1ULL << 6;	   // Set by CPU on write
-static constexpr u64 PAGE_HUGE = 1ULL << 7;	   // 2 MiB or 1 GiB page (set only in PD or PDPT)
-static constexpr u64 PAGE_PAT = 1ULL << 7;	   // Page Attribute Table (set in PTE)
-static constexpr u64 PAGE_GLOBAL = 1ULL << 8;	   // Global page (ignores CR3 reload)
-static constexpr u64 PAGE_NO_EXECUTE = 1ULL << 63; // Requires EFER.NXE to be set
 
-static constexpr u64 CACHE_WRITE_BACK = 0;			  // PAT=0, PCD=0, PWT=0
-static constexpr u64 CACHE_WRITE_THROUGH = PAGE_PWT;		  // PAT=0, PCD=0, PWT=1
-static constexpr u64 CACHE_UNCACHABLE = PAGE_PCD | PAGE_PWT;	  // PAT=0, PCD=1, PWT=1
-static constexpr u64 CACHE_UNCACHABLE_ALT = PAGE_PCD;		  // PAT=0, PCD=1, PWT=0
-static constexpr u64 CACHE_WRITE_COMBINING = PAGE_PAT | PAGE_PWT; // PAT=1, PCD=0, PWT=1
-static constexpr u64 CACHE_WRITE_PROTECTED = PAGE_PAT;		  // PAT=1, PCD=0, PWT=0
+// Page is present in memory
+static constexpr u64 PAGE_PRESENT = 1ULL << 0;
+// Writable
+static constexpr u64 PAGE_WRITE = 1ULL << 1;
+// Accessible from user-mode
+static constexpr u64 PAGE_USER = 1ULL << 2;
+// Write-through caching enabled
+static constexpr u64 PAGE_PWT = 1ULL << 3;
+// Disable caching
+static constexpr u64 PAGE_PCD = 1ULL << 4;
+// Set by CPU when page is read/written
+static constexpr u64 PAGE_ACCESSED = 1ULL << 5;
+// Set by CPU on write
+static constexpr u64 PAGE_DIRTY = 1ULL << 6;
+// 2 MiB or 1 GiB page (set only in PD or PDPT)
+static constexpr u64 PAGE_HUGE = 1ULL << 7;
+// Page Attribute Table (set in PTE)
+static constexpr u64 PAGE_PAT = 1ULL << 7;
+// Global page (ignores CR3 reload)
+static constexpr u64 PAGE_GLOBAL = 1ULL << 8;
+// Requires EFER.NXE to be set
+static constexpr u64 PAGE_NO_EXECUTE = 1ULL << 63;
+
+// PAT=0, PCD=0, PWT=0
+static constexpr u64 CACHE_WRITE_BACK = 0;
+// PAT=0, PCD=0, PWT=1
+static constexpr u64 CACHE_WRITE_THROUGH = PAGE_PWT;
+// PAT=0, PCD=1, PWT=1
+static constexpr u64 CACHE_UNCACHABLE = PAGE_PCD | PAGE_PWT;
+// PAT=0, PCD=1, PWT=0
+static constexpr u64 CACHE_UNCACHABLE_ALT = PAGE_PCD;
+// PAT=1, PCD=0, PWT=1
+static constexpr u64 CACHE_WRITE_COMBINING = PAGE_PAT | PAGE_PWT;
+// PAT=1, PCD=0, PWT=0
+static constexpr u64 CACHE_WRITE_PROTECTED = PAGE_PAT;
+
+// TODO: Use these
+
+/** @brief An entry in the Page Global Directory (PGD), the top-level page table. */
+typedef struct {
+	unsigned long pgd;
+} pgd_t;
+
+/**
+ * @brief An entry in the Page 4th-level Directory (P4D).
+ * @note We do not support this since we only do 4 level paging.
+ */
+typedef struct {
+	unsigned long p4d;
+} p4d_t;
+
+/** @brief An entry in the Page Upper Directory (PUD). */
+typedef struct {
+	unsigned long pud;
+} pud_t;
+
+/** @brief An entry in the Page Middle Directory (PMD). */
+typedef struct {
+	unsigned long pmd;
+} pmd_t;
+
+/** @brief A Page Table Entry (PTE) which points to a physical page frame. */
+typedef struct {
+	unsigned long pte;
+} pte_t;
 
 /**
  * @brief Reads the value of the CR3 register.
@@ -63,7 +111,8 @@ static inline uintptr_t vmm_read_cr3()
 static inline void vmm_load_cr3(uintptr_t pml4_phys_addr)
 {
 	// Ensure it's 4 KiB aligned
-	kassert((pml4_phys_addr & 0xFFF) == 0 && "CR3 address must be 4 KiB aligned");
+	kassert((pml4_phys_addr & 0xFFF) == 0 &&
+		"CR3 address must be 4 KiB aligned");
 
 	__asm__ volatile("mov %0, %%cr3" ::"r"(pml4_phys_addr) : "memory");
 }
@@ -85,11 +134,13 @@ uint64_t* vmm_create_address_space();
  * @param pml4   Pointer to the PML4 table.
  * @param vaddr  Virtual address to map.
  * @param paddr  Physical address to map to.
- * @param flags  Flags for the page table entry (e.g., PAGE_PRESENT, PAGE_WRITE).
+ * @param flags  Flags for the page table entry (e.g., PAGE_PRESENT,
+ * PAGE_WRITE).
  *
- * @return       0 on success, -1 on failure (e.g., misalignment or mapping issues).
+ * @return       0 on success, -1 on failure (e.g., misalignment or mapping
+ * issues).
  */
-int vmm_map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags);
+int vmm_map_page(pgd_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags);
 
 /**
  * @brief Unmaps a virtual address from the page table.
@@ -100,7 +151,7 @@ int vmm_map_page(uint64_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags
  * @return       0 on success, -1 on failure (e.g., misalignment).
  *               Returns 0 if the page was already unmapped.
  */
-int vmm_unmap_page(uint64_t* pml4, uintptr_t vaddr);
+int vmm_unmap_page(pgd_t* pml4, uintptr_t vaddr);
 
 /**
  * @brief Prunes empty page tables recursively.
