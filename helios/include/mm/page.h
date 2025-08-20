@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include <stddef.h>
-
+#include <arch/atomic.h>
 #include <kernel/types.h>
+#include <mm/page_alloc.h>
+#include <stddef.h>
 #include <util/list.h>
 
 static constexpr int PAGE_SHIFT = 12;
@@ -121,4 +122,17 @@ static inline bool page_buddy(struct page* pg)
 {
 	if (pg) return ((pg->flags & PG_BUDDY) != 0);
 	return false;
+}
+
+static inline struct page* get_page(struct page* pg)
+{
+	if (pg) atomic_inc(&pg->ref_count);
+	return pg;
+}
+
+static inline void put_page(struct page* pg)
+{
+	if (atomic_sub_and_test(1, &pg->ref_count)) {
+		__free_page(pg);
+	}
 }

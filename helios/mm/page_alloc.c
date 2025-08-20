@@ -38,6 +38,7 @@
 
 #include <kernel/helios.h>
 #include <kernel/kmath.h>
+#include <kernel/panic.h>
 #include <kernel/spinlock.h>
 #include <mm/address_space.h>
 #include <mm/bootmem.h>
@@ -337,6 +338,9 @@ void* get_free_pages(aflags_t flags, size_t pages)
 void __free_pages(struct page* page, size_t order)
 {
 	if (!page) return;
+
+	kassert(atomic_read(&page->ref_count) == 0);
+
 	enum MEM_ZONE zone = page_zone(page);
 	if (zone == MEM_ZONE_INVALID) {
 		log_error("Invalid page zone for page at %p", (void*)page);
@@ -371,14 +375,16 @@ void free_pages(void* addr, size_t pages)
 	uintptr_t page_virt = HHDM_TO_PHYS((uintptr_t)addr);
 	struct page* page = &mem_map[phys_to_pfn(page_virt)];
 
-	size_t rounded_size = roundup_pow_of_two(pages);
-	size_t order = (size_t)ilog2(rounded_size);
+	if (atomic_sub_and_test(1, &page->ref_count)) {
+		size_t rounded_size = roundup_pow_of_two(pages);
+		size_t order = (size_t)ilog2(rounded_size);
 
-	log_debug("Freeing %zu pages at address %p (order: %zu)",
-		  pages,
-		  addr,
-		  order);
-	__free_pages(page, order);
+		log_debug("Freeing %zu pages at address %p (order: %zu)",
+			  pages,
+			  addr,
+			  order);
+		__free_pages(page, order);
+	}
 }
 
 /*******************************************************************************
@@ -487,7 +493,7 @@ static struct page* alloc_pages_core(struct buddy_allocator* allocator,
 		log_error("Order: %zu, larger than max order: %zu",
 			  order,
 			  allocator->max_order);
-		return NULL;
+		return nullptr;
 	}
 	log_debug("Allocating pages with order: %zu", order);
 
@@ -538,9 +544,11 @@ static struct page* alloc_pages_core(struct buddy_allocator* allocator,
 			log_error("Failed to split block for order %zu", order);
 		}
 
+		atomic_inc(&split_block->ref_count);
+
 		return split_block;
 	}
-	return NULL;
+	return nullptr;
 }
 
 /**

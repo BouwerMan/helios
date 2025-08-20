@@ -23,6 +23,7 @@
 #include <drivers/serial.h>
 #include <drivers/tty.h>
 #include <kernel/panic.h>
+#include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <stdlib.h>
 

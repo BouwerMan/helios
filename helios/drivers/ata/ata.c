@@ -31,32 +31,47 @@
 #endif
 
 // https://wiki.osdev.org/ATA_PIO_Mode#28_bit_PIO
-#include <limits.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include <drivers/ata/ata.h>
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
 #include <kernel/panic.h>
+#include <limits.h>
+#include <mm/page.h>
 #include <mm/page_alloc.h>
+#include <stdlib.h>
+#include <string.h>
 
 static bool bmr_poll(sATADevice* device);
 static uint16_t get_command(sATADevice* device, uint16_t op);
-static bool program_ata_reg(sATADevice* device, uint32_t lba, size_t sec_count, uint16_t command);
-static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_t lba, size_t sec_size,
+static bool program_ata_reg(sATADevice* device,
+			    uint32_t lba,
+			    size_t sec_count,
+			    uint16_t command);
+static bool read_dma(sATADevice* device,
+		     uint16_t command,
+		     void* buffer,
+		     uint32_t lba,
+		     size_t sec_size,
 		     size_t sec_count);
 
 // TODO: Support for ATAPI
-bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba, size_t sec_size, size_t sec_count)
+bool ata_read_write(sATADevice* device,
+		    uint16_t op,
+		    void* buffer,
+		    uint32_t lba,
+		    size_t sec_size,
+		    size_t sec_count)
 {
-	log_debug("Trying to access lba: %x, sec_count: %zx, sec_size: %zx", lba, sec_count, sec_size);
+	log_debug("Trying to access lba: %x, sec_count: %zx, sec_size: %zx",
+		  lba,
+		  sec_count,
+		  sec_size);
 	if (sec_size * sec_count > 65536) {
 		log_error("DMA doesn't support more than 64KiB");
 		return false;
 	}
 	sATAController* ctrl = device->ctrl;
-	uint16_t command     = get_command(device, op);
+	uint16_t command = get_command(device, op);
 	if (!command) return false;
 
 	switch (command) {
@@ -66,11 +81,14 @@ bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba,
 		for (size_t i = 0; i < sec_count; i++) {
 			// First we poll the device to wait for it to be ready
 			if (!device_poll(device)) {
-				printf("Polling failed for device %d", device->id);
+				printf("Polling failed for device %d",
+				       device->id);
 				return false;
 			}
 			// Weird casting to appease the clangd gods
-			ctrl_inws(ctrl, ATA_REG_DATA, (void*)((uintptr_t)buffer + (i * sec_size)),
+			ctrl_inws(ctrl,
+				  ATA_REG_DATA,
+				  (void*)((uintptr_t)buffer + (i * sec_size)),
 				  sec_size / sizeof(uint16_t));
 			// Flush cache
 			ctrl_outb(ctrl, ATA_REG_COMMAND, COMMAND_CACHE_FLUSH);
@@ -78,17 +96,22 @@ bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba,
 		}
 		break;
 	case COMMAND_READ_DMA:
-		return read_dma(device, command, buffer, lba, sec_size, sec_count);
+		return read_dma(
+			device, command, buffer, lba, sec_size, sec_count);
 	case COMMAND_WRITE_SEC:
 		program_ata_reg(device, lba, sec_count, command);
 		// For each sector we want to get
 		for (size_t i = 0; i < sec_count; i++) {
 			// First we poll the device to wait for it to be ready
 			if (!device_poll(device)) {
-				printf("Polling failed for device %d", device->id);
+				printf("Polling failed for device %d",
+				       device->id);
 				return false;
 			}
-			ctrl_outws(ctrl, ATA_REG_DATA, buffer, sec_size / sizeof(uint16_t));
+			ctrl_outws(ctrl,
+				   ATA_REG_DATA,
+				   buffer,
+				   sec_size / sizeof(uint16_t));
 		}
 		// Flush cache
 		ctrl_outb(ctrl, ATA_REG_COMMAND, COMMAND_CACHE_FLUSH);
@@ -99,12 +122,16 @@ bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba,
 	return true;
 }
 
-static bool program_ata_reg(sATADevice* device, uint32_t lba, size_t sec_count, uint16_t command)
+static bool program_ata_reg(sATADevice* device,
+			    uint32_t lba,
+			    size_t sec_count,
+			    uint16_t command)
 {
 	sATAController* ctrl = device->ctrl;
 	if (!device_poll(device)) return false;
 
-	outb(ctrl->port_base + ATA_REG_DRIVE_SELECT, 0xE0 | ((device->id & SLAVE_BIT) << 4) | ((lba >> 24) & 0x0F));
+	outb(ctrl->port_base + ATA_REG_DRIVE_SELECT,
+	     0xE0 | ((device->id & SLAVE_BIT) << 4) | ((lba >> 24) & 0x0F));
 	ctrl_wait(ctrl);
 
 	log_debug("sending sec_count: %x", (uint8_t)sec_count);
@@ -141,7 +168,7 @@ static uint16_t get_command(sATADevice* device, uint16_t op)
 static bool bmr_poll(sATADevice* device)
 {
 	sATAController* ctrl = device->ctrl;
-	int timeout	     = 100000;
+	int timeout = 100000;
 	while (timeout--) {
 		uint8_t status = inb(ctrl->bmr_base + BMR_REG_STATUS);
 		if (status & BMR_STATUS_IRQ) {
@@ -156,8 +183,11 @@ static bool bmr_poll(sATADevice* device)
 		if ((status & BMR_STATUS_DMA) == 0) {
 			// Check ATA drive status
 			uint8_t ata = inb(ctrl->port_base + ATA_REG_STATUS);
-			if ((ata & CMD_ST_BUSY) == 0 && (ata & CMD_ST_DRQ) == 0 && (ata & CMD_ST_ERROR) == 0) {
-				log_warn("DMA completed but no IRQ raised — fallback path");
+			if ((ata & CMD_ST_BUSY) == 0 &&
+			    (ata & CMD_ST_DRQ) == 0 &&
+			    (ata & CMD_ST_ERROR) == 0) {
+				log_warn(
+					"DMA completed but no IRQ raised — fallback path");
 				outb(ctrl->bmr_base + BMR_REG_COMMAND, 0);
 				// TODO: This warrants more intensive error handling
 				return false;
@@ -168,11 +198,15 @@ static bool bmr_poll(sATADevice* device)
 	return false;
 }
 
-static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_t lba, size_t sec_size,
+static bool read_dma(sATADevice* device,
+		     uint16_t command,
+		     void* buffer,
+		     uint32_t lba,
+		     size_t sec_size,
 		     size_t sec_count)
 {
-	sATAController* ctrl	= device->ctrl;
-	struct PRDT* prdt	= ctrl->prdt;
+	sATAController* ctrl = device->ctrl;
+	struct PRDT* prdt = ctrl->prdt;
 	const uint16_t bmr_base = ctrl->bmr_base;
 
 	size_t pages = (sec_count * sec_size / PAGE_SIZE) + 1;
@@ -184,7 +218,8 @@ static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_
 	uint64_t full_addr = (uintptr_t)HHDM_TO_PHYS(dma_buffer);
 	if (full_addr >= (1ULL << 32)) {
 		// handle error or log warning: address cannot be DMA'd
-		log_error("PRDT buffer is not in valid location: %lx", full_addr);
+		log_error("PRDT buffer is not in valid location: %lx",
+			  full_addr);
 	}
 	prdt->addr = (uint32_t)full_addr;
 	// TODO: Put size limits
@@ -197,7 +232,8 @@ static bool read_dma(sATADevice* device, uint16_t command, void* buffer, uint32_
 	// 2. Clearing interrupt and error flags
 	uint8_t bmr_st = inb(bmr_base + BMR_REG_STATUS);
 	log_debug("bmr_st: %x", bmr_st);
-	outb(bmr_base + BMR_REG_STATUS, bmr_st | BMR_STATUS_IRQ | BMR_STATUS_ERROR);
+	outb(bmr_base + BMR_REG_STATUS,
+	     bmr_st | BMR_STATUS_IRQ | BMR_STATUS_ERROR);
 
 	// 3. Write PRDT pointer
 	uint64_t full_prdt_addr = (uintptr_t)HHDM_TO_PHYS(prdt);

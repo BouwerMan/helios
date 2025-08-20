@@ -1,6 +1,7 @@
 #include <drivers/vconsole.h>
 #include <kernel/panic.h>
 #include <kernel/screen.h>
+#include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <stdlib.h>
 #include <sys/types.h>

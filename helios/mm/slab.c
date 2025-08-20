@@ -19,21 +19,21 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <kernel/kmath.h>
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
 #include <util/log.h>
 #undef FORCE_LOG_REDEF
 
-#include <stdlib.h>
-#include <string.h>
-
 #include <arch/cache.h>
+#include <kernel/kmath.h>
 #include <kernel/panic.h>
 #include <kernel/spinlock.h>
+#include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
+#include <stdlib.h>
+#include <string.h>
 
 /*******************************************************************************
 * Global Variable Definitions
@@ -41,13 +41,17 @@
 
 #ifdef SLAB_DEBUG
 static constexpr int POISON_PATTERN = 0x5A;
-static constexpr int POISON_BYTE_COUNT = 16; // Number of bytes to verify at head/tail
-static constexpr int REDZONE_SIZE = 4;	     // 4 bytes at head and tail (so it is technically cross platform :))
+static constexpr int POISON_BYTE_COUNT =
+	16; // Number of bytes to verify at head/tail
+static constexpr int REDZONE_SIZE =
+	4; // 4 bytes at head and tail (so it is technically cross platform :))
 static constexpr long REDZONE_PATTERN = 0xDEADBEEF;
 #else
 static constexpr int POISON_PATTERN = 0;
-static constexpr int POISON_BYTE_COUNT = 0; // Number of bytes to verify at head/tail
-static constexpr int REDZONE_SIZE = 0;	    // 4 bytes at head and tail (so it is technically cross platform :))
+static constexpr int POISON_BYTE_COUNT =
+	0; // Number of bytes to verify at head/tail
+static constexpr int REDZONE_SIZE =
+	0; // 4 bytes at head and tail (so it is technically cross platform :))
 static constexpr long REDZONE_PATTERN = 0;
 #endif
 
@@ -117,8 +121,10 @@ static inline void _slab_free_pages(void* addr, size_t pages)
 [[gnu::always_inline]]
 static inline struct slab* slab_from_object(const void* object)
 {
-	size_t slab_bytes = SLAB_SIZE_PAGES * PAGE_SIZE; // Total size of a slab in bytes
-	uint64_t mask = ~(slab_bytes - 1);		 // Mask to align the address to the slab base
+	size_t slab_bytes =
+		SLAB_SIZE_PAGES * PAGE_SIZE; // Total size of a slab in bytes
+	uint64_t mask =
+		~(slab_bytes - 1); // Mask to align the address to the slab base
 	return (struct slab*)((uintptr_t)object & mask);
 }
 
@@ -164,8 +170,12 @@ static void test_object_alignment(struct slab_cache* cache);
  * @return              0 on success, or a negative error code on failure.
  */
 [[nodiscard]]
-int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_size, size_t object_align,
-		    void (*constructor)(void*), void (*destructor)(void*))
+int slab_cache_init(struct slab_cache* cache,
+		    const char* name,
+		    size_t object_size,
+		    size_t object_align,
+		    void (*constructor)(void*),
+		    void (*destructor)(void*))
 {
 	if (!cache) {
 		log_error("Must supply valid cache structure pointer");
@@ -182,12 +192,15 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
 	}
 
 	if (!is_pow_of_two(object_align)) {
-		log_error("Object alignment is not a power of 2: %lu", object_align);
+		log_error("Object alignment is not a power of 2: %lu",
+			  object_align);
 		return -EALIGN;
 	}
 
 	if (object_size >= PAGE_SIZE) {
-		log_error("Object size of %lu is basically the same size as a page.", object_size);
+		log_error(
+			"Object size of %lu is basically the same size as a page.",
+			object_size);
 		return -EOOM; // Technically not OOM but idk what it should actually be
 	}
 
@@ -225,7 +238,9 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
 
 	cache->object_align = object_align;
 	cache->header_size = ALIGN_UP(sizeof(struct slab), object_align);
-	cache->objects_per_slab = (SLAB_SIZE_PAGES * PAGE_SIZE - cache->header_size) / cache->data_size;
+	cache->objects_per_slab =
+		(SLAB_SIZE_PAGES * PAGE_SIZE - cache->header_size) /
+		cache->data_size;
 
 	list_init(&cache->empty);
 	list_init(&cache->partial);
@@ -244,7 +259,11 @@ int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_si
 
 	log_debug(
 		"Cache '%s' initialized: object_size=%zu, data_size=%zu, object_align=%zu, header_size=%zu, objects_per_slab=%zu",
-		cache->name, cache->object_size, cache->data_size, cache->object_align, cache->header_size,
+		cache->name,
+		cache->object_size,
+		cache->data_size,
+		cache->object_align,
+		cache->header_size,
 		cache->objects_per_slab);
 
 	spinlock_release(&cache->lock);
@@ -283,14 +302,17 @@ retry:
 
 	// Attempt to allocate from a partially filled slab
 	if (!list_empty(&cache->partial)) {
-		log_debug("Cache %s: Allocating from a partial slab", cache->name);
+		log_debug("Cache %s: Allocating from a partial slab",
+			  cache->name);
 		slab = list_entry(cache->partial.next, struct slab, link);
-	} else if (!list_empty(&cache->empty) || (res = slab_grow(cache)) >= 0) {
+	} else if (!list_empty(&cache->empty) ||
+		   (res = slab_grow(cache)) >= 0) {
 		// Move the first empty slab to the partial list
 		slab = list_entry(cache->empty.next, struct slab, link);
 		slab_relocate(slab, SLAB_PARTIAL);
 	} else {
-		log_error("Could not create more slabs, slab_grow returned: %d", res);
+		log_error("Could not create more slabs, slab_grow returned: %d",
+			  res);
 		spinlock_release(&cache->lock);
 		return NULL;
 	}
@@ -312,8 +334,13 @@ retry:
 		slab_relocate(slab, SLAB_FULL);
 	}
 
-	log_debug("Cache %s: allocated object %p from slab %p (free_top=%zu/%zu)", cache->name, obj_start, (void*)slab,
-		  slab->free_top, cache->objects_per_slab);
+	log_debug(
+		"Cache %s: allocated object %p from slab %p (free_top=%zu/%zu)",
+		cache->name,
+		obj_start,
+		(void*)slab,
+		slab->free_top,
+		cache->objects_per_slab);
 
 	cache->used_objects++;
 
@@ -358,13 +385,16 @@ void slab_free(struct slab_cache* cache, void* object)
 
 	struct slab* slab = slab_from_object(object);
 	if (slab->parent != cache) {
-		log_error("Somehow got the wrong slab (parent doesn't match the cache), good luck debugging this one");
+		log_error(
+			"Somehow got the wrong slab (parent doesn't match the cache), good luck debugging this one");
 		spinlock_release(&cache->lock);
 		return;
 	}
 
 	if (slab->free_top >= cache->objects_per_slab) {
-		log_error("Free top overflow for slab %p in cache %s", (void*)slab, cache->name);
+		log_error("Free top overflow for slab %p in cache %s",
+			  (void*)slab,
+			  cache->name);
 		spinlock_release(&cache->lock);
 		return;
 	}
@@ -391,7 +421,10 @@ void slab_free(struct slab_cache* cache, void* object)
 		slab_relocate(slab, SLAB_EMPTY);
 
 		if (cache->num_empty > MAX_EMPTY_SLABS) {
-			log_debug("Cache %s: too many empty slabs, freeing slab %p", cache->name, (void*)slab);
+			log_debug(
+				"Cache %s: too many empty slabs, freeing slab %p",
+				cache->name,
+				(void*)slab);
 			slab_destroy(slab);
 
 			cache->num_empty--;
@@ -403,8 +436,12 @@ void slab_free(struct slab_cache* cache, void* object)
 
 	cache->used_objects--;
 
-	log_debug("Cache %s: freed object %p to slab %p (free_top=%zu/%zu)", cache->name, object, (void*)slab,
-		  slab->free_top, cache->objects_per_slab);
+	log_debug("Cache %s: freed object %p to slab %p (free_top=%zu/%zu)",
+		  cache->name,
+		  object,
+		  (void*)slab,
+		  slab->free_top,
+		  cache->objects_per_slab);
 
 	spinlock_release(&cache->lock);
 }
@@ -425,7 +462,8 @@ void slab_free(struct slab_cache* cache, void* object)
 void slab_cache_destroy(struct slab_cache* cache)
 {
 	if (!cache) {
-		log_error("I can't destroy a cache if you don't give me a valid cache");
+		log_error(
+			"I can't destroy a cache if you don't give me a valid cache");
 		return;
 	}
 	if (cache->flags == CACHE_UNINITIALIZED) {
@@ -493,11 +531,15 @@ void slab_cache_purge_corrupt(struct slab_cache* cache)
 
 		// Manually re-add total_objects since we double subtracted during quarantine and destruction
 		cache->total_objects += cache->objects_per_slab;
-		log_debug("Updated cache '%s': num_quarantine=%zu, total_objects=%zu", cache->name,
-			  cache->num_quarantine, cache->total_objects);
+		log_debug(
+			"Updated cache '%s': num_quarantine=%zu, total_objects=%zu",
+			cache->name,
+			cache->num_quarantine,
+			cache->total_objects);
 	}
 
-	log_debug("Completed purge of corrupt slabs in cache '%s'", cache->name);
+	log_debug("Completed purge of corrupt slabs in cache '%s'",
+		  cache->name);
 }
 
 /**
@@ -544,7 +586,8 @@ void slab_test()
 	log_info(TESTING_HEADER, "Slab Allocator");
 
 	struct slab_cache test_cache = { 0 };
-	(void)slab_cache_init(&test_cache, "Test cache", sizeof(uint64_t), 0, NULL, NULL);
+	(void)slab_cache_init(
+		&test_cache, "Test cache", sizeof(uint64_t), 0, NULL, NULL);
 	log_debug("Test cache slab size: %d pages", SLAB_SIZE_PAGES);
 
 	test_use_before_alloc(&test_cache);
@@ -591,7 +634,8 @@ static void slab_destroy(struct slab* slab)
 		// Full slab, destructor called on all objects
 		for (size_t i = 0; i < N; i++) {
 			uintptr_t raw_ptr = data_base + i * cache->data_size;
-			void* obj = (void*)ALIGN_UP(raw_ptr + REDZONE_SIZE, cache->object_align);
+			void* obj = (void*)ALIGN_UP(raw_ptr + REDZONE_SIZE,
+						    cache->object_align);
 			if (cache->destructor) cache->destructor(obj);
 		}
 	} else if (slab->free_top == N) {
@@ -605,14 +649,19 @@ static void slab_destroy(struct slab* slab)
 		// mark every free object
 		for (size_t i = 0; i < slab->free_top; i++) {
 			uintptr_t ptr = (uintptr_t)slab->free_stack[i];
-			size_t idx = (ptr - (uintptr_t)base - cache->header_size) / cache->data_size;
+			size_t idx =
+				(ptr - (uintptr_t)base - cache->header_size) /
+				cache->data_size;
 			is_free[idx] = true;
 		}
 		// Now call destructor on each non free item
 		for (size_t i = 0; i < N; i++) {
 			if (!is_free[i]) {
-				uintptr_t raw_ptr = data_base + i * cache->data_size;
-				void* obj = (void*)ALIGN_UP(raw_ptr + REDZONE_SIZE, cache->object_align);
+				uintptr_t raw_ptr =
+					data_base + i * cache->data_size;
+				void* obj =
+					(void*)ALIGN_UP(raw_ptr + REDZONE_SIZE,
+							cache->object_align);
 				if (cache->destructor) cache->destructor(obj);
 			}
 		}
@@ -638,7 +687,10 @@ static int slab_grow(struct slab_cache* cache)
 	}
 
 #ifdef SLAB_DEBUG
-	memset(base, POISON_PATTERN, SLAB_SIZE_PAGES * PAGE_SIZE); // Fill with a pattern for debugging
+	memset(base,
+	       POISON_PATTERN,
+	       SLAB_SIZE_PAGES *
+		       PAGE_SIZE); // Fill with a pattern for debugging
 #endif
 
 	struct slab* new_slab = (struct slab*)base;
@@ -652,7 +704,8 @@ static int slab_grow(struct slab_cache* cache)
 	}
 
 	new_slab->free_top = cache->objects_per_slab;
-	log_debug("Free stack is %lu bytes and has a max of %lu objects", cache->objects_per_slab * sizeof(void*),
+	log_debug("Free stack is %lu bytes and has a max of %lu objects",
+		  cache->objects_per_slab * sizeof(void*),
 		  cache->objects_per_slab);
 
 	// TODO: Try including the free_stack within the struct, removes extra allocation.
@@ -663,12 +716,14 @@ static int slab_grow(struct slab_cache* cache)
 		uintptr_t raw_ptr = data_base + i * cache->data_size;
 
 		// Align the object such that obj_start is aligned, with redzone before it
-		uintptr_t obj_start = ALIGN_UP(raw_ptr + REDZONE_SIZE, cache->object_align);
+		uintptr_t obj_start =
+			ALIGN_UP(raw_ptr + REDZONE_SIZE, cache->object_align);
 #ifdef SLAB_DEBUG
 		uint32_t* redzone_head = (uint32_t*)(obj_start - REDZONE_SIZE);
 		*redzone_head = REDZONE_PATTERN; // Set the redzone at the start
 
-		uint32_t* redzone_tail = (uint32_t*)(obj_start + cache->object_size);
+		uint32_t* redzone_tail =
+			(uint32_t*)(obj_start + cache->object_size);
 		*redzone_tail = REDZONE_PATTERN; // Set the redzone at the end
 #endif
 		new_slab->free_stack[i] = (void*)obj_start;
@@ -693,7 +748,9 @@ static void slab_quarantine(struct slab* slab)
 	cache->used_objects -= cache->objects_per_slab - slab->free_top;
 	cache->total_objects -= cache->objects_per_slab;
 
-	log_warn("Cache %s: slab %p moved to quarantine", cache->name, (void*)slab);
+	log_warn("Cache %s: slab %p moved to quarantine",
+		 cache->name,
+		 (void*)slab);
 }
 
 static void slab_relocate(struct slab* slab, enum _SLAB_LOCATION location)
@@ -721,7 +778,11 @@ static void slab_relocate(struct slab* slab, enum _SLAB_LOCATION location)
 	// Move the slab to the new list
 	list_move(&slab->link, lists[location]);
 
-	log_debug("Cache %s: slab %p moved from %d to %d.", cache->name, (void*)slab, slab->location, location);
+	log_debug("Cache %s: slab %p moved from %d to %d.",
+		  cache->name,
+		  (void*)slab,
+		  slab->location,
+		  location);
 
 	// Update the slab's location
 	slab->location = location;
@@ -773,14 +834,18 @@ static bool check_poison(const void* obj_start, size_t size)
 
 	for (size_t i = 0; i < check_len; i++) {
 		if (byte_ptr[i] != POISON_PATTERN) {
-			log_error("Use-before-init detected at start of object at byte %zu", i);
+			log_error(
+				"Use-before-init detected at start of object at byte %zu",
+				i);
 			_dump_data(obj_start, size);
 			slab = slab_from_object(obj_start);
 			slab->debug_error = true;
 			return false;
 		}
 		if (byte_ptr[size - 1 - i] != POISON_PATTERN) {
-			log_error("Use-before-init detected at end of object at byte %zu", size - 1 - i);
+			log_error(
+				"Use-before-init detected at end of object at byte %zu",
+				size - 1 - i);
 			_dump_data(obj_start, size);
 			slab = slab_from_object(obj_start);
 			slab->debug_error = true;
@@ -813,18 +878,22 @@ static bool check_redzone(const void* obj_start, size_t size)
 {
 	struct slab* slab = slab_from_object((void*)obj_start);
 
-	uint32_t* redzone_start = (uint32_t*)((uintptr_t)obj_start - REDZONE_SIZE);
+	uint32_t* redzone_start =
+		(uint32_t*)((uintptr_t)obj_start - REDZONE_SIZE);
 	if (*redzone_start != REDZONE_PATTERN) {
 		log_error("Underflow on freed object detected");
-		_dump_data((void*)((uintptr_t)obj_start - REDZONE_SIZE), slab->parent->data_size);
-		*redzone_start = REDZONE_PATTERN; // Reset the redzone at the start
-		slab->debug_error = true;	  // Mark slab as corrupted
+		_dump_data((void*)((uintptr_t)obj_start - REDZONE_SIZE),
+			   slab->parent->data_size);
+		*redzone_start =
+			REDZONE_PATTERN;  // Reset the redzone at the start
+		slab->debug_error = true; // Mark slab as corrupted
 	}
 
 	uint32_t* redzone_end = (uint32_t*)((uintptr_t)obj_start + size);
 	if (*redzone_end != REDZONE_PATTERN) {
 		log_error("Overflow on freed object detected");
-		_dump_data((void*)((uintptr_t)obj_start - REDZONE_SIZE), slab->parent->data_size);
+		_dump_data((void*)((uintptr_t)obj_start - REDZONE_SIZE),
+			   slab->parent->data_size);
 		*redzone_end = REDZONE_PATTERN; // Reset the redzone at the end
 		slab->debug_error = true;	// Mark slab as corrupted
 	}
@@ -857,7 +926,8 @@ static void test_use_before_alloc(struct slab_cache* cache)
 	}
 	struct slab* slab = list_entry(cache->empty.next, struct slab, link);
 	kassert(slab->free_top > 0);
-	void* poisoned_obj = (void*)((uintptr_t)slab->free_stack[slab->free_top - 1]);
+	void* poisoned_obj =
+		(void*)((uintptr_t)slab->free_stack[slab->free_top - 1]);
 
 	// simulate use-before-init:
 	((uint8_t*)poisoned_obj)[0] = 0xAA;
@@ -866,7 +936,8 @@ static void test_use_before_alloc(struct slab_cache* cache)
 	// reinsert manually for test
 	slab_free(cache, obj);
 
-	kassert(slab->debug_error == true && "Slab should be marked as corrupted after use-before-init");
+	kassert(slab->debug_error == true &&
+		"Slab should be marked as corrupted after use-before-init");
 	log_info("Use-before-init test passed.");
 	slab->debug_error = false; // Reset for further tests
 }
@@ -898,7 +969,8 @@ static void test_buffer_overflow(struct slab_cache* cache)
 
 	slab_free(cache, obj); // Should log "Overflow on freed object detected"
 
-	kassert(slab->debug_error == true && "Slab should be marked as corrupted after overflow");
+	kassert(slab->debug_error == true &&
+		"Slab should be marked as corrupted after overflow");
 	log_info("Buffer overflow test passed.");
 	slab->debug_error = false; // Reset for further tests
 }
@@ -928,9 +1000,11 @@ static void test_buffer_underflow(struct slab_cache* cache)
 	// Write just before the object (into the redzone)
 	((uint8_t*)obj)[-1] = 0xBA;
 
-	slab_free(cache, obj); // Should log "Underflow on freed object detected"
+	slab_free(cache,
+		  obj); // Should log "Underflow on freed object detected"
 
-	kassert(slab->debug_error == true && "Slab should be marked as corrupted after underflow");
+	kassert(slab->debug_error == true &&
+		"Slab should be marked as corrupted after underflow");
 	log_info("Buffer underflow test passed.");
 	slab->debug_error = false; // Reset for further tests
 }
@@ -959,7 +1033,8 @@ static void test_valid_usage(struct slab_cache* cache)
 	memset(obj, 0, cache->object_size); // Legal usage
 
 	slab_free(cache, obj); // Should not trigger any warnings or logs
-	kassert(slab->debug_error == false && "Slab should not be marked as corrupted after valid usage");
+	kassert(slab->debug_error == false &&
+		"Slab should not be marked as corrupted after valid usage");
 	log_info("Valid usage test passed.");
 }
 
@@ -989,12 +1064,15 @@ static void test_object_alignment(struct slab_cache* cache)
 		uintptr_t addr = (uintptr_t)obj;
 
 		if (addr % cache->object_align != 0) {
-			log_error("Object at %p is not aligned to %lu", obj, cache->object_align);
+			log_error("Object at %p is not aligned to %lu",
+				  obj,
+				  cache->object_align);
 			kassert(false && "Slab object is not properly aligned");
 		}
 
 		slab_free(cache, obj);
 	}
 
-	log_info("Object alignment test passed for alignment=%lu", cache->object_align);
+	log_info("Object alignment test passed for alignment=%lu",
+		 cache->object_align);
 }
