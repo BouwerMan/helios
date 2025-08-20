@@ -19,6 +19,7 @@ long do_fork(struct registers* regs)
 	}
 
 	int res = copy_thread_state(child, regs);
+	child->regs->rax = 0;
 	if (res < 0) {
 		enable_preemption();
 		log_error("Could not copy thread state to child");
@@ -37,5 +38,6 @@ long do_fork(struct registers* regs)
 	address_space_dup(child->vas, parent->vas);
 
 	enable_preemption();
+	// TODO: actually return right values :)
 	return 0;
 }

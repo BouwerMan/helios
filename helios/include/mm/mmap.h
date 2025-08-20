@@ -2,21 +2,11 @@
 #pragma once
 
 #include <kernel/types.h>
+#include <mm/address_space.h>
 #include <stddef.h>
 
 #define MAP_FAILED ((void*)-1)
 #define DEF_ADDR   ((void*)0x555555554000)
-
-enum PROT {
-	PROT_NONE  = 0,
-	PROT_EXEC  = 1 << 0,
-	PROT_READ  = 1 << 1,
-	PROT_WRITE = 1 << 2,
-};
-
-enum MMAP_FLAGS {
-	MAP_ANON,
-};
 
 /**
  * @brief Creates a new memory mapping in the virtual address space of a process.
@@ -45,7 +35,13 @@ enum MMAP_FLAGS {
  * MAP_FAILED is returned, and errno is set to indicate the cause
  * of the error.
  */
-void* mmap_sys(u64* pml4, void* addr, size_t length, int prot, int flags, int fd, size_t offset);
+void* mmap_sys(u64* pml4,
+	       void* addr,
+	       size_t length,
+	       int prot,
+	       int flags,
+	       int fd,
+	       size_t offset);
 
 /**
  * @brief Removes a memory mapping.

@@ -52,6 +52,7 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
 	list_for_each_entry (pos, &src->mr_list, list) {
 		struct memory_region* new_mr = alloc_mem_region(
 			pos->start, pos->end, pos->prot, pos->flags);
+
 		if (!new_mr) {
 			log_error("Could not allocate mem region");
 			__free_addr_space(dest);
@@ -62,6 +63,17 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
 	}
 
 	return 0;
+}
+
+void add_region(struct address_space* vas, struct memory_region* mr)
+{
+	mr->owner = vas;
+	list_add(&vas->mr_list, &mr->list);
+}
+
+void remove_region(struct memory_region* mr)
+{
+	list_remove(&mr->list);
 }
 
 static void __free_addr_space(struct address_space* vas)
