@@ -33,6 +33,9 @@
 static constexpr uptr LIST_POISON1 = 0x100;
 static constexpr uptr LIST_POISON2 = 0x122;
 
+// FIXME: I mix up the list and head orders a ton in this, standardize it or
+// I'll fight you
+
 /**
  * __WRITE_ONCE - Ensures a value is written to a variable exactly once.
  * @x: The variable to write to.
@@ -56,11 +59,12 @@ static inline void list_init(struct list_head* list)
 	list->prev = list;
 }
 
-static inline int list_empty(struct list_head* list)
+static inline bool list_empty(struct list_head* list)
 {
 	return list->next == list;
 }
 
+[[deprecated]]
 static inline void list_insert(struct list_head* link,
 			       struct list_head* new_link)
 {
@@ -70,28 +74,25 @@ static inline void list_insert(struct list_head* link,
 	new_link->next->prev = new_link;
 }
 
+[[deprecated("Use list_add_tail() instead")]]
 static inline void list_append(struct list_head* list,
 			       struct list_head* new_link)
 {
 	list_insert((struct list_head*)list, new_link);
 }
 
+[[deprecated("Use list_add() instead")]]
 static inline void list_prepend(struct list_head* list,
 				struct list_head* new_link)
 {
 	list_insert(list->next, new_link);
 }
 
+[[deprecated("Use list_del() instead")]]
 static inline void list_remove(struct list_head* link)
 {
 	link->prev->next = link->next;
 	link->next->prev = link->prev;
-}
-
-static inline void list_move(struct list_head* link, struct list_head* new_link)
-{
-	list_remove(link);
-	list_append(new_link, link);
 }
 
 /**
@@ -99,8 +100,8 @@ static inline void list_move(struct list_head* link, struct list_head* new_link)
  * @head: the head of the list
  * @list: the entry to test
  */
-static inline int list_is_first(const struct list_head* head,
-				const struct list_head* list)
+static inline bool list_is_first(const struct list_head* head,
+				 const struct list_head* list)
 {
 	return list->prev == head;
 }
@@ -110,10 +111,10 @@ static inline int list_is_first(const struct list_head* head,
  * @head: the head of the list
  * @list: the entry to test
  */
-static inline int list_is_last(const struct list_head* head,
-			       const struct list_head* list)
+static inline bool list_is_last(const struct list_head* head,
+				const struct list_head* list)
 {
-	return list->next == head;
+	return head == list->next;
 }
 
 /**
@@ -158,6 +159,14 @@ static inline void list_add(struct list_head* head, struct list_head* new)
 	__list_insert(new, head->next, head);
 }
 
+/**
+ * list_add_tail - add a new entry
+ * @head: list head to add it before
+ * @new: new entry to be added
+ *
+ * Insert a new entry before the specified head.
+ * This is useful for implementing queues.
+ */
 static inline void list_add_tail(struct list_head* head, struct list_head* new)
 {
 	__list_insert(new, head, head->prev);
@@ -189,9 +198,43 @@ static inline void list_del(struct list_head* entry)
 	entry->prev = (void*)LIST_POISON2;
 }
 
+static inline void __list_del_entry(struct list_head* entry)
+{
+	__list_del(entry->prev, entry->next);
+}
+
+/**
+ * list_move - delete from one list and add as another's head
+ * @list: the entry to move
+ * @head: the head that will precede our entry
+ */
+static inline void list_move(struct list_head* list, struct list_head* head)
+{
+	__list_del_entry(list);
+	list_add(head, list);
+}
+
+/**
+ * list_move_tail - delete from one list and add as another's tail
+ * @list: the entry to move
+ * @head: the head that will follow our entry
+ */
+static inline void list_move_tail(struct list_head* list,
+				  struct list_head* head)
+{
+	__list_del_entry(list);
+	list_add_tail(head, list);
+}
+
 #define list_entry_is_head(pos, head, member) list_is_head((head), &pos->member)
 
-#define list_entry(link, type, member) container_of(link, type, member)
+/**
+ * list_entry - get the struct for this entry
+ * @ptr:	the &struct list_head pointer.
+ * @type:	the type of the struct this is embedded in.
+ * @member:	the name of the list_head within the struct.
+ */
+#define list_entry(ptr, type, member) container_of(ptr, type, member)
 
 /**
  * list_first_entry - get the first element from a list
@@ -213,6 +256,11 @@ static inline void list_del(struct list_head* entry)
 
 #define list_next(element) (element->next)
 
+/**
+ * list_next_entry - get the next element in list
+ * @pos:	the type * to cursor
+ * @member:	the name of the list_head within the struct.
+ */
 #define list_next_entry(pos, member) \
 	list_entry((pos)->member.next, typeof(*(pos)), member)
 
@@ -242,6 +290,56 @@ static inline void list_del(struct list_head* entry)
 	    n = list_next_entry(pos, member);                    \
 	     !list_entry_is_head(pos, head, member);             \
 	     pos = n, n = list_next_entry(n, member))
+
+/**
+ * list_for_each_continue - continue iteration over a list
+ * @pos:	the &struct list_head to use as a loop cursor.
+ * @head:	the head for your list.
+ *
+ * Continue to iterate over a list, continuing after the current position.
+ */
+#define list_for_each_continue(pos, head) \
+	for (pos = pos->next; !list_is_head(pos, (head)); pos = pos->next)
+
+/**
+ * list_for_each_entry_continue - continue iteration over list of given type
+ * @pos:	the type * to use as a loop cursor.
+ * @head:	the head for your list.
+ * @member:	the name of the list_head within the struct.
+ *
+ * Continue to iterate over list of given type, continuing after
+ * the current position.
+ */
+#define list_for_each_entry_continue(pos, head, member) \
+	for (pos = list_next_entry(pos, member);        \
+	     !list_entry_is_head(pos, head, member);    \
+	     pos = list_next_entry(pos, member))
+
+/**
+ * list_for_each_entry_from - iterate over list of given type from the current point
+ * @pos:	the type * to use as a loop cursor.
+ * @head:	the head for your list.
+ * @member:	the name of the list_head within the struct.
+ *
+ * Iterate over list of given type, continuing from current position.
+ */
+#define list_for_each_entry_from(pos, head, member)    \
+	for (; !list_entry_is_head(pos, head, member); \
+	     pos = list_next_entry(pos, member))
+
+/**
+ * list_next_entry_circular - get the next element in list
+ * @pos:	the type * to cursor.
+ * @head:	the list head to take the element from.
+ * @member:	the name of the list_head within the struct.
+ *
+ * Wraparound if pos is the last element (return the first element).
+ * Note, that list is expected to be not empty.
+ */
+#define list_next_entry_circular(pos, head, member)               \
+	(list_is_last(head, &(pos)->member) ?                     \
+		 list_first_entry(head, typeof(*(pos)), member) : \
+		 list_next_entry(pos, member))
 
 /*
  * Double linked lists with a single pointer list head.

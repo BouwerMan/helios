@@ -259,6 +259,13 @@ struct page* alloc_pages(aflags_t flags, size_t order)
 			log_debug("Allocated page at %p with order: %zu",
 				  (void*)page_to_phys(pg),
 				  order);
+
+			if (atomic_read(&pg->ref_count) >= 1) {
+				log_warn("page has refcount of %d",
+					 atomic_read(&pg->ref_count));
+			}
+
+			atomic_set(&pg->ref_count, 1);
 			break;
 		}
 	}
@@ -543,8 +550,6 @@ static struct page* alloc_pages_core(struct buddy_allocator* allocator,
 		} else {
 			log_error("Failed to split block for order %zu", order);
 		}
-
-		atomic_inc(&split_block->ref_count);
 
 		return split_block;
 	}

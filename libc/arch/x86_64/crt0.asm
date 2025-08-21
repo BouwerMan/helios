@@ -19,7 +19,7 @@ _start:
 
 	call main
 
-	mov eax, edi
-	call exit
+	; mov eax, edi
+	; call exit
 
 	jmp $

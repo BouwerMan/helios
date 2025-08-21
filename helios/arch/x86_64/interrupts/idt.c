@@ -23,14 +23,19 @@
 #include <arch/idt.h>
 #include <arch/ports.h>
 #include <drivers/console.h>
+#include <kernel/container_of.h>
 #include <kernel/dmesg.h>
+#include <kernel/irq_log.h>
 #include <kernel/screen.h>
+#include <kernel/tasks/scheduler.h>
 #include <string.h>
 #include <util/log.h>
 
 /*******************************************************************************
 * Global Variable Definitions
 *******************************************************************************/
+
+volatile int g_interrupt_nesting_level = 0;
 
 __attribute__((aligned(0x10))) static idt_entry_t
 	idt[256]; // Create an array of IDT entries; aligned for performance
@@ -368,6 +373,11 @@ void interrupt_handler(struct registers* r)
 	}
 }
 
+bool is_in_interrupt_context()
+{
+	return g_interrupt_nesting_level > 0;
+}
+
 /*******************************************************************************
 * Private Function Definitions
 *******************************************************************************/
@@ -388,12 +398,23 @@ static void set_descriptor(uint8_t vector, uint64_t isr, uint8_t flags)
 static void default_exception_handler(struct registers* registers)
 {
 	set_log_mode(LOG_DIRECT);
+	irq_log_flush();
 	console_flush();
+
 	log_error(
 		"Recieved interrupt #%lx with error code %lx on the default handler!",
 		registers->int_no,
 		registers->err_code);
 	log_error("Exception: %s", exception_messages[registers->int_no]);
+
+	scheduler_dump();
+
+	struct task* task = get_current_task();
+	log_error("Faulted in task '%s'", task->name);
+
+	extern struct task* previous_task;
+	log_error("Previous task: %s", previous_task->name);
+
 	log_error("RIP: %lx, RSP: %lx, RBP: %lx",
 		  registers->rip,
 		  registers->rsp,

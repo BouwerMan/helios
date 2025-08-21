@@ -26,6 +26,7 @@
 #undef FORCE_LOG_REDEF
 
 #include <arch/cache.h>
+#include <kernel/errno.h>
 #include <kernel/kmath.h>
 #include <kernel/panic.h>
 #include <kernel/spinlock.h>
@@ -40,11 +41,11 @@
 *******************************************************************************/
 
 #ifdef SLAB_DEBUG
-static constexpr int POISON_PATTERN = 0x5A;
+static constexpr char POISON_PATTERN = 0x5A;
 static constexpr int POISON_BYTE_COUNT =
 	16; // Number of bytes to verify at head/tail
 static constexpr int REDZONE_SIZE =
-	4; // 4 bytes at head and tail (so it is technically cross platform :))
+	4;  // 4 bytes at head and tail (so it is technically cross platform :))
 static constexpr long REDZONE_PATTERN = 0xDEADBEEF;
 #else
 static constexpr int POISON_PATTERN = 0;
@@ -179,7 +180,7 @@ int slab_cache_init(struct slab_cache* cache,
 {
 	if (!cache) {
 		log_error("Must supply valid cache structure pointer");
-		return -ENULLPTR;
+		return -EINVAL;
 	}
 
 	if (object_align == 0) {
@@ -194,14 +195,14 @@ int slab_cache_init(struct slab_cache* cache,
 	if (!is_pow_of_two(object_align)) {
 		log_error("Object alignment is not a power of 2: %lu",
 			  object_align);
-		return -EALIGN;
+		return -EINVAL;
 	}
 
 	if (object_size >= PAGE_SIZE) {
 		log_error(
 			"Object size of %lu is basically the same size as a page.",
 			object_size);
-		return -EOOM; // Technically not OOM but idk what it should actually be
+		return -ENOMEM; // Technically not OOM but idk what it should actually be
 	}
 
 	// Zero out cache just to make sure there is no garbage data there
@@ -246,7 +247,7 @@ int slab_cache_init(struct slab_cache* cache,
 	list_init(&cache->partial);
 	list_init(&cache->full);
 	list_init(&cache->quarantine);
-	list_append(&kernel.slab_caches, &cache->cache_node);
+	list_add_tail(&kernel.slab_caches, &cache->cache_node);
 
 	cache->constructor = constructor;
 	cache->destructor = destructor;
@@ -298,17 +299,22 @@ void* slab_alloc(struct slab_cache* cache)
 
 	spinlock_acquire(&cache->lock);
 
+	log_debug("Asked to allocate from cache %s(%p) by caller %p",
+		  cache->name,
+		  (void*)cache,
+		  __builtin_return_address(0));
+
 retry:
 
 	// Attempt to allocate from a partially filled slab
 	if (!list_empty(&cache->partial)) {
 		log_debug("Cache %s: Allocating from a partial slab",
 			  cache->name);
-		slab = list_entry(cache->partial.next, struct slab, link);
+		slab = list_first_entry(&cache->partial, struct slab, link);
 	} else if (!list_empty(&cache->empty) ||
 		   (res = slab_grow(cache)) >= 0) {
 		// Move the first empty slab to the partial list
-		slab = list_entry(cache->empty.next, struct slab, link);
+		slab = list_first_entry(&cache->empty, struct slab, link);
 		slab_relocate(slab, SLAB_PARTIAL);
 	} else {
 		log_error("Could not create more slabs, slab_grow returned: %d",
@@ -317,6 +323,7 @@ retry:
 		return NULL;
 	}
 
+	log_debug("Chose slab %p", (void*)slab);
 	void* obj_start = slab->free_stack[--slab->free_top];
 
 #ifdef SLAB_DEBUG
@@ -496,7 +503,7 @@ void slab_cache_destroy(struct slab_cache* cache)
 		slab_destroy(slab);
 	}
 
-	list_remove(&cache->cache_node);
+	list_del(&cache->cache_node);
 
 	// This also sets the flags to CACHE_UNINITIALIZED
 	memset(cache, 0, sizeof(struct slab_cache));
@@ -547,7 +554,6 @@ void slab_cache_purge_corrupt(struct slab_cache* cache)
  *
  * This function logs detailed information about the state of a slab cache,
  * including its name, object size, alignment, slab size, and usage statistics.
- * It ensures thread safety by acquiring a spinlock during the operation.
  *
  * @param cache Pointer to the slab_cache whose statistics are to be dumped.
  *              If the cache is NULL or uninitialized, an error is logged.
@@ -558,8 +564,6 @@ void slab_dump_stats(struct slab_cache* cache)
 		log_error("Invalid or uninitialized cache");
 		return;
 	}
-
-	spinlock_acquire(&cache->lock);
 
 	log_info("Slab Cache Stats:");
 	log_info("Name: %s", cache->name);
@@ -577,8 +581,6 @@ void slab_dump_stats(struct slab_cache* cache)
 	log_info("Total Slabs: %lu", cache->total_slabs);
 	log_info("Total Objects: %lu", cache->total_objects);
 	log_info("Used Objects: %lu", cache->used_objects);
-
-	spinlock_release(&cache->lock);
 }
 
 void slab_test()
@@ -668,7 +670,7 @@ static void slab_destroy(struct slab* slab)
 		kfree(is_free);
 	}
 
-	list_remove(&slab->link);
+	list_del(&slab->link);
 	kfree(slab->free_stack);
 	_slab_free_pages(base, SLAB_SIZE_PAGES);
 
@@ -679,11 +681,13 @@ static void slab_destroy(struct slab* slab)
 [[nodiscard]]
 static int slab_grow(struct slab_cache* cache)
 {
-	log_debug("Creating new slab for cache: %s", cache->name);
+	log_debug("Creating new slab for cache: %s(%p)",
+		  cache->name,
+		  (void*)cache);
 	void* base = (void*)_slab_alloc_pages(SLAB_SIZE_PAGES);
 	if (!base) {
 		log_error("OOM growing slab for cache %s", cache->name);
-		return -EOOM;
+		return -ENOMEM;
 	}
 
 #ifdef SLAB_DEBUG
@@ -700,7 +704,7 @@ static int slab_grow(struct slab_cache* cache)
 	if (!new_slab->free_stack) {
 		log_error("OOM growing slab for cache %s", cache->name);
 		_slab_free_pages(base, SLAB_SIZE_PAGES);
-		return -EOOM;
+		return -ENOMEM;
 	}
 
 	new_slab->free_top = cache->objects_per_slab;
@@ -729,13 +733,13 @@ static int slab_grow(struct slab_cache* cache)
 		new_slab->free_stack[i] = (void*)obj_start;
 	}
 
-	list_append(&cache->empty, &new_slab->link);
-	log_debug("Initialized slab at %p", base);
-
 	new_slab->location = SLAB_EMPTY;
 	cache->num_empty++;
 	cache->total_slabs++;
 	cache->total_objects += cache->objects_per_slab;
+
+	list_add_tail(&cache->empty, &new_slab->link);
+	log_debug("Initialized slab (%p) at base: %p", (void*)new_slab, base);
 
 	return 0;
 }
@@ -759,17 +763,17 @@ static void slab_relocate(struct slab* slab, enum _SLAB_LOCATION location)
 
 	struct slab_cache* cache = slab->parent;
 
-	size_t* counters[] = {
-		&cache->num_empty,
-		&cache->num_partial,
-		&cache->num_full,
-		&cache->num_quarantine,
+	size_t* const counters[] = {
+		[SLAB_EMPTY] = &cache->num_empty,
+		[SLAB_PARTIAL] = &cache->num_partial,
+		[SLAB_FULL] = &cache->num_full,
+		[SLAB_QUARANTINE] = &cache->num_quarantine,
 	};
-	struct list_head* lists[] = {
-		&cache->empty,
-		&cache->partial,
-		&cache->full,
-		&cache->quarantine,
+	struct list_head* const lists[] = {
+		[SLAB_EMPTY] = &cache->empty,
+		[SLAB_PARTIAL] = &cache->partial,
+		[SLAB_FULL] = &cache->full,
+		[SLAB_QUARANTINE] = &cache->quarantine,
 	};
 
 	(*counters[slab->location])--;

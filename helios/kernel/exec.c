@@ -171,53 +171,20 @@ static int load_program_header(struct task* task,
 			       void* elf,
 			       struct elf_program_header* prog)
 {
-	u64* pml4 = (u64*)PHYS_TO_HHDM(task->vas->pml4_phys);
-
 	size_t pages = CEIL_DIV(prog->size_in_memory, PAGE_SIZE);
-	void* free_pages = get_free_pages(AF_KERNEL, pages);
-	if (!free_pages) {
-		log_error("Failed to allocate memory");
-		return -1;
-	}
 
-	uptr paddr_start = HHDM_TO_PHYS(free_pages);
-	uptr vaddr_start = (uptr)prog->virtual_address;
-
-	flags_t page_flags = PAGE_PRESENT | PAGE_USER;
-	page_flags |= prog->flags & PF_WRITE ? PAGE_WRITE : 0;
-	page_flags |= prog->flags & PF_EXEC ? 0 : PAGE_NO_EXECUTE;
+	vaddr_t vaddr_start = (vaddr_t)prog->virtual_address;
+	vaddr_t vaddr_end = vaddr_start + (pages * PAGE_SIZE);
 
 	unsigned long prot = (prog->flags & PF_EXEC) ? PROT_EXEC : 0;
 	prot |= prog->flags & PF_WRITE ? PROT_WRITE : 0;
 	prot |= prog->flags & PF_READ ? PROT_READ : 0;
 
-	map_region(task->vas,
-		   vaddr_start,
-		   vaddr_start + (pages * PAGE_SIZE),
-		   prot,
-		   prog->flags);
-
-	for (size_t i = 0; i < pages; i++) {
-		uptr vaddr = vaddr_start + i * PAGE_SIZE;
-		uptr paddr = paddr_start + i * PAGE_SIZE;
-		int err = vmm_map_page((pgd_t*)pml4, vaddr, paddr, page_flags);
-
-		if (err) {
-			log_error("Failed to map page");
-			return -1;
-		}
-		log_debug("Mapped vaddr: %lx, to paddr: %lx", vaddr, paddr);
-	}
-
-	// I am copying into kvaddr which is the same memory as vaddr in the other address space.
-	void* kvaddr = (void*)free_pages;
+	map_region(task->vas, vaddr_start, vaddr_end, prot, prog->flags);
 
 	void* data = (void*)((uptr)elf + prog->offset);
-	log_debug("Copying data at %p to vaddr %p, size: %zu",
-		  data,
-		  kvaddr,
-		  prog->size_in_file);
-	memcpy(kvaddr, data, prog->size_in_file);
+
+	vmm_write_region(task->vas, vaddr_start, data, prog->size_in_file);
 
 	return 0;
 }
@@ -226,29 +193,12 @@ static int setup_user_stack(struct task* task,
 			    uptr stack_base,
 			    size_t stack_pages)
 {
-	constexpr flags_t page_flags = PAGE_PRESENT | PAGE_WRITE | PAGE_USER |
-				       PAGE_NO_EXECUTE;
-	u64* pml4 = (u64*)PHYS_TO_HHDM(task->vas->pml4_phys);
 	uptr stack_top = stack_base + stack_pages * PAGE_SIZE;
 	log_debug("Setting up user stack at base: 0x%lx, top: 0x%lx",
 		  stack_base,
 		  stack_top);
 
-	uptr stack = HHDM_TO_PHYS(get_free_pages(AF_KERNEL, stack_pages));
-
 	map_region(task->vas, stack_base, stack_top, PROT_READ | PROT_WRITE, 0);
-
-	for (size_t i = 0; i < stack_pages; i++) {
-		uptr vaddr = stack_base + i * PAGE_SIZE;
-		uptr paddr = stack + i * PAGE_SIZE;
-		int err = vmm_map_page((pgd_t*)pml4, vaddr, paddr, page_flags);
-
-		if (err) {
-			log_error("Failed to map stack page at: 0x%lx", paddr);
-			return -1;
-		}
-		log_debug("Mapped vaddr: %lx, to paddr: %lx", vaddr, paddr);
-	}
 
 	task->regs->rsp =
 		stack_top; // Set the stack pointer to the top of the stack

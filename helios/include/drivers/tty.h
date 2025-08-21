@@ -18,7 +18,7 @@ struct ring_buffer {
 	volatile size_t tail; // The consumer (worker thread) reads from here
 	spinlock_t lock;
 	struct waitqueue
-		readers; // Tasks waiting to read from the TTY (for stdin)
+		readers;      // Tasks waiting to read from the TTY (for stdin)
 	struct waitqueue
 		writers; // Tasks waiting to write to the TTY (if buffer is full)
 };
@@ -30,6 +30,7 @@ struct tty {
 	struct tty_driver* driver;
 	struct list_head list;
 	struct ring_buffer output_buffer;
+	semaphore_t write_lock;
 	char name[32];
 };
 

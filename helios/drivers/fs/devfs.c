@@ -153,6 +153,8 @@ struct vfs_inode* devfs_alloc_inode(struct vfs_superblock* sb)
 	inode->ops = &devfs_ops;
 	inode->fops = &devfs_fops;
 
+	sem_init(&inode->lock, 1);
+
 	return inode;
 }
 

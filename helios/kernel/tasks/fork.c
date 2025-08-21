@@ -1,6 +1,7 @@
 #include <arch/mmu/vmm.h>
 #include <kernel/tasks/fork.h>
 #include <kernel/tasks/scheduler.h>
+#include <mm/address_space.h>
 #include <string.h>
 #include <util/log.h>
 
@@ -34,7 +35,8 @@ long do_fork(struct registers* regs)
 	strncpy(child->name, parent->name, MAX_TASK_NAME_LEN);
 	child->name[MAX_TASK_NAME_LEN - 1] = '\0';
 
-	child->vas->pml4_phys = HHDM_TO_PHYS((uptr)vmm_create_address_space());
+	vas_set_pml4(child->vas, (pgd_t*)vmm_create_address_space());
+	// child->vas->pml4_phys = HHDM_TO_PHYS((uptr)vmm_create_address_space());
 	address_space_dup(child->vas, parent->vas);
 
 	enable_preemption();

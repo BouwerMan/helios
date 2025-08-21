@@ -101,6 +101,7 @@ qemu: iso
 		-hdd ./fat.img -boot d -s \
 		-d cpu_reset \
 		-D log.txt \
+		-no-reboot \
 		-serial stdio \
 		-enable-kvm \
 		-cpu host \

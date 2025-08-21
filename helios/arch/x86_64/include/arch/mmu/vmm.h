@@ -1,11 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include <mm/page.h>
-#include <stdint.h>
-
 #include <kernel/panic.h>
 #include <kernel/types.h>
+#include <mm/page.h>
+#include <stdint.h>
 
 static constexpr int PML4_SIZE_PAGES = 1;
 static constexpr int PML4_ENTRIES = 512;
@@ -128,6 +127,44 @@ static inline u64* get_pml4()
 void vmm_init();
 uint64_t* vmm_create_address_space();
 
+// Have to put this here so pgd_t is define :/
+#include <mm/address_space.h>
+
+/**
+ * vmm_map_region - Map a memory region by allocating new pages
+ * @vas: Target address space to map the region into
+ * @mr: Memory region descriptor containing virtual address range and permissions
+ *
+ * Return: 0 on success, negative error code on failure
+ * Errors: -EINVAL if vas or mr is NULL
+ *         Other negative values from vmm_map_page() failures
+ */
+int vmm_map_region(struct address_space* vas, struct memory_region* mr);
+
+/**
+ * vmm_fork_region - Fork a memory region with copy-on-write semantics
+ * @dest_vas: Destination address space to create the forked region in
+ * @src_mr: Source memory region to fork from
+ *
+ * Return: 0 on success, negative error code on failure
+ * Errors: -EINVAL if dest_vas or src_mr is NULL
+ *         -EFAULT if source page is not present or accessible
+ *         Other negative values from vmm_map_page() or vmm_protect_page()
+ */
+int vmm_fork_region(struct address_space* dest_vas,
+		    struct memory_region* src_mr);
+
+/**
+ * vmm_unmap_region - Unmap all pages within a memory region
+ * @vas: Address space containing the memory region to unmap
+ * @mr: Memory region descriptor specifying the virtual address range to unmap
+ *
+ * Return: 0 on success, negative error code on failure
+ * Errors: Propagates error codes from vmm_unmap_page() if individual page
+ *         unmapping fails (e.g., invalid virtual address, page table corruption)
+ */
+int vmm_unmap_region(struct address_space* vas, struct memory_region* mr);
+
 /**
  * @brief Maps a virtual address to a physical address in the page table.
  *
@@ -154,6 +191,35 @@ int vmm_map_page(pgd_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags);
 int vmm_unmap_page(pgd_t* pml4, uintptr_t vaddr);
 
 /**
+ * vmm_protect_page - Change memory protection flags for a single virtual page
+ * @vas: Address space containing the page to modify
+ * @vaddr: Virtual address of the page to change (must be page-aligned)
+ * @new_prot: New protection flags to apply to the page
+ *
+ * Return: 0 on success, negative error code on failure
+ * Errors: -EFAULT if the virtual address is not mapped or page is not present
+ *
+ * Note: The new protection flags should include appropriate architecture-specific
+ *       bits (e.g., PAGE_PRESENT, PAGE_USER) as this function performs a direct
+ *       flag replacement rather than selective bit modification.
+ */
+int vmm_protect_page(struct address_space* vas,
+		     vaddr_t vaddr,
+		     flags_t new_prot);
+
+/**
+ * vmm_write_region - Write data to a virtual memory region
+ * @vas: Address space containing the target virtual memory
+ * @vaddr: Starting virtual address to write to
+ * @data: Source data buffer to copy from
+ * @len: Number of bytes to write
+ */
+void vmm_write_region(struct address_space* vas,
+		      vaddr_t vaddr,
+		      const char* data,
+		      size_t len);
+
+/**
  * @brief Prunes empty page tables recursively.
  *
  * @param pml4   Pointer to the PML4 table.
@@ -162,5 +228,13 @@ int vmm_unmap_page(pgd_t* pml4, uintptr_t vaddr);
  * @return       0 on success.
  */
 int prune_page_tables(uint64_t* pml4, uintptr_t vaddr);
+
+/**
+ * @brief Gets the physical address for a given virtual address.
+ * @param pml4   Pointer to the PML4 table.
+ * @param vaddr  Virtual address to resolve.
+ * @return       The physical address corresponding to the virtual address,
+ */
+paddr_t get_phys_addr(pgd_t* pml4, vaddr_t vaddr);
 
 void vmm_test_prune_single_mapping(void);

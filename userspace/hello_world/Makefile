@@ -1,7 +1,7 @@
 LIBS:=$(LIBS) -nostdlib -L$(PWD)/libc/build -lc -lgcc
 
-CFLAGS := -ffreestanding -I$(PWD)/libc/include -static \
-	  -fno-stack-protector -fno-pie $(LIBS)
+CFLAGS := -ffreestanding -I$(PWD)/libc/arch/x86_64/include -I$(PWD)/libc/include -static \
+	  -fno-stack-protector -fno-pie $(LIBS) -mgeneral-regs-only -mno-red-zone -mno-mmx -mno-sse -mno-sse3 -ggdb
 
 OUT_EXE := hello_world.elf
 

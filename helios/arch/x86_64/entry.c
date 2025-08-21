@@ -36,6 +36,8 @@
 extern void __switch_to_new_stack(void* new_stack_top,
 				  void (*entrypoint)(void));
 
+void* g_entry_new_stack = nullptr;
+
 /**
  * @brief Architecture-specific kernel entry point.
  *
@@ -100,9 +102,10 @@ void __arch_entry()
 	log_init(
 		"Init Stage 6: Initializing kernel stack and jumping to kernel_main");
 
-	void* kernel_stack = get_free_pages(AF_KERNEL, KERNEL_STACK_SIZE_PAGES);
-	__switch_to_new_stack((void*)((uptr)kernel_stack +
-				      KERNEL_STACK_SIZE_PAGES * PAGE_SIZE),
-			      kernel_main);
+	// Bottom of stack
+	void* new_stack = get_free_pages(AF_KERNEL, STACK_SIZE_PAGES);
+	g_entry_new_stack =
+		(void*)((uptr)new_stack + STACK_SIZE_PAGES * PAGE_SIZE);
+	__switch_to_new_stack(g_entry_new_stack, kernel_main);
 	__builtin_unreachable();
 }

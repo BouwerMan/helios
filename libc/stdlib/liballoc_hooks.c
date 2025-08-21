@@ -5,8 +5,10 @@
 #if defined(__is_libk)
 #include <kernel/spinlock.h>
 #include <mm/page_alloc.h>
+#include <util/log.h>
 
-spinlock_t lock;
+static spinlock_t lock;
+static unsigned long flags;
 #endif
 
 void liballoc_init()
@@ -21,7 +23,7 @@ int liballoc_lock()
 {
 // __asm__ volatile("cli");
 #if defined(__is_libk)
-	spinlock_acquire(&lock);
+	spin_lock_irqsave(&lock, &flags);
 #endif
 	return 0;
 }
@@ -31,7 +33,7 @@ int liballoc_unlock()
 {
 // __asm__ volatile("sti");
 #if defined(__is_libk)
-	spinlock_release(&lock);
+	spin_unlock_irqrestore(&lock, flags);
 #endif
 	return 0;
 }
@@ -40,7 +42,9 @@ int liballoc_unlock()
 void* liballoc_alloc(size_t pages)
 {
 #if defined(__is_libk)
-	return (void*)get_free_pages(AF_KERNEL, pages);
+	void* alloc = get_free_pages(AF_KERNEL, pages);
+	// log_debug("liballoc_alloc: Allocated %zu pages at %p", pages, alloc);
+	return alloc;
 #else
 	// sbrk syscall
 	(void)pages;
@@ -52,6 +56,7 @@ void* liballoc_alloc(size_t pages)
 int liballoc_free(void* first_page, size_t pages)
 {
 #if defined(__is_libk)
+	// log_debug("liballoc_free: Freeing %zu pages at %p", pages, first_page);
 	free_pages(first_page, pages);
 #else
 	(void)first_page;

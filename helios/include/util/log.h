@@ -21,11 +21,12 @@ enum LOG_MODE {
 };
 
 // ANSI Color Codes for Readability
-#define LOG_COLOR_RESET	 "\x1b[0m"
-#define LOG_COLOR_CYAN	 "\x1b[1;36m"
-#define LOG_COLOR_YELLOW "\x1b[1;33m"
-#define LOG_COLOR_RED	 "\x1b[1;31m"
-#define LOG_COLOR_GREEN	 "\x1b[1;32m"
+#define LOG_COLOR_RESET	  "\x1b[0m"
+#define LOG_COLOR_CYAN	  "\x1b[1;36m"
+#define LOG_COLOR_YELLOW  "\x1b[1;33m"
+#define LOG_COLOR_RED	  "\x1b[1;31m"
+#define LOG_COLOR_GREEN	  "\x1b[1;32m"
+#define LOG_COLOR_MAGENTA "\x1b[1;35m"
 // NOTE: DEBUG has no color by default to keep it visually clean.
 
 // Optional force-redefinition toggle

@@ -29,6 +29,7 @@
 #include <kernel/work_queue.h>
 #include <util/log.h>
 
+#if 0
 static constexpr int DMESG_BUFFER_SIZE = 0x10000;
 
 char log_buffer[DMESG_BUFFER_SIZE];
@@ -120,3 +121,4 @@ void dmesg_wake()
 	data_ready = true;
 	dmesg_task->state = READY;
 }
+#endif

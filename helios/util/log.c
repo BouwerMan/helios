@@ -19,17 +19,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <arch/idt.h>
 #include <drivers/serial.h>
-#include <kernel/dmesg.h>
+#include <kernel/helios.h>
+#include <kernel/irq_log.h>
 #include <kernel/screen.h>
 #include <kernel/work_queue.h>
 #include <liballoc.h>
+#include <stdlib.h>
+#include <string.h>
 #include <util/log.h>
 
-#include <printf.h>
-#include <stdlib.h>
-#define __STDC_WANT_LIB_EXT1__
-#include <string.h>
+static constexpr char interrupt_context_str[] = LOG_COLOR_MAGENTA
+	"[INT]" LOG_COLOR_RESET;
 
 static enum LOG_MODE current_mode = LOG_DIRECT;
 
@@ -48,8 +50,13 @@ void log_output(const char* msg, int len)
 		screen_putstring(msg);
 		break;
 	case LOG_BUFFERED:
-		g_kernel_console->fops->write(
-			g_kernel_console, msg, (size_t)len);
+		if (unlikely(is_in_interrupt_context())) {
+			irq_log_write(interrupt_context_str,
+				      ARRAY_SIZE(interrupt_context_str) - 1);
+			irq_log_write(msg, (size_t)len);
+		} else {
+			vfs_file_write(g_kernel_console, msg, (size_t)len);
+		}
 		break;
 	}
 }

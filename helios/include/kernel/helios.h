@@ -112,20 +112,25 @@
 	"Test completed successfully. All expected conditions were met.\n"                    \
 	"*****************************************************************************\n"
 
-#define KERNEL_STACK_SIZE_PAGES 16 // 16 pages of stack, 64 KiB
-
 static inline void halt()
 {
 	__asm__ volatile("hlt");
 }
 
-enum ERROR_CODES {
-	ENONE = 0,
-	EOOM,
-	EALIGN,
-	ENULLPTR,
+static inline unsigned long long get_rsp_value()
+{
+	unsigned long long rsp_val;
+	__asm__ __volatile__("movq %%rsp, %0" : "=r"(rsp_val));
+	return rsp_val;
+}
 
-};
+// enum ERROR_CODES {
+// 	ENONE = 0,
+// 	EOOM,
+// 	EALIGN,
+// 	ENULLPTR,
+//
+// };
 
 struct kernel_context {
 	uint64_t* pml4;

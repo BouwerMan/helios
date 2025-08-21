@@ -36,8 +36,12 @@
 #include <drivers/console.h>
 #include <kernel/bootinfo.h>
 #include <kernel/dmesg.h>
+#include <kernel/errno.h>
 #include <kernel/helios.h>
+#include <kernel/irq_log.h>
 #include <kernel/panic.h>
+#include <kernel/tasks/scheduler.h>
+#include <mm/address_space.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <stdint.h>
@@ -64,6 +68,9 @@ static void map_memmap_entry(u64* pml4,
  * @param r Pointer to the registers structure containing the faulting address.
  */
 static void page_fault(struct registers* r);
+
+[[noreturn]]
+static void page_fault_fail(struct registers* r);
 
 /**
  * @brief Walks the page table hierarchy to locate or create a page table entry.
@@ -216,7 +223,7 @@ int vmm_map_page(pgd_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
 			"Something isn't aligned right, vaddr: %lx, paddr: %lx",
 			vaddr,
 			paddr);
-		return -1;
+		return -EINVAL;
 	}
 
 	// We want PAGE_PRESENT and PAGE_WRITE on almost all the higher levels
@@ -226,7 +233,7 @@ int vmm_map_page(pgd_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
 
 	if (!pte || pte->pte & PAGE_PRESENT) {
 		log_warn("Could not find pte or pte is already present");
-		return -1;
+		return -EFAULT;
 	}
 
 	pte->pte = paddr | flags;
@@ -251,7 +258,7 @@ int vmm_unmap_page(pgd_t* pml4, uintptr_t vaddr)
 {
 	if (!is_page_aligned(vaddr)) {
 		log_error("Something isn't aligned right, vaddr: %lx", vaddr);
-		return -1;
+		return -EINVAL;
 	}
 
 	pte_t* pte = walk_page_table(pml4, vaddr, false, 0);
@@ -259,6 +266,9 @@ int vmm_unmap_page(pgd_t* pml4, uintptr_t vaddr)
 	if (!pte || !(pte->pte & PAGE_PRESENT)) {
 		return 0; // Already unmapped, nothing to do
 	}
+
+	struct page* page = phys_to_page(pte->pte & PAGE_FRAME_MASK);
+	put_page(page);
 
 	pte->pte = 0;
 
@@ -346,6 +356,277 @@ void vmm_test_prune_single_mapping(void)
 	_free_page_table(pml4);
 }
 
+paddr_t get_phys_addr(pgd_t* pml4, vaddr_t vaddr)
+{
+	pte_t* pte = walk_page_table(pml4, vaddr & PAGE_FRAME_MASK, false, 0);
+
+	paddr_t paddr = pte->pte & PAGE_FRAME_MASK;
+
+	return paddr;
+}
+
+/**
+ * vmm_map_region - Map a memory region by allocating new pages
+ * @vas: Target address space to map the region into
+ * @mr: Memory region descriptor containing virtual address range and permissions
+ *
+ * This function maps a virtual memory region by allocating new physical pages
+ * for each page in the region's virtual address range. Each page is mapped
+ * with permissions derived from the memory region's protection flags.
+ *
+ * The function assumes the memory region (mr) is fully initialized with valid
+ * start/end addresses and protection flags. The address space parameter (vas)
+ * is passed to handle potential edge cases where add_region() hasn't been
+ * called before this mapping operation.
+ *
+ * Page permissions are constructed as follows:
+ * - PAGE_PRESENT | PAGE_USER are always set
+ * - PAGE_WRITE is set if PROT_WRITE is in mr->prot
+ * - PAGE_NO_EXECUTE is set if PROT_EXEC is NOT in mr->prot
+ *
+ * Return: 0 on success, negative error code on failure
+ * Errors: -EINVAL if vas or mr is NULL
+ *         Other negative values from vmm_map_page() failures
+ *
+ * Note: On failure, all successfully mapped pages are automatically unmapped
+ *       during cleanup to prevent memory leaks.
+ */
+int vmm_map_region(struct address_space* vas, struct memory_region* mr)
+{
+	int err = 0;
+	vaddr_t v = 0;
+
+	if (!vas || !mr) {
+		return -EINVAL;
+	}
+
+	// NOTE: Not sure if I should assume PAGE_USER
+	flags_t flags = PAGE_PRESENT | PAGE_USER;
+	flags |= mr->prot & PROT_WRITE ? PAGE_WRITE : 0;
+	flags |= mr->prot & PROT_EXEC ? 0 : PAGE_NO_EXECUTE;
+
+	for (v = mr->start; v < mr->end; v += PAGE_SIZE) {
+		struct page* page = alloc_page(AF_NORMAL);
+		paddr_t paddr = page_to_phys(page);
+
+		err = vmm_map_page(vas->pml4, v, paddr, flags);
+		if (err < 0) {
+			goto clean;
+		}
+	}
+
+	return 0;
+
+clean:
+	log_error("Failed to map region");
+
+	vaddr_t cleanup_end = v; // Don't include the failed page
+	for (v = mr->start; v < cleanup_end; v += PAGE_SIZE) {
+		// Find the original flags to restore them
+		int res = vmm_unmap_page(vas->pml4, v);
+		if (res < 0) {
+			panic("Could not cleanup vmm_map_region");
+		}
+	}
+
+	return err;
+}
+
+/**
+ * vmm_fork_region - Fork a memory region with copy-on-write semantics
+ * @dest_vas: Destination address space to create the forked region in
+ * @src_mr: Source memory region to fork from
+ *
+ * This function implements copy-on-write (COW) memory region forking for
+ * process creation. Instead of copying physical pages immediately, both
+ * parent and child processes share the same physical pages, with write
+ * access removed to trigger page faults on modification attempts.
+ *
+ * The forking process:
+ * 1. Maps each present page from source region into destination address space
+ * 2. Removes write permissions from both source and destination mappings
+ * 3. Increments reference count on shared physical pages
+ * 4. Preserves original page permissions for pages that were already read-only
+ *
+ * Return: 0 on success, negative error code on failure
+ * Errors: -EINVAL if dest_vas or src_mr is NULL
+ *         -EFAULT if source page is not present or accessible
+ *         Other negative values from vmm_map_page() or vmm_protect_page()
+ *
+ * Note: On failure, all successfully mapped pages in destination are unmapped
+ *       and source page protections are restored to prevent inconsistent state.
+ */
+int vmm_fork_region(struct address_space* dest_vas,
+		    struct memory_region* src_mr)
+{
+	int err = 0;
+	vaddr_t v = 0;
+
+	if (!dest_vas || !src_mr) {
+		return -EINVAL;
+	}
+
+	struct address_space* src_vas = src_mr->owner;
+
+	for (v = src_mr->start; v < src_mr->end; v += PAGE_SIZE) {
+		pte_t* src_pte = walk_page_table(src_vas->pml4, v, false, 0);
+		if (!src_pte || !(src_pte->pte & PAGE_PRESENT)) {
+			err = -EFAULT;
+			goto clean;
+		}
+
+		paddr_t p = src_pte->pte & PAGE_FRAME_MASK;
+		flags_t current_flags = (src_pte->pte & FLAGS_MASK);
+		flags_t new_flags = current_flags & ~PAGE_WRITE;
+
+		err = vmm_map_page(dest_vas->pml4, v, p, new_flags);
+		if (err < 0) {
+			goto clean;
+		}
+
+		struct page* page = phys_to_page(p);
+		get_page(page);
+
+		// Skip write protecting if page is already read only
+		if (!(current_flags & PAGE_WRITE)) continue;
+
+		err = vmm_protect_page(src_vas, v, new_flags);
+		if (err < 0) {
+			goto clean;
+		}
+	}
+
+	return 0;
+
+clean:
+	log_error("Failed to fork region");
+
+	vaddr_t cleanup_end = v; // Don't include the failed page
+	for (v = src_mr->start; v < cleanup_end; v += PAGE_SIZE) {
+		// Find the original flags to restore them
+		pte_t* src_pte = walk_page_table(src_vas->pml4, v, false, 0);
+		if (src_pte && (src_pte->pte & PAGE_PRESENT)) {
+			flags_t original_flags = (src_pte->pte & FLAGS_MASK) |
+						 PAGE_WRITE;
+			// Restore parent's write access if it was a writable page
+			if (src_mr->prot & PROT_WRITE) {
+				vmm_protect_page(src_vas, v, original_flags);
+			}
+		}
+
+		int res = vmm_unmap_page(dest_vas->pml4, v);
+		if (res < 0) {
+			panic("Could not cleanup vmm_fork_region");
+		}
+	}
+
+	return err;
+}
+
+/**
+ * vmm_unmap_region - Unmap all pages within a memory region
+ * @vas: Address space containing the memory region to unmap
+ * @mr: Memory region descriptor specifying the virtual address range to unmap
+ *
+ * This function unmaps all virtual pages within the specified memory region
+ * by iterating through each page-aligned virtual address and removing its
+ * mapping from the page tables. This operation effectively makes the virtual
+ * address range inaccessible and may free associated physical pages depending
+ * on reference counting.
+ *
+ * Note: The memory region structure (mr) may not have its owner field populated,
+ * so the address space must be passed explicitly as a parameter.
+ *
+ * Return: 0 on success, negative error code on failure
+ * Errors: Propagates error codes from vmm_unmap_page() if individual page
+ *         unmapping fails (e.g., invalid virtual address, page table corruption)
+ */
+int vmm_unmap_region(struct address_space* vas, struct memory_region* mr)
+{
+	for (vaddr_t v = mr->start; v < mr->end; v += PAGE_SIZE) {
+		int err = vmm_unmap_page(vas->pml4, v);
+		if (err < 0) {
+			return err;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * vmm_protect_page - Change memory protection flags for a single virtual page
+ * @vas: Address space containing the page to modify
+ * @vaddr: Virtual address of the page to change (must be page-aligned)
+ * @new_prot: New protection flags to apply to the page
+ *
+ * This function modifies the memory protection attributes of a single virtual
+ * page by updating its page table entry (PTE). The function preserves the
+ * physical address mapping while updating only the permission bits.
+ *
+ * Return: 0 on success, negative error code on failure
+ * Errors: -EFAULT if the virtual address is not mapped or page is not present
+ *
+ * Note: The new protection flags should include appropriate architecture-specific
+ *       bits (e.g., PAGE_PRESENT, PAGE_USER) as this function performs a direct
+ *       flag replacement rather than selective bit modification.
+ */
+int vmm_protect_page(struct address_space* vas, vaddr_t vaddr, flags_t new_prot)
+{
+	pte_t* pte = walk_page_table(vas->pml4, vaddr, false, 0);
+	if (!pte || !(pte->pte & PAGE_PRESENT)) {
+		return -EFAULT;
+	}
+
+	uptr paddr = pte->pte & PAGE_FRAME_MASK;
+	pte->pte = paddr | (new_prot & FLAGS_MASK);
+
+	invalidate(vaddr);
+	return 0;
+}
+
+/**
+ * vmm_write_region - Write data to a virtual memory region
+ * @vas: Address space containing the target virtual memory
+ * @vaddr: Starting virtual address to write to
+ * @data: Source data buffer to copy from
+ * @len: Number of bytes to write
+ *
+ * Writes data to a virtual memory region by translating virtual addresses
+ * to physical addresses page by page. Handles writes that span multiple
+ * pages by breaking them into page-aligned chunks.
+ *
+ * Note: This function assumes all target virtual pages are already mapped
+ * and accessible. No page fault handling is performed.
+ */
+void vmm_write_region(struct address_space* vas,
+		      vaddr_t vaddr,
+		      const char* data,
+		      size_t len)
+{
+	// NOTE: Maybe we should use a memory_region like the name suggests :)
+	// Doesn't really change anything though.
+	while (len > 0) {
+		// Calculate offset within the current page
+		size_t page_offset = vaddr & (PAGE_SIZE - 1);
+
+		// Calculate how much we can write in this page
+		size_t bytes_in_page = PAGE_SIZE - page_offset;
+		size_t bytes_to_copy = (len < bytes_in_page) ? len :
+							       bytes_in_page;
+
+		// Translate virtual to physical address
+		// TODO: Make sure this returns correct address
+		paddr_t paddr = get_phys_addr(vas->pml4, vaddr);
+		vaddr_t kernel_vaddr = PHYS_TO_HHDM(paddr);
+
+		memcpy((char*)kernel_vaddr, data, bytes_to_copy);
+
+		len -= bytes_to_copy;
+		vaddr += bytes_to_copy;
+		data += bytes_to_copy;
+	}
+}
+
 /*******************************************************************************
 * Private Function Definitions
 *******************************************************************************/
@@ -422,7 +703,7 @@ static bool prune_page_table_recursive(uint64_t* table,
 static pte_t*
 walk_page_table(pgd_t* pml4, uptr vaddr, bool create, flags_t flags)
 {
-	if ((flags & PAGE_PRESENT) == 0) {
+	if (create && (flags & PAGE_PRESENT) == 0) {
 		log_warn(
 			"walk_page_table creating an entry WITHOUT PAGE_PRESENT! flags: 0x%lx",
 			flags);
@@ -561,14 +842,92 @@ static void page_fault(struct registers* r)
 	uint64_t cr3;
 	__asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
 
+	bool is_write_fault = r->err_code & 0x2;
+	bool is_present_fault = r->err_code & 0x1;
+
+	if (!is_write_fault || !is_present_fault) {
+		// This is not a CoW fault. It might be a real error (like a segfault)
+		// or something else like demand paging. For now, we'll treat it as a failure.
+		goto fail;
+	}
+
+	if (!is_scheduler_init()) {
+		goto fail;
+	}
+
+	struct task* task = get_current_task();
+	struct address_space* vas = task->vas;
+	vaddr_t page_aligned_addr = fault_addr & PAGE_FRAME_MASK;
+
+	if (vas->pml4_phys != cr3) {
+		goto fail;
+	}
+
+	log_info("Faulted in address_space %lx", cr3);
+	address_space_dump(vas);
+
+	pte_t* pte = walk_page_table(vas->pml4, page_aligned_addr, false, 0);
+	if (!pte) {
+		goto fail;
+	}
+
+	paddr_t shared_paddr = pte->pte & PAGE_FRAME_MASK;
+	struct page* shared_page = phys_to_page(shared_paddr);
+
+	if (atomic_read(&shared_page->ref_count) > 1) {
+		// Case 1: We must copy since this is shared
+
+		struct page* new_page = alloc_page(AF_NORMAL);
+		if (!new_page) {
+			log_error("OOM during CoW fault!");
+			goto fail;
+		}
+
+		paddr_t new_paddr = page_to_phys(new_page);
+
+		// Actually do the copy part
+		void* dest_kvaddr = (void*)PHYS_TO_HHDM(new_paddr);
+		void* src_kvaddr = (void*)PHYS_TO_HHDM(shared_paddr);
+		memcpy(dest_kvaddr, src_kvaddr, PAGE_SIZE);
+
+		// Update mappings
+		flags_t flags = (pte->pte & FLAGS_MASK) | PAGE_WRITE;
+		vmm_unmap_page(vas->pml4, page_aligned_addr);
+		vmm_map_page(vas->pml4, page_aligned_addr, new_paddr, flags);
+	} else {
+		// Case 2: We are last user, therefore no need to copy.
+		// Just make it writeable
+
+		flags_t new_flags = (pte->pte & FLAGS_MASK) | PAGE_WRITE;
+		vmm_protect_page(vas, page_aligned_addr, new_flags);
+	}
+
+	return;
+
+fail:
+	page_fault_fail(r);
+}
+
+[[noreturn]]
+static void page_fault_fail(struct registers* r)
+{
+	// GDB BREAKPOINT
+	uint64_t fault_addr;
+	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
+	uint64_t cr3;
+	__asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
+
 	int present = !(r->err_code & 0x1);
 	int rw = r->err_code & 0x2;
 	int user = r->err_code & 0x4;
 	int reserved = r->err_code & 0x8;
 	int id = r->err_code & 0x10;
-
 	set_log_mode(LOG_DIRECT);
+	irq_log_flush();
 	console_flush();
+
+	struct task* task = get_current_task();
+	log_debug("Faulting task: %s", task->name);
 
 	log_error(
 		"PAGE FAULT! err %lu (p:%d,rw:%d,user:%d,res:%d,id:%d) at 0x%lx. Caused by 0x%lx in address space %lx",
@@ -581,6 +940,29 @@ static void page_fault(struct registers* r)
 		fault_addr,
 		r->rip,
 		cr3);
+
+	if (!present) {
+		log_error("Reason: The page was not present in memory.");
+	}
+	if (rw) {
+		log_error(
+			"Violation: This was a write operation to a read-only page.");
+	} else {
+		log_error("Violation: This was a read operation.");
+	}
+	if (user) {
+		log_error("Context: The fault occurred in user-mode.");
+	} else {
+		log_error("Context: The fault occurred in kernel-mode.");
+	}
+	if (reserved) {
+		log_error(
+			"Details: A reserved bit was set in a page directory entry.");
+	}
+	if (id) {
+		log_error(
+			"Details: The fault was caused by an instruction fetch.");
+	}
 
 	log_error("General registers:");
 	log_error("RIP: %lx, RSP: %lx, RBP: %lx", r->rip, r->rsp, r->rbp);

@@ -1,13 +1,13 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
+#include <drivers/ata/controller.h>
+#include <drivers/ata/device.h>
+#include <drivers/ata/partition.h>
+#include <kernel/semaphores.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>
-
-#include <drivers/ata/controller.h>
-#include <drivers/ata/device.h>
-#include <drivers/ata/partition.h>
 
 static constexpr size_t FS_TYPE_LEN = 8;
 static constexpr size_t VFS_MAX_NAME = 255; // Not including null terminator
@@ -61,20 +61,20 @@ enum VFS_PERMS {
 };
 
 enum VFS_OPEN_FLAGS {
-	O_RDONLY = 0x0000,  ///< Open for reading only
-	O_WRONLY = 0x0001,  ///< Open for writing only
-	O_RDWR = 0x0002,    ///< Open for reading and writing
-	O_ACCMODE = 0x0003, ///< Mask for access mode (internal use)
+	O_RDONLY = 0x0000,    ///< Open for reading only
+	O_WRONLY = 0x0001,    ///< Open for writing only
+	O_RDWR = 0x0002,      ///< Open for reading and writing
+	O_ACCMODE = 0x0003,   ///< Mask for access mode (internal use)
 
-	O_APPEND = 0x0004, ///< Writes append to the end of file
-	O_CREAT = 0x0008,  ///< Create file if it does not exist
-	O_TRUNC = 0x0010,  ///< Truncate file to zero length if it exists
-	O_EXCL = 0x0020,   ///< Error if O_CREAT and file exists
+	O_APPEND = 0x0004,    ///< Writes append to the end of file
+	O_CREAT = 0x0008,     ///< Create file if it does not exist
+	O_TRUNC = 0x0010,     ///< Truncate file to zero length if it exists
+	O_EXCL = 0x0020,      ///< Error if O_CREAT and file exists
 
 	O_DIRECTORY = 0x0040, ///< Fail if the path is not a directory
 	O_NOFOLLOW = 0x0080, ///< Do not follow symlinks (when you support them)
 
-	O_CLOEXEC = 0x0100, ///< Set close-on-exec (if you do exec)
+	O_CLOEXEC = 0x0100,  ///< Set close-on-exec (if you do exec)
 };
 
 #ifndef SEEK_SET
@@ -87,12 +87,6 @@ enum VFS_SEEK_TYPES {
 
 enum MOUNT_FLAGS {
 	MOUNT_PRESENT = 0x1,
-};
-
-enum MOUNT_ERRORS {
-	ENODEV,
-	ENOENT,
-	EFAULT,
 };
 
 /**
@@ -148,9 +142,9 @@ static inline const char* vfs_get_err_name(enum vfs_err errno)
 // A more Unix-like vfs_file
 struct vfs_file {
 	struct vfs_dentry* dentry; // <-- THIS IS THE MAGIC LINK!
-	off_t f_pos;   // The current read/write offset for this session
-	int flags;     // Open flags (O_RDONLY, O_WRONLY, O_APPEND, etc.)
-	int ref_count; // How many file descriptors point to this?
+	off_t f_pos;	    // The current read/write offset for this session
+	int flags;	    // Open flags (O_RDONLY, O_WRONLY, O_APPEND, etc.)
+	int ref_count;	    // How many file descriptors point to this?
 	struct file_ops* fops;
 	void* private_data; // For filesystem-specific use
 };
@@ -173,6 +167,7 @@ struct vfs_inode {
 	int ref_count;
 	uint16_t permissions;
 	uint8_t flags;
+	semaphore_t lock;
 	struct inode_ops* ops; // What can you DO with this inode?
 	struct file_ops* fops; // Default file ops
 
@@ -184,7 +179,7 @@ struct vfs_inode {
 
 	uint32_t nlink; // Number of hard links (dentries) pointing to this inode
 
-	void* fs_data; // Filesystem specific, for FAT it stores fat_inode_info
+	void* fs_data;	// Filesystem specific, for FAT it stores fat_inode_info
 };
 
 struct inode_ops {
@@ -300,6 +295,7 @@ void inode_add(struct vfs_inode* inode);
 // --- File Operations (Syscall Layer) ---
 int vfs_open(const char* path, int flags);
 int vfs_close(int fd);
+ssize_t vfs_file_write(struct vfs_file* file, const char* buffer, size_t count);
 ssize_t vfs_write(int fd, const char* buffer, size_t count);
 ssize_t vfs_read(int fd, char* buffer, size_t count);
 off_t vfs_lseek(int fd, off_t offset, int whence);

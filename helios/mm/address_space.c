@@ -1,3 +1,5 @@
+#include <arch/mmu/vmm.h>
+#include <kernel/errno.h>
 #include <kernel/panic.h>
 #include <mm/address_space.h>
 #include <mm/slab.h>
@@ -13,6 +15,8 @@ static struct slab_cache mem_cache = { 0 };
  * removes them from the list, and frees them.
  */
 static void __free_addr_space(struct address_space* vas);
+
+static void inc_refcounts_(struct memory_region* mr);
 
 void address_space_init()
 {
@@ -45,9 +49,14 @@ alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags)
 	return mr;
 }
 
+void destroy_mem_region(struct memory_region* mr)
+{
+	slab_free(&mem_cache, mr);
+}
+
 int address_space_dup(struct address_space* dest, struct address_space* src)
 {
-
+	log_debug("Duplicating address space");
 	struct memory_region* pos = nullptr;
 	list_for_each_entry (pos, &src->mr_list, list) {
 		struct memory_region* new_mr = alloc_mem_region(
@@ -60,6 +69,11 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
 		}
 
 		add_region(dest, new_mr);
+		/* The reason we are incrementing here is because
+		 * we are duplicating the address space, so we need to
+		 * ensure that the reference counts for the memory regions
+		 * are correct in the new address space. */
+		inc_refcounts_(new_mr);
 	}
 
 	return 0;
@@ -76,6 +90,75 @@ void remove_region(struct memory_region* mr)
 	list_remove(&mr->list);
 }
 
+void vas_set_pml4(struct address_space* vas, pgd_t* pml4)
+{
+	if (!vas) {
+		panic("Cannot set PML4 for a null address space");
+	}
+	vas->pml4 = pml4;
+	vas->pml4_phys = HHDM_TO_PHYS((uptr)pml4);
+}
+
+int map_region(struct address_space* vas,
+	       uptr start,
+	       uptr end,
+	       unsigned long prot,
+	       unsigned long flags)
+{
+	log_debug(
+		"Mapping region: start=0x%lx, end=0x%lx, prot=0x%lx, flags=0x%lx",
+		start,
+		end,
+		prot,
+		flags);
+	struct memory_region* mr = alloc_mem_region(start, end, prot, flags);
+	if (!mr) {
+		return -ENOMEM;
+	}
+
+	int err = vmm_map_region(vas, mr);
+	if (err < 0) {
+		return err;
+	}
+
+	add_region(vas, mr);
+
+	return 0;
+}
+
+struct memory_region* get_region(struct address_space* vas, vaddr_t vaddr)
+{
+	struct memory_region* pos = nullptr;
+	list_for_each_entry (pos, &vas->mr_list, list) {
+		if (is_within_region(pos, vaddr)) {
+			return pos;
+		}
+	}
+
+	return pos;
+}
+
+void address_space_dump(struct address_space* vas)
+{
+	if (!vas) return;
+
+	struct memory_region* pos = NULL;
+	log_info("Dumping address space");
+	log_info("Start              | "
+		 "End                | "
+		 "Prot               | "
+		 "Flags");
+	log_info(
+		"---------------------------------------------------------------------------------");
+	list_for_each_entry (pos, &vas->mr_list, list) {
+		log_info("0x%016lx | 0x%016lx | 0x%016lx | 0x%016lx",
+			 pos->start,
+			 pos->end,
+			 pos->prot,
+			 pos->flags);
+	}
+}
+
 static void __free_addr_space(struct address_space* vas)
 {
 	struct memory_region* pos = nullptr;
@@ -85,4 +168,15 @@ static void __free_addr_space(struct address_space* vas)
 		remove_region(pos);
 		slab_free(&mem_cache, pos);
 	}
+}
+
+static void inc_refcounts_(struct memory_region* mr)
+{
+	paddr_t start = get_phys_addr(mr->owner->pml4, mr->start);
+	size_t num_pages = CEIL_DIV(mr->end - mr->start, PAGE_SIZE);
+
+	log_debug("Start: %lx, num_pages: %zu", start, num_pages);
+
+	// Go through each page
+	// pfn_t start_pfn = PADDR_TO_PFN(start);
 }

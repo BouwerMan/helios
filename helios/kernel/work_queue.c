@@ -1,3 +1,4 @@
+#include <drivers/serial.h>
 #include <kernel/spinlock.h>
 #include <kernel/tasks/scheduler.h>
 #include <kernel/work_queue.h>
@@ -63,6 +64,11 @@ void work_queue_init()
  */
 int add_work_item(work_func_t func, void* data)
 {
+	if (!func) {
+		log_error("Invalid function supplied (%p) by caller: %p",
+			  (void*)func,
+			  __builtin_return_address(0));
+	}
 	struct work_item* item = kmalloc(sizeof(struct work_item));
 	if (!item) {
 		return -1;
@@ -71,13 +77,14 @@ int add_work_item(work_func_t func, void* data)
 	item->func = func;
 	item->data = data;
 
-	spinlock_acquire(&g_work_queue.lock);
+	unsigned long flags;
+	spin_lock_irqsave(&g_work_queue.lock, &flags);
 	list_add_tail(&g_work_queue.queue, &item->list);
-	spinlock_release(&g_work_queue.lock);
+	spin_unlock_irqrestore(&g_work_queue.lock, flags);
 
 	// TODO: make this a proper wake queue
 	if (wq_task->state == BLOCKED) {
-		wq_task->state = READY;
+		task_wake(wq_task);
 	}
 
 	return 0;
@@ -123,7 +130,8 @@ static void worker_thread_entry(void)
  */
 static struct work_item* take_from_queue()
 {
-	spinlock_acquire(&g_work_queue.lock);
+	unsigned long flags;
+	spin_lock_irqsave(&g_work_queue.lock, &flags);
 	struct work_item* item = nullptr;
 
 	if (list_empty(&g_work_queue.queue)) {
@@ -131,9 +139,9 @@ static struct work_item* take_from_queue()
 	}
 
 	item = list_first_entry(&g_work_queue.queue, struct work_item, list);
-	list_remove(&item->list);
+	list_del(&item->list);
 
 release:
-	spinlock_release(&g_work_queue.lock);
+	spin_unlock_irqrestore(&g_work_queue.lock, flags);
 	return item;
 }

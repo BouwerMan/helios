@@ -789,14 +789,19 @@ int vfs_mkdir(const char* path, uint16_t mode)
 	return VFS_OK;
 }
 
-ssize_t vfs_write(int fd, const char* buffer, size_t count)
+ssize_t vfs_file_write(struct vfs_file* file, const char* buffer, size_t count)
 {
-	struct vfs_file* file = get_file(fd);
 	if (!file) {
 		return -VFS_ERR_INVAL;
 	}
 
 	return file->fops->write(file, buffer, count);
+}
+
+ssize_t vfs_write(int fd, const char* buffer, size_t count)
+{
+	struct vfs_file* file = get_file(fd);
+	return vfs_file_write(file, buffer, count);
 }
 
 ssize_t vfs_read(int fd, char* buffer, size_t count)

@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
+#include <arch/mmu/vmm.h>
 #include <kernel/types.h>
 #include <util/list.h>
-#include <util/log.h>
 
 enum MMAP_PROT {
 	PROT_NONE = 0,
@@ -24,6 +24,7 @@ enum MMAP_FLAGS {
  */
 struct address_space {
 	uptr pml4_phys;		  /* Physical address of the PML4 table. */
+	pgd_t* pml4;		  /* Has to go second for switch.asm */
 	struct list_head mr_list; /* List of memory regions. */
 };
 
@@ -31,15 +32,39 @@ struct address_space {
  * struct memory_region - Represents a virtual memory area (VMA).
  */
 struct memory_region {
-	uptr start; /* VMR start, inclusive */
-	uptr end;   /* VMR end, exclusive */
+	uptr start;		     /* VMR start, inclusive */
+	uptr end;		     /* VMR end, exclusive */
 
-	unsigned long prot;  /* Memory protection flags. */
-	unsigned long flags; /* Additional flags for the region. */
+	unsigned long prot;	     /* Memory protection flags. */
+	unsigned long flags;	     /* Additional flags for the region. */
 
 	struct address_space* owner; /* Owning address space. */
 	struct list_head list; /* Links into the address_space's mr_list. */
 };
+
+/**
+ * These are both inline so that our page_fault handler doesn't take 1000 years
+ */
+
+static inline bool is_within_region(struct memory_region* mr, vaddr_t vaddr)
+{
+	return vaddr > mr->start && vaddr < mr->end;
+}
+
+static inline bool is_within_vas(struct address_space* vas, vaddr_t vaddr)
+{
+	bool res = false;
+
+	struct memory_region* pos = nullptr;
+	list_for_each_entry (pos, &vas->mr_list, list) {
+		res = is_within_region(pos, vaddr);
+		if (res) return res;
+	}
+
+	return res;
+}
+
+struct memory_region* get_region(struct address_space* vas, vaddr_t vaddr);
 
 /**
  * add_region - Adds a memory region to an address space.
@@ -72,6 +97,12 @@ struct memory_region*
 alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags);
 
 /**
+ * destroy_mem_region - Destroys and deallocates a memory_region.
+ * @mr: The region to destroy
+ */
+void destroy_mem_region(struct memory_region* mr);
+
+/**
  * address_space_dup - Duplicates an address space.
  * @dest: The destination address space.
  * @src: The source address space.
@@ -79,6 +110,8 @@ alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags);
  * Return: 0 on success, -1 on failure.
  */
 int address_space_dup(struct address_space* dest, struct address_space* src);
+
+void vas_set_pml4(struct address_space* vas, pgd_t* pml4);
 
 /**
  * map_region - Creates and maps a new memory region.
@@ -88,22 +121,12 @@ int address_space_dup(struct address_space* dest, struct address_space* src);
  * @prot: The memory protection flags for the region.
  * @flags: Additional flags for the region.
  *
- * This function is a simple wrapper that allocates a new memory_region
- * and immediately adds it to the specified address space.
+ * Return: 0 on success, negative error code on failure
  */
-static inline void map_region(struct address_space* vas,
-			      uptr start,
-			      uptr end,
-			      unsigned long prot,
-			      unsigned long flags)
-{
-	log_debug(
-		"Mapping region: start=0x%lx, end=0x%lx, prot=0x%lx, flags=0x%lx",
-		start,
-		end,
-		prot,
-		flags);
-	struct memory_region* mr = alloc_mem_region(start, end, prot, flags);
-	if (!mr) return;
-	add_region(vas, mr);
-}
+int map_region(struct address_space* vas,
+	       uptr start,
+	       uptr end,
+	       unsigned long prot,
+	       unsigned long flags);
+
+void address_space_dump(struct address_space* vas);

@@ -100,11 +100,15 @@ void register_tty(struct tty* tty)
  */
 ssize_t __write_to_tty(struct tty* tty, const char* buffer, size_t count)
 {
+	sem_wait(&tty->write_lock);
+
 	struct ring_buffer* rb = &tty->output_buffer;
 
 	ssize_t written = tty_fill_buffer(rb, buffer, count);
 
 	add_work_item(tty_drain_output_buffer, tty);
+
+	sem_signal(&tty->write_lock);
 
 	return written;
 }
@@ -191,9 +195,9 @@ static ssize_t tty_fill_buffer(struct ring_buffer* rb,
 			       const char* buffer,
 			       size_t count)
 {
-
 	size_t i = 0;
-	spinlock_acquire(&rb->lock);
+	unsigned long flags;
+	spin_lock_irqsave(&rb->lock, &flags);
 
 	// TODO: Make sure there is room
 
@@ -206,7 +210,7 @@ static ssize_t tty_fill_buffer(struct ring_buffer* rb,
 		}
 	}
 
-	spinlock_release(&rb->lock);
+	spin_unlock_irqrestore(&rb->lock, flags);
 
 	return (ssize_t)i;
 }

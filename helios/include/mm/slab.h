@@ -23,6 +23,13 @@ enum slab_cache_flags {
 	CACHE_INITIALIZED,
 };
 
+enum _SLAB_LOCATION {
+	SLAB_EMPTY = 0,	  /**< Slab is empty with no allocated objects. */
+	SLAB_PARTIAL = 1, /**< Slab has some allocated objects but not full. */
+	SLAB_FULL = 2,	  /**< Slab is fully occupied with no free objects. */
+	SLAB_QUARANTINE = 3,
+};
+
 /**
  * @brief Represents a slab cache for managing memory allocation of fixed-size objects.
  *
@@ -82,13 +89,6 @@ struct slab_cache {
 	char name[MAX_CACHE_NAME_LEN];
 };
 
-enum _SLAB_LOCATION {
-	SLAB_EMPTY = 0,	     /**< Slab is empty with no allocated objects. */
-	SLAB_PARTIAL = 1,    /**< Slab has some allocated objects but is not full. */
-	SLAB_FULL = 2,	     /**< Slab is fully occupied with no free objects. */
-	SLAB_QUARANTINE = 3, /**< Slab is in quarantine for debugging purposes. */
-};
-
 /**
  * @brief Represents a slab in the slab allocator.
  *
@@ -126,8 +126,12 @@ struct slab {
  * @return              0 on success, or a negative error code on failure.
  */
 [[nodiscard]]
-int slab_cache_init(struct slab_cache* cache, const char* name, size_t object_size, size_t object_align,
-		    void (*constructor)(void*), void (*destructor)(void*));
+int slab_cache_init(struct slab_cache* cache,
+		    const char* name,
+		    size_t object_size,
+		    size_t object_align,
+		    void (*constructor)(void*),
+		    void (*destructor)(void*));
 
 /**
  * @brief Destroy a slab cache and release all its memory.

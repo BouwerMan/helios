@@ -46,6 +46,7 @@ void vconsole_tty_init()
 	rb->size = RING_BUFFER_SIZE;
 	spinlock_init(&rb->lock);
 
+	sem_init(&tty->write_lock, 1);
 	register_tty(tty);
 }
 
@@ -65,7 +66,7 @@ ssize_t vconsole_tty_write(struct tty* tty)
 	struct ring_buffer* rb = &tty->output_buffer;
 	ssize_t bytes_written = 0;
 
-	spinlock_acquire(&rb->lock);
+	sem_wait(&tty->write_lock);
 
 	while (rb->head != rb->tail) {
 		screen_putchar(rb->buffer[rb->tail]);
@@ -73,7 +74,7 @@ ssize_t vconsole_tty_write(struct tty* tty)
 		bytes_written++;
 	}
 
-	spinlock_release(&rb->lock);
+	sem_signal(&tty->write_lock);
 
 	return bytes_written;
 }

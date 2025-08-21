@@ -3,8 +3,12 @@
 ; asmsyntax=nasm
 [bits 64]
 
+extern g_interrupt_nesting_level
 extern interrupt_handler
 extern schedule
+extern syscall_handler
+
+%define INT_OFF 144
 
 global __set_idt
 __set_idt:
@@ -119,35 +123,51 @@ __set_idt:
 %endmacro
 
 interrupt_common_stub:
-	swapgs_if_necessary
+	;swapgs_if_necessary
 
 	PUSHALL
 
 	mov rdi, rsp ; this points to the struct registers
 	mov r15, rsp ; save rsp in r15
-
+	
 	; ABI requirements
 	and rsp, -16 ; align stack to 16 bytes
 	cld
-	call interrupt_handler
+	
+	; Check if this is a syscall (interrupt 128)
+	cmp dword [rdi + INT_OFF], 128
+	je .syscall_path
 
+.interrupt_path:
+	inc dword [rel g_interrupt_nesting_level]
+	call interrupt_handler
+	jmp .schedule_and_return
+
+.syscall_path:
+	sti ; We want to allow interrupts during syscalls
+	call syscall_handler
+	; Fall through to schedule_and_return
+
+.schedule_and_return:
 	mov rdi, r15 ; restore rdi to point to the struct registers
-	; schedule will jmp to interrupt_return if a switch is performed
-	; otherwise r15 will still have a valid struct registers in it
 	cld
 	call schedule
-
-	; If we make it here
-	mov rdi, r15 ; put struct register into rdi for interrupt_return
+	mov rdi, r15 ; rdi gets clobered by schedule
+	; Fall through to interrupt_return
 	
 ; rdi: struct registers to pop from
 global interrupt_return
 interrupt_return:
 	mov rsp, rdi ; put struct registers into rsp then we can POPALL and iretq
 
-	POPALL
+	; Only decrement nesting level for actual interrupts (not syscalls)
+	cmp dword [rdi + INT_OFF], 128
+	je .return_from_interrupt
+	dec dword [rel g_interrupt_nesting_level]
 
-	swapgs_if_necessary
+.return_from_interrupt:
+	POPALL
+	;swapgs_if_necessary
 	sti
 	iretq
 

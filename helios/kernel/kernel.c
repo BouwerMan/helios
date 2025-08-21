@@ -28,9 +28,11 @@
 #include <kernel/dmesg.h>
 #include <kernel/exec.h>
 #include <kernel/helios.h>
+#include <kernel/irq_log.h>
 #include <kernel/limine_requests.h>
 #include <kernel/panic.h>
 #include <kernel/screen.h>
+#include <kernel/semaphores.h>
 #include <kernel/syscall.h>
 #include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
@@ -77,6 +79,7 @@ void kernel_console_init()
 {
 	struct vfs_dentry* dentry = vfs_lookup("/dev/console");
 	if (dentry && dentry->inode) {
+		log_debug("Found /dev/console, setting up kernel console");
 		g_kernel_console = kzmalloc(sizeof(struct vfs_file));
 		g_kernel_console->dentry = dget(dentry);
 		g_kernel_console->fops = dentry->inode->fops;
@@ -93,6 +96,8 @@ void kernel_console_init()
 
 void kernel_main()
 {
+	extern void* g_entry_new_stack;
+	log_debug("Successfully jumped to stack: %p", g_entry_new_stack);
 	// FIXME: Once we get module loading working I will uncomment this
 	// bootmem_reclaim_bootloader();
 
@@ -117,6 +122,7 @@ void kernel_main()
 
 	tty_init();
 
+	irq_log_init();
 	console_init();
 	attach_tty_to_console("ttyS0");
 	attach_tty_to_console("tty0");
@@ -125,12 +131,13 @@ void kernel_main()
 	log_info("Successfully got out of bootstrapping hell");
 	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
 
-	// GDB BREAKPOINT
 	int init_res = launch_init();
 	if (init_res < 0) {
 		log_error("Init error code: %d", init_res);
 		panic("Could not launch init!");
 	}
+
+	scheduler_dump();
 
 #if 0
 	log_warn("Shutting down in 1 second");
@@ -140,6 +147,8 @@ void kernel_main()
 	console_flush();
 	outword(0x604, 0x2000);
 #endif
-	for (;;)
+	log_info("Entering idle loop");
+	for (;;) {
 		halt();
+	}
 }

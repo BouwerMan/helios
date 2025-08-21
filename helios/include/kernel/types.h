@@ -24,6 +24,9 @@ typedef unsigned long flags_t;
 
 typedef long off_t;
 
+typedef unsigned long paddr_t;
+typedef unsigned long vaddr_t;
+
 typedef struct {
 	int counter;
 } atomic_t;
