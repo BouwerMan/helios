@@ -71,12 +71,6 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
 		add_region(dest, new_mr);
 
 		vmm_fork_region(dest, pos);
-
-		/* The reason we are incrementing here is because
-		 * we are duplicating the address space, so we need to
-		 * ensure that the reference counts for the memory regions
-		 * are correct in the new address space. */
-		inc_refcounts(new_mr);
 	}
 
 	return 0;
