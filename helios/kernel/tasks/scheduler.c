@@ -358,7 +358,9 @@ void reap_task(struct task* task)
 	{
 		log_info("Cleaning up task '%s' (PID %d)", pos->name, pos->pid);
 		task_remove(pos);
-		free_pages((void*)pos->kernel_stack, STACK_SIZE_PAGES);
+		void* stack_base = (void*)(task->kernel_stack -
+					   (STACK_SIZE_PAGES * PAGE_SIZE));
+		free_pages(stack_base, STACK_SIZE_PAGES);
 
 		free_page(pos->vas->pml4);
 
