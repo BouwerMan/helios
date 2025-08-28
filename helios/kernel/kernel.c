@@ -147,6 +147,7 @@ void kernel_main()
 	console_flush();
 	outword(0x604, 0x2000);
 #endif
+	// This thread will now become the cleanup task
 	log_info("Entering idle loop");
 	for (;;) {
 		halt();

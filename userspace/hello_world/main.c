@@ -23,6 +23,9 @@ int main(void)
 
 	printf("Liballoc: %s\n", buffer2);
 
+	// GDB BREAKPOINT
+	exit(102);
+
 	for (;;)
 		;
 	return 0;

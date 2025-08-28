@@ -19,6 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <drivers/fs/vfs.h>
 #undef LOG_LEVEL
 #define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
@@ -185,7 +186,9 @@ void schedule(struct registers* regs)
 	struct task* prev = squeue.current_task;
 	previous_task = prev;
 	prev->regs = regs;
-	if (prev->state != BLOCKED) prev->state = READY;
+	if (prev->state != BLOCKED && prev->state != TERMINATED) {
+		prev->state = READY;
+	}
 
 	struct task* new = pick_next();
 
@@ -208,8 +211,10 @@ void scheduler_init(void)
 		log_error("OOM error from kmalloc");
 		panic("OOM error from kmalloc");
 	}
+
 	list_init(&squeue.ready_list);
 	list_init(&squeue.blocked_list);
+	list_init(&squeue.terminated_list);
 
 	int res = slab_cache_init(squeue.cache,
 				  "Scheduler Tasks",
@@ -306,10 +311,12 @@ int kthread_run(struct task* task)
 		log_error("Could not run kthread: no entry was specified");
 		return -1;
 	}
+
 	disable_preemption();
 	task->state = READY;
 	task_add(task);
 	enable_preemption();
+
 	return 0;
 }
 
@@ -340,6 +347,52 @@ int launch_init()
 
 	enable_preemption();
 	return 0;
+}
+
+void reap_task(struct task* task)
+{
+	struct task* pos = nullptr;
+	struct task* temp = nullptr;
+
+	list_for_each_entry_safe(pos, temp, &squeue.terminated_list, list)
+	{
+		log_info("Cleaning up task '%s' (PID %d)", pos->name, pos->pid);
+		task_remove(pos);
+		free_pages((void*)pos->kernel_stack, STACK_SIZE_PAGES);
+
+		free_page(pos->vas->pml4);
+
+		slab_free(squeue.cache, pos);
+	}
+}
+
+[[noreturn]]
+void task_end(int status)
+{
+	// GDB BREAKPOINT
+	struct task* task = get_current_task();
+	log_info("Task '%s' (PID %d) exiting with status %d",
+		 task->name,
+		 task->pid,
+		 status);
+
+	address_space_destroy(task->vas);
+	for (int i = 0; i < MAX_RESOURCES; i++) {
+		if (task->resources[i]) {
+			vfs_close(i);
+		}
+	}
+
+	task->state = TERMINATED;
+	list_move_tail(&task->list, &squeue.terminated_list);
+
+	task->exit_code = status;
+
+	waitqueue_wake_all(&task->parent->parent_wq);
+
+	yield();
+
+	__builtin_unreachable();
 }
 
 int copy_thread_state(struct task* child, struct registers* parent_regs)
@@ -378,11 +431,20 @@ struct task* __alloc_task()
 
 	memset(task, 0, sizeof(struct task));
 	task->vas = vas;
-	task->PID = squeue.pid_i++;
+	task->pid = squeue.pid_i++;
 
 	// Init lists, maybe default resources (stdio)
+	task->parent = get_current_task();
 	list_init(&task->list);
 	list_init(&task->vas->mr_list);
+	list_init(&task->children);
+	list_init(&task->sibling);
+	waitqueue_init(&task->parent_wq);
+
+	// The first task is its own parent
+	if (task->parent != nullptr && task->parent != task) {
+		list_add_tail(&task->parent->children, &task->sibling);
+	}
 
 	return task;
 }
@@ -435,8 +497,8 @@ void scheduler_dump()
 	log_info("Ready List:");
 	list_for_each_entry (pos, &squeue.ready_list, list) {
 		log_info(
-			"  %lu: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
-			pos->PID,
+			"  %d: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
+			pos->pid,
 			pos->name,
 			get_task_name(pos->type),
 			pos->state,
@@ -446,8 +508,8 @@ void scheduler_dump()
 	log_info("Blocked List:");
 	list_for_each_entry (pos, &squeue.blocked_list, list) {
 		log_info(
-			"  %lu: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
-			pos->PID,
+			"  %d: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
+			pos->pid,
 			pos->name,
 			get_task_name(pos->type),
 			pos->state,
@@ -551,8 +613,8 @@ void waitqueue_dump_waiters(struct waitqueue* wqueue)
 	struct task* pos = nullptr;
 	list_for_each_entry (pos, &wqueue->waiters_list, list) {
 		log_info(
-			"  %lu: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
-			pos->PID,
+			"  %d: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
+			pos->pid,
 			pos->name,
 			get_task_name(pos->type),
 			pos->state,
@@ -631,11 +693,10 @@ static int create_kernel_stack(struct task* task, entry_func entry)
 	// with a null entry
 	task->regs->rip = (uptr)entry;
 
-	log_debug(
-		"Created stack for task %lu, kernel_stack: %lx, regs addr: %p",
-		task->PID,
-		task->kernel_stack,
-		(void*)task->regs);
+	log_debug("Created stack for task %d, kernel_stack: %lx, regs addr: %p",
+		  task->pid,
+		  task->kernel_stack,
+		  (void*)task->regs);
 
 	return 0;
 }
@@ -646,7 +707,7 @@ static void task_add(struct task* task)
 	list_add_tail(&squeue.ready_list, &task->list);
 	squeue.task_count++;
 
-	log_debug("Added task %lu", task->PID);
+	log_debug("Added task %d", task->pid);
 	log_debug("Currently have %lu tasks", squeue.task_count);
 }
 
@@ -658,8 +719,9 @@ static void task_remove(struct task* task)
 
 static void idle_task_entry()
 {
-	while (1)
+	while (1) {
 		halt();
+	}
 }
 
 /**
@@ -704,7 +766,8 @@ static void setup_first_kernel_task()
 static void setup_idle_task()
 {
 	idle_task = kthread_create("Idle task", (entry_func)idle_task_entry);
+	// kthread_run(idle_task);
 
-	idle_task->parent = kernel_task;
-	idle_task->state = IDLE;
+	// idle_task->parent = kernel_task;
+	// idle_task->state = IDLE;
 }

@@ -9,9 +9,6 @@
 static constexpr int PML4_SIZE_PAGES = 1;
 static constexpr int PML4_ENTRIES = 512;
 
-static constexpr u64 FLAGS_MASK = 0xFFF;
-static constexpr u64 PAGE_FRAME_MASK = ~FLAGS_MASK;
-
 // Page is present in memory
 static constexpr u64 PAGE_PRESENT = 1ULL << 0;
 // Writable
@@ -34,6 +31,9 @@ static constexpr u64 PAGE_PAT = 1ULL << 7;
 static constexpr u64 PAGE_GLOBAL = 1ULL << 8;
 // Requires EFER.NXE to be set
 static constexpr u64 PAGE_NO_EXECUTE = 1ULL << 63;
+
+static constexpr u64 FLAGS_MASK = 0xFFF | PAGE_NO_EXECUTE;
+static constexpr u64 PAGE_FRAME_MASK = ~FLAGS_MASK;
 
 // PAT=0, PCD=0, PWT=0
 static constexpr u64 CACHE_WRITE_BACK = 0;

@@ -20,6 +20,7 @@ enum TASK_STATE {
 	READY,
 	RUNNING,
 	IDLE,
+	TERMINATED,
 };
 
 enum TASK_TYPE {
@@ -38,24 +39,35 @@ static inline const char* get_task_name(enum TASK_TYPE type)
 	return task_type_names[type];
 }
 
+struct waitqueue {
+	struct list_head waiters_list;
+	spinlock_t waiters_lock;
+};
+
 // Any changes to this structure needs to be reflected in switch.asm
 // This represents ANY schedulable task
 struct task {
 	struct registers*
 		regs; // Full CPU context, this address is loaded into rsp on switch
 	struct address_space* vas;
-	uintptr_t kernel_stack; // Not super sure abt this one
+	uintptr_t kernel_stack; // The top of the kernel stack
 	enum TASK_STATE state;
 	enum TASK_TYPE type;
 	uint8_t priority;
 	int preempt_count;
-	uint64_t PID;
+	pid_t pid;
 	volatile uint64_t sleep_ticks;
 	struct vfs_file* resources[MAX_RESOURCES];
-	struct task* parent; // Should this just be parent PID?
-	struct waitqueue* wait;
+	struct task* parent;	    // Should this just be parent PID?
 
-	struct list_head list;
+	struct list_head list;	    // For the scheduler's main task list
+	struct list_head children;  // Head of this task's children list
+	struct list_head sibling;   // Node in the parent's children list
+	int exit_code;		    // Store the exit code
+	struct waitqueue parent_wq; // For parents to wait on
+
+	struct waitqueue*
+		wait; // For debugging, stores current blocking waitqueue
 
 	char name[MAX_TASK_NAME_LEN];
 };
@@ -63,16 +75,12 @@ struct task {
 struct scheduler_queue {
 	struct list_head ready_list; // list head of the queue
 	struct list_head blocked_list;
+	struct list_head terminated_list;
 	struct task* current_task;
 	struct slab_cache* cache;
 	size_t task_count;
-	uint64_t pid_i;
+	pid_t pid_i;
 	bool inited;
-};
-
-struct waitqueue {
-	struct list_head waiters_list;
-	spinlock_t waiters_lock;
 };
 
 static inline bool waitqueue_empty(struct waitqueue* wqueue)
@@ -103,6 +111,10 @@ void yield();
 void yield_blocked();
 void task_wake(struct task* task);
 void task_block(struct task* task);
+void reap_task(struct task* task);
+
+[[noreturn]]
+void task_end(int status);
 
 struct task* get_current_task();
 struct scheduler_queue* get_scheduler_queue();

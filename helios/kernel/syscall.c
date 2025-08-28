@@ -21,7 +21,9 @@
 
 #include <arch/idt.h>
 #include <drivers/console.h>
+#include <helios/syscall.h>
 #include <kernel/dmesg.h>
+#include <kernel/errno.h>
 #include <kernel/irq_log.h>
 #include <kernel/syscall.h>
 #include <kernel/tasks/scheduler.h>
@@ -120,10 +122,62 @@ void sys_mmap(struct registers* r)
 	SYSRET(r, (uptr)map);
 }
 
+void sys_exit(struct registers* r)
+{
+	task_end((int)r->rdi);
+}
+
+void sys_waitpid(struct registers* r)
+{
+	pid_t pid = (pid_t)r->rdi;
+	int* status = (int*)r->rsi;
+	int options = (int)r->rdx;
+	(void)options;
+
+	struct task* task = get_current_task();
+
+	if (list_empty(&task->children)) {
+		SYSRET(r, -ECHILD);
+		return;
+	}
+
+retry:
+	disable_preemption();
+
+	// Iterate through children, find terminated, then reap and return
+	struct task* child = nullptr;
+	list_for_each_entry (child, &task->children, sibling) {
+		bool pid_match = pid == -1 || child->pid == pid;
+		bool child_terminated = child->state == TERMINATED;
+		// Child isn't zombie
+		if (!pid_match || !child_terminated) {
+			continue;
+		}
+
+		if (status) {
+			*status = child->exit_code;
+		}
+		pid_t child_pid = child->pid;
+
+		reap_task(child);
+
+		enable_preemption();
+		SYSRET(r, child_pid);
+		return;
+	}
+
+	// No zombies found yet, so we block and wait for a child to exit.
+	enable_preemption();
+	waitqueue_sleep(&child->parent_wq);
+	goto retry;
+}
+
 typedef void (*handler)(struct registers* r);
 static const handler syscall_handlers[] = {
 	[SYS_WRITE] = sys_write,
 	[SYS_MMAP] = sys_mmap,
+	[SYS_EXIT] = sys_exit,
+	[SYS_WAITPID] = sys_waitpid,
 };
 
 static constexpr int SYSCALL_COUNT =

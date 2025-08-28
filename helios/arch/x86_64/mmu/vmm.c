@@ -197,6 +197,7 @@ uint64_t* vmm_create_address_space()
 	}
 
 	memcpy(pml4, kernel.pml4, PAGE_SIZE);
+	log_info("Created address space with PML4 at %p", (void*)pml4);
 
 	return pml4;
 }

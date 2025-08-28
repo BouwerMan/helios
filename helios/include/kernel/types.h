@@ -28,6 +28,8 @@ typedef long off_t;
 typedef unsigned long paddr_t;
 typedef unsigned long vaddr_t;
 
+typedef int pid_t;
+
 typedef struct {
 	int counter;
 } atomic_t;

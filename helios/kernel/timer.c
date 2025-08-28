@@ -52,9 +52,9 @@ void timer_phase(uint32_t hz)
 	uint32_t divisor = PIT_CLK / hz; /* Calculate our divisor */
 	uint8_t low = (uint8_t)(divisor & 0xFF);
 	uint8_t high = (uint8_t)((divisor >> 8) & 0xFF);
-	outb(0x43, 0x36); /* Set our command byte 0x36 */
-	outb(0x40, low);  /* Set low byte of divisor */
-	outb(0x40, high); /* Set high byte of divisor */
+	outb(0x43, 0x36);		 /* Set our command byte 0x36 */
+	outb(0x40, low);		 /* Set low byte of divisor */
+	outb(0x40, high);		 /* Set high byte of divisor */
 }
 
 /**
@@ -98,7 +98,10 @@ void sleep(uint64_t millis)
 {
 	struct task* t = get_current_task();
 	if (!t) return;
-	log_debug("Sleeping task %lu for %lu millis or %lu ticks", t->PID, millis, millis_to_ticks(millis));
+	log_debug("Sleeping task %d for %lu millis or %lu ticks",
+		  t->pid,
+		  millis,
+		  millis_to_ticks(millis));
 	// Don't need to convert to ticks since we have 1ms ticks but just incase
 	t->sleep_ticks = millis_to_ticks(millis);
 	t->state = BLOCKED;

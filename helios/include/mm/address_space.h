@@ -99,6 +99,9 @@ void destroy_mem_region(struct memory_region* mr);
  */
 int address_space_dup(struct address_space* dest, struct address_space* src);
 
+void unmap_region(struct address_space* vas, struct memory_region* mr);
+void address_space_destroy(struct address_space* vas);
+
 void vas_set_pml4(struct address_space* vas, pgd_t* pml4);
 
 /**

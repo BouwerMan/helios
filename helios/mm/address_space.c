@@ -87,7 +87,7 @@ void add_region(struct address_space* vas, struct memory_region* mr)
 
 void remove_region(struct memory_region* mr)
 {
-	list_remove(&mr->list);
+	list_del(&mr->list);
 }
 
 void vas_set_pml4(struct address_space* vas, pgd_t* pml4)
@@ -124,6 +124,27 @@ int map_region(struct address_space* vas,
 	add_region(vas, mr);
 
 	return 0;
+}
+
+void unmap_region(struct address_space* vas, struct memory_region* mr)
+{
+	if (!vas || !mr) return;
+
+	vmm_unmap_region(vas, mr);
+	remove_region(mr);
+	destroy_mem_region(mr);
+}
+
+void address_space_destroy(struct address_space* vas)
+{
+	if (!vas) return;
+
+	struct memory_region* pos = nullptr;
+	struct memory_region* temp = nullptr;
+	list_for_each_entry_safe(pos, temp, &vas->mr_list, list)
+	{
+		unmap_region(vas, pos);
+	}
 }
 
 struct memory_region* get_region(struct address_space* vas, vaddr_t vaddr)
