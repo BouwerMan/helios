@@ -133,3 +133,10 @@ void waitqueue_wake_all(struct waitqueue* wqueue);
 void waitqueue_dump_waiters(struct waitqueue* wqueue);
 
 int install_fd(struct task* t, struct vfs_file* file);
+
+/**
+ * @brief Adds a task to the scheduler queue.
+ *
+ * @param task Pointer to the task structure to add.
+ */
+void __task_add(struct task* task);

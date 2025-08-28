@@ -16,7 +16,7 @@ static struct slab_cache mem_cache = { 0 };
  */
 static void __free_addr_space(struct address_space* vas);
 
-static void inc_refcounts_(struct memory_region* mr);
+static void inc_refcounts(struct memory_region* mr);
 
 void address_space_init()
 {
@@ -69,11 +69,14 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
 		}
 
 		add_region(dest, new_mr);
+
+		vmm_fork_region(dest, pos);
+
 		/* The reason we are incrementing here is because
 		 * we are duplicating the address space, so we need to
 		 * ensure that the reference counts for the memory regions
 		 * are correct in the new address space. */
-		inc_refcounts_(new_mr);
+		inc_refcounts(new_mr);
 	}
 
 	return 0;
@@ -191,13 +194,15 @@ static void __free_addr_space(struct address_space* vas)
 	}
 }
 
-static void inc_refcounts_(struct memory_region* mr)
+static void inc_refcounts(struct memory_region* mr)
 {
 	paddr_t start = get_phys_addr(mr->owner->pml4, mr->start);
 	size_t num_pages = CEIL_DIV(mr->end - mr->start, PAGE_SIZE);
 
 	log_debug("Start: %lx, num_pages: %zu", start, num_pages);
 
-	// Go through each page
-	// pfn_t start_pfn = PADDR_TO_PFN(start);
+	for (size_t i = 0; i < num_pages; i++) {
+		struct page* page = phys_to_page(start + i * PAGE_SIZE);
+		get_page(page);
+	}
 }

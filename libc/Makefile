@@ -21,7 +21,7 @@ LIBK_CPPFLAGS:=$(CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS) -D__is_libk
 LIBC_CFLAGS:=$(CFLAGS) -D__is_libc
 LIBC_CPP_FLAGS:=$(CPP_FLAGS) -D__is_libc
 
-SRC_DIRS:=ctype stdio stdlib string sys $(ARCHDIR)
+SRC_DIRS:=ctype stdio stdlib string sys unistd $(ARCHDIR)
 
 # 1) collect & sort
 C_SRCS   = $(shell find $(SRC_DIRS) -type f -name '*.c')

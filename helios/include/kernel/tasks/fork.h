@@ -2,5 +2,6 @@
 #pragma once
 
 #include <arch/regs.h>
+#include <sys/types.h>
 
-long do_fork(struct registers* regs);
+pid_t do_fork(struct registers* regs);

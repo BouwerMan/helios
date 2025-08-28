@@ -14,6 +14,9 @@ int execve(const char*, char* const[], char* const[]);
 int execvp(const char*, char* const[]);
 pid_t fork(void);
 
+pid_t getpid(void);
+pid_t getppid(void);
+
 #ifdef __cplusplus
 }
 #endif

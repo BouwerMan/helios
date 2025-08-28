@@ -69,13 +69,6 @@ extern void __switch_to(struct task* next);
  */
 static struct task* pick_next();
 
-/**
- * @brief Adds a task to the scheduler queue.
- *
- * @param task Pointer to the task structure to add.
- */
-static void task_add(struct task* task);
-
 static void task_remove(struct task* task);
 
 /**
@@ -314,7 +307,7 @@ int kthread_run(struct task* task)
 
 	disable_preemption();
 	task->state = READY;
-	task_add(task);
+	__task_add(task);
 	enable_preemption();
 
 	return 0;
@@ -636,6 +629,16 @@ int install_fd(struct task* t, struct vfs_file* file)
 	return -1;
 }
 
+void __task_add(struct task* task)
+{
+	log_debug("Appending new task to list");
+	list_add_tail(&squeue.ready_list, &task->list);
+	squeue.task_count++;
+
+	log_debug("Added task %d", task->pid);
+	log_debug("Currently have %lu tasks", squeue.task_count);
+}
+
 /*******************************************************************************
 * Private Function Definitions
 *******************************************************************************/
@@ -703,16 +706,6 @@ static int create_kernel_stack(struct task* task, entry_func entry)
 	return 0;
 }
 
-static void task_add(struct task* task)
-{
-	log_debug("Appending new task to list");
-	list_add_tail(&squeue.ready_list, &task->list);
-	squeue.task_count++;
-
-	log_debug("Added task %d", task->pid);
-	log_debug("Currently have %lu tasks", squeue.task_count);
-}
-
 static void task_remove(struct task* task)
 {
 	list_del(&task->list);
@@ -756,7 +749,7 @@ static void setup_first_kernel_task()
 	kernel_task->name[MAX_TASK_NAME_LEN - 1] = '\0';
 
 	kernel_task->state = RUNNING;
-	task_add(kernel_task);
+	__task_add(kernel_task);
 	squeue.current_task = kernel_task;
 }
 

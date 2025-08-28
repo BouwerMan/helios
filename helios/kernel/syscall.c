@@ -26,6 +26,7 @@
 #include <kernel/errno.h>
 #include <kernel/irq_log.h>
 #include <kernel/syscall.h>
+#include <kernel/tasks/fork.h>
 #include <kernel/tasks/scheduler.h>
 #include <mm/mmap.h>
 #include <stddef.h>
@@ -127,6 +128,12 @@ void sys_exit(struct registers* r)
 	task_end((int)r->rdi);
 }
 
+void sys_fork(struct registers* r)
+{
+	pid_t pid = do_fork(r);
+	SYSRET(r, pid);
+}
+
 void sys_waitpid(struct registers* r)
 {
 	pid_t pid = (pid_t)r->rdi;
@@ -172,12 +179,28 @@ retry:
 	goto retry;
 }
 
+void sys_getpid(struct registers* r)
+{
+	struct task* task = get_current_task();
+	SYSRET(r, task->pid);
+}
+
+void sys_getppid(struct registers* r)
+{
+	struct task* task = get_current_task();
+	if (task->parent) {
+		SYSRET(r, task->parent->pid);
+	} else {
+		SYSRET(r, 0); // No parent
+	}
+}
+
 typedef void (*handler)(struct registers* r);
 static const handler syscall_handlers[] = {
-	[SYS_WRITE] = sys_write,
-	[SYS_MMAP] = sys_mmap,
-	[SYS_EXIT] = sys_exit,
-	[SYS_WAITPID] = sys_waitpid,
+	[SYS_WRITE] = sys_write,     [SYS_MMAP] = sys_mmap,
+	[SYS_EXIT] = sys_exit,	     [SYS_WAITPID] = sys_waitpid,
+	[SYS_FORK] = sys_fork,	     [SYS_GETPID] = sys_getpid,
+	[SYS_GETPPID] = sys_getppid,
 };
 
 static constexpr int SYSCALL_COUNT =
