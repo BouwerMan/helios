@@ -59,7 +59,8 @@ all: headers libc userspace helios
 helios:
 	@DESTDIR=$(SYSROOT) $(MAKE) -C ./helios install
 
-libc:
+libc: headers
+	@DESTDIR=$(SYSROOT) $(MAKE) -C ./helios install-headers
 	@DESTDIR=$(SYSROOT) $(MAKE) -C ./libc install
 
 userspace: libc
@@ -68,6 +69,7 @@ userspace: libc
 
 headers:
 	@mkdir -p $(SYSROOT)
+	# @DESTDIR=$(SYSROOT) $(MAKE) -C ./helios install-headers
 	@DESTDIR=$(SYSROOT) $(MAKE) -C ./libc install-headers
 
 todolist:

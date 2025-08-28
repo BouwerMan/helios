@@ -8,10 +8,11 @@ INCLUDEDIR?=$(PREFIX)/include
 LIBDIR?=$(EXEC_PREFIX)/lib
 
 ARCHDIR=arch/$(HOSTARCH)
-KARCHDIR=$(PWD)/helios/$(ARCHDIR)
+KDIR=$(PWD)/helios
+KARCHDIR=$(KDIR)/$(ARCHDIR)
 include $(ARCHDIR)/make.config
 
-CFLAGS:=$(CFLAGS) $(ARCH_CFLAGS) -ffreestanding -Wall -Wextra -pedantic -isystem$(ARCHDIR)/include -isysteminclude
+CFLAGS:=$(CFLAGS) $(ARCH_CFLAGS) -ffreestanding -Wall -Wextra -pedantic -isystem$(ARCHDIR)/include -isysteminclude -isystem$(KDIR)/include
 CPPFLAGS:=$(CPPFLAGS) $(ARCH_CPPFLAGS) -isysteminclude -isystem$(ARCHDIR)/include -isystem$(KARCHDIR)/include
 
 LIBK_CFLAGS:=$(CFLAGS) $(KERNEL_ARCH_CFLAGS) -I$(PWD)/helios/include -D__is_libk
@@ -20,7 +21,7 @@ LIBK_CPPFLAGS:=$(CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS) -D__is_libk
 LIBC_CFLAGS:=$(CFLAGS) -D__is_libc
 LIBC_CPP_FLAGS:=$(CPP_FLAGS) -D__is_libc
 
-SRC_DIRS:=ctype stdio stdlib string $(ARCHDIR)
+SRC_DIRS:=ctype stdio stdlib string sys $(ARCHDIR)
 
 # 1) collect & sort
 C_SRCS   = $(shell find $(SRC_DIRS) -type f -name '*.c')
@@ -99,7 +100,7 @@ clean:
 	@echo "Cleaning build directory..."
 	@rm -rf $(BUILDDIR)
 	
-install: install-headers install-libs
+install: install-libs
 
 install-headers:
 	@mkdir -p $(DESTDIR)$(INCLUDEDIR)

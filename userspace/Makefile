@@ -1,4 +1,3 @@
-
 .PHONY: hello_world all clean
 
 all: hello_world install

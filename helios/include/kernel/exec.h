@@ -4,13 +4,13 @@
 #include <kernel/helios.h>
 #include <kernel/tasks/scheduler.h>
 
-#define ELFMAG0 0x7F // e_ident[EI_MAG0]
-#define ELFMAG1 'E'  // e_ident[EI_MAG1]
-#define ELFMAG2 'L'  // e_ident[EI_MAG2]
-#define ELFMAG3 'F'  // e_ident[EI_MAG3]
+#define ELFMAG0 0x7F	   // e_ident[EI_MAG0]
+#define ELFMAG1 'E'	   // e_ident[EI_MAG1]
+#define ELFMAG2 'L'	   // e_ident[EI_MAG2]
+#define ELFMAG3 'F'	   // e_ident[EI_MAG3]
 
-#define ELFDATA2LSB (1) // Little Endian
-#define ELFCLASS32  (1) // 32-bit Architecture
+#define ELFDATA2LSB (1)	   // Little Endian
+#define ELFCLASS32  (1)	   // 32-bit Architecture
 
 enum elf_id {
 	EI_MAG0 = 0,	   // 0x7F
@@ -43,6 +43,24 @@ enum ELF_PROGRAM_FLAGS {
 	PF_EXEC = 1,
 	PF_WRITE = 2,
 	PF_READ = 4,
+};
+
+#define SHN_UNDEF (0x00)  // Undefined/Not Present
+#define SHN_ABS	  0xFFF1  // Absolute symbol
+
+enum ShT_Types {
+	SHT_NULL = 0,	  // Null section
+	SHT_PROGBITS = 1, // Program information
+	SHT_SYMTAB = 2,	  // Symbol table
+	SHT_STRTAB = 3,	  // String table
+	SHT_RELA = 4,	  // Relocation (w/ addend)
+	SHT_NOBITS = 8,	  // Not present in file
+	SHT_REL = 9,	  // Relocation (no addend)
+};
+
+enum ShT_Attributes {
+	SHF_WRITE = 0x01, // Writable section
+	SHF_ALLOC = 0x02  // Exists in memory
 };
 
 struct elf_file_header {

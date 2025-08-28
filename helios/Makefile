@@ -74,10 +74,14 @@ clean:
 	# @rm $(OBJS)
 	@rm -rf $(BUILDDIR)
 
-install: install-kernel
+install: install-headers install-kernel
 
 install-kernel: $(OSNAME).kernel
 	@mkdir -p $(DESTDIR)$(BOOTDIR)
 	@cp $(BUILDDIR)/$(OSNAME).kernel $(DESTDIR)$(BOOTDIR)
+
+install-headers:
+	@mkdir -p $(DESTDIR)/usr/include
+	@cp include/helios $(DESTDIR)/usr/include -r --preserve=timestamps
 
 -include $(OBJS:.o=.d)

@@ -9,6 +9,8 @@
 
 static spinlock_t lock;
 static unsigned long flags;
+#else
+#include <sys/mman.h>
 #endif
 
 void liballoc_init()
@@ -21,7 +23,6 @@ void liballoc_init()
 // Locks memory structures by disabling interrupts (really basic way)
 int liballoc_lock()
 {
-// __asm__ volatile("cli");
 #if defined(__is_libk)
 	spin_lock_irqsave(&lock, &flags);
 #endif
@@ -31,7 +32,6 @@ int liballoc_lock()
 // Unlocks memory structures by enabling interrupts again (really basic way)
 int liballoc_unlock()
 {
-// __asm__ volatile("sti");
 #if defined(__is_libk)
 	spin_unlock_irqrestore(&lock, flags);
 #endif
@@ -43,12 +43,15 @@ void* liballoc_alloc(size_t pages)
 {
 #if defined(__is_libk)
 	void* alloc = get_free_pages(AF_KERNEL, pages);
-	// log_debug("liballoc_alloc: Allocated %zu pages at %p", pages, alloc);
 	return alloc;
 #else
-	// sbrk syscall
-	(void)pages;
-	return nullptr;
+	void* alloc = mmap(nullptr,
+			   pages * 4096,
+			   PROT_READ | PROT_WRITE,
+			   MAP_PRIVATE | MAP_ANONYMOUS,
+			   -1,
+			   0);
+	return alloc;
 #endif
 }
 

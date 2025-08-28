@@ -1,54 +1,27 @@
-#include <arch/syscall.h>
 #include <stdio.h>
-
-// You'll need to define this syscall number in your libc headers
-#define SYS_TEST_COW 2
-
-// A simple wrapper for the syscall
-int test_cow_setup()
-{
-	return __syscall0(SYS_TEST_COW);
-	// long ret;
-	// __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_TEST_COW));
-	// return (int)ret;
-}
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
 
 int main(void)
 {
-	printf("Hello from userspace! Preparing to test CoW.\n");
+	void* res =
+		mmap(NULL, 4096, PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS, -1, 0);
 
-	// These are the addresses the kernel will set up for us.
-	char* ptr1 = (char*)0x100000;
-	char* ptr2 = (char*)0x200000;
+	printf("mmap result: %p\n", res);
 
-	// Ask the kernel to set up the CoW scenario.
-	if (test_cow_setup() != 0) {
-		printf("Kernel failed to set up the CoW test.\n");
-		return -1;
-	}
+	char* buffer = res;
 
-	// At this point, ptr1 and ptr2 point to the SAME read-only physical page.
-	// The initial value should be 'A'.
-	printf("Initial data at ptr1: '%c'\n", ptr1[0]);
-	printf("Initial data at ptr2: '%c'\n", ptr2[0]);
+	strcpy(buffer, "Hello, World!\n");
 
-	printf("Attempting to write to ptr1. This will trigger a CoW page fault...\n");
+	printf("mmap buffer: %s\n", buffer);
 
-	// This is the magic moment! This write will fault.
-	ptr1[0] = 'B';
+	// GDB BREAKPOINT
+	char* buffer2 = malloc(strlen(buffer) + 1);
+	printf("Liballoc returned: %p\n", (void*)buffer2);
+	strcpy(buffer2, buffer);
 
-	printf("...Write successful! The CoW fault was handled correctly.\n");
-
-	// Now, verify that the copy happened.
-	printf("%c\n", ptr1[0]);
-	printf("New data at ptr1: '%c'\n", ptr1[0]);
-	printf("Data at ptr2 should still be the original: '%c'\n", ptr2[0]);
-
-	if (ptr1[0] == 'B' && ptr2[0] == 'A') {
-		printf("SUCCESS: CoW worked as expected!\n");
-	} else {
-		printf("FAILURE: The data does not match the expected outcome.\n");
-	}
+	printf("Liballoc: %s\n", buffer2);
 
 	for (;;)
 		;

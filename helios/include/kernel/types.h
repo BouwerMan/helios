@@ -22,6 +22,7 @@ typedef intptr_t iptr;
 // Flags/bitmask type
 typedef unsigned long flags_t;
 
+typedef long ssize_t;
 typedef long off_t;
 
 typedef unsigned long paddr_t;

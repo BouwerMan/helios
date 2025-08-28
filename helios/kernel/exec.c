@@ -85,6 +85,8 @@ int load_elf(struct task* task, struct elf_file_header* header)
 
 	log_debug("Valid type, reading program headers");
 
+	// TODO: Proper section header handling for .bss and such
+
 	uptr highest = 0;
 	struct elf_program_header* prog =
 		(struct elf_program_header*)((uintptr_t)header +
@@ -109,7 +111,8 @@ int load_elf(struct task* task, struct elf_file_header* header)
 				log_error("Failed to load program header");
 				return -1;
 			}
-			uptr end = prog->virtual_address + prog->size_in_memory;
+			uptr end = align_up_page(prog->virtual_address +
+						 prog->size_in_memory);
 			if (end > highest) highest = end;
 			break;
 		default:
@@ -173,7 +176,7 @@ static int load_program_header(struct task* task,
 {
 	size_t pages = CEIL_DIV(prog->size_in_memory, PAGE_SIZE);
 
-	vaddr_t vaddr_start = (vaddr_t)prog->virtual_address;
+	vaddr_t vaddr_start = align_down_page((vaddr_t)prog->virtual_address);
 	vaddr_t vaddr_end = vaddr_start + (pages * PAGE_SIZE);
 
 	unsigned long prot = (prog->flags & PF_EXEC) ? PROT_EXEC : 0;

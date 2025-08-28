@@ -5,8 +5,7 @@
 #include <mm/address_space.h>
 #include <stddef.h>
 
-#define MAP_FAILED ((void*)-1)
-#define DEF_ADDR   ((void*)0x555555554000)
+#define DEF_ADDR ((void*)0x555555554000)
 
 /**
  * @brief Creates a new memory mapping in the virtual address space of a process.
@@ -15,7 +14,6 @@
  * It can be used to map a file into memory (file-backed mapping) or to create
  * a region of zero-initialized memory (anonymous mapping).
  *
- * @param pml4 Pointer to the PML4 table of the process to map into.
  * @param addr A suggested starting address for the mapping. If NULL, the kernel
  * will choose a suitable address. This is the recommended usage.
  * @param length The length of the mapping in bytes. The kernel will round this up
@@ -35,13 +33,12 @@
  * MAP_FAILED is returned, and errno is set to indicate the cause
  * of the error.
  */
-void* mmap_sys(u64* pml4,
-	       void* addr,
+void* mmap_sys(void* addr,
 	       size_t length,
 	       int prot,
 	       int flags,
 	       int fd,
-	       size_t offset);
+	       off_t offset);
 
 /**
  * @brief Removes a memory mapping.

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#ifndef _PBUFFER_H
+#define _PBUFFER_H
 #pragma once
 
-#include <helios/syscall.h>
-
-void syscall_init();
+#endif /* PBUFFER_H */

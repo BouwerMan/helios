@@ -5,19 +5,7 @@
 #include <kernel/types.h>
 #include <util/list.h>
 
-enum MMAP_PROT {
-	PROT_NONE = 0,
-	PROT_EXEC = 1 << 0,
-	PROT_READ = 1 << 1,
-	PROT_WRITE = 1 << 2,
-};
-
-enum MMAP_FLAGS {
-	MAP_PRIVATE = 1 << 0,	/* Private mapping, copy-on-write */
-	MAP_SHARED = 1 << 1,	/* Shared mapping, changes visible to others */
-	MAP_ANONYMOUS = 1 << 2, /* Anonymous mapping, not backed by a file */
-	MAP_GROWSDOWN = 1 << 3, /* Not supported yet :) */
-};
+#include <helios/mmap.h>
 
 /**
  * struct address_space - Represents a virtual address space.
@@ -48,7 +36,7 @@ struct memory_region {
 
 static inline bool is_within_region(struct memory_region* mr, vaddr_t vaddr)
 {
-	return vaddr > mr->start && vaddr < mr->end;
+	return vaddr >= mr->start && vaddr < mr->end;
 }
 
 static inline bool is_within_vas(struct address_space* vas, vaddr_t vaddr)

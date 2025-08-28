@@ -4,10 +4,10 @@
 #include <drivers/ata/device.h>
 #include <drivers/ata/partition.h>
 #include <kernel/semaphores.h>
+#include <kernel/types.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <sys/types.h>
 
 static constexpr size_t FS_TYPE_LEN = 8;
 static constexpr size_t VFS_MAX_NAME = 255; // Not including null terminator

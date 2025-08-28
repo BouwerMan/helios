@@ -19,15 +19,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <arch/idt.h>
 #include <drivers/console.h>
+#include <kernel/dmesg.h>
 #include <kernel/irq_log.h>
+#include <kernel/syscall.h>
 #include <kernel/tasks/scheduler.h>
+#include <mm/mmap.h>
 #include <stddef.h>
 #include <stdio.h>
-
-#include <arch/idt.h>
-#include <kernel/dmesg.h>
-#include <kernel/syscall.h>
 #include <util/log.h>
 
 /*******************************************************************************
@@ -107,11 +107,23 @@ void sys_test_cow(struct registers* r)
 	r->rax = 0; // Return success
 }
 
+void sys_mmap(struct registers* r)
+{
+	void* addr = (void*)r->rdi;
+	size_t length = (size_t)r->rsi;
+	int prot = (int)r->rdx;
+	int flags = (int)r->r10;
+	int fd = (int)r->r8;
+	off_t offset = (off_t)r->r9;
+
+	void* map = mmap_sys(addr, length, prot, flags, fd, offset);
+	SYSRET(r, (uptr)map);
+}
+
 typedef void (*handler)(struct registers* r);
 static const handler syscall_handlers[] = {
-	0,
-	sys_write,
-	sys_test_cow,
+	[SYS_WRITE] = sys_write,
+	[SYS_MMAP] = sys_mmap,
 };
 
 static constexpr int SYSCALL_COUNT =

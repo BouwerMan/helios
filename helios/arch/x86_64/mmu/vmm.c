@@ -911,7 +911,6 @@ fail:
 [[noreturn]]
 static void page_fault_fail(struct registers* r)
 {
-	// GDB BREAKPOINT
 	uint64_t fault_addr;
 	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
 	uint64_t cr3;
@@ -926,8 +925,12 @@ static void page_fault_fail(struct registers* r)
 	irq_log_flush();
 	console_flush();
 
+	log_error("=== PAGE FAULT ===");
+
 	struct task* task = get_current_task();
-	log_debug("Faulting task: %s", task->name);
+	log_error("Faulting task: %s", task->name);
+
+	address_space_dump(task->vas);
 
 	log_error(
 		"PAGE FAULT! err %lu (p:%d,rw:%d,user:%d,res:%d,id:%d) at 0x%lx. Caused by 0x%lx in address space %lx",

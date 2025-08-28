@@ -31,7 +31,7 @@
 #include <util/log.h>
 
 static constexpr char interrupt_context_str[] = LOG_COLOR_MAGENTA
-	"[INT]" LOG_COLOR_RESET;
+	"[INT] " LOG_COLOR_RESET;
 
 static enum LOG_MODE current_mode = LOG_DIRECT;
 
