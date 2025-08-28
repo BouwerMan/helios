@@ -14,6 +14,7 @@ enum SyscallNumbers {
 	SYS_WAITPID,
 	SYS_GETPID,
 	SYS_GETPPID,
+	SYS_EXEC,
 	SYS_MMAP,
 	SYS_MUNMAP,
 	SYS_BRK,

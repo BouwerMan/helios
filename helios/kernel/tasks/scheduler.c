@@ -20,6 +20,7 @@
  */
 
 #include <drivers/fs/vfs.h>
+#include <kernel/spinlock.h>
 #undef LOG_LEVEL
 #define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
@@ -325,8 +326,6 @@ int launch_init()
 
 	task->type = USER_TASK;
 	vas_set_pml4(task->vas, (pgd_t*)vmm_create_address_space());
-	// task->vas->pml4_phys = HHDM_TO_PHYS((uptr)vmm_create_address_space());
-	// task->cr3 = HHDM_TO_PHYS((uptr)vmm_create_address_space());
 
 	struct limine_module_response* mod = mod_request.response;
 
@@ -364,7 +363,6 @@ void reap_task(struct task* task)
 [[noreturn]]
 void task_end(int status)
 {
-	// GDB BREAKPOINT
 	struct task* task = get_current_task();
 	log_info("Task '%s' (PID %d) exiting with status %d",
 		 task->name,
@@ -543,12 +541,13 @@ void waitqueue_sleep(struct waitqueue* wqueue)
 	disable_preemption();
 	struct task* task = get_current_task();
 
-	spinlock_acquire(&wqueue->waiters_lock);
+	unsigned long flags;
+	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
 
 	__task_block(task, &wqueue->waiters_list);
 	task->wait = wqueue;
 
-	spinlock_release(&wqueue->waiters_lock);
+	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
 
 	enable_preemption();
 	yield_blocked();

@@ -24,6 +24,7 @@
 #include <helios/syscall.h>
 #include <kernel/dmesg.h>
 #include <kernel/errno.h>
+#include <kernel/exec.h>
 #include <kernel/irq_log.h>
 #include <kernel/syscall.h>
 #include <kernel/tasks/fork.h>
@@ -31,6 +32,7 @@
 #include <mm/mmap.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 #include <util/log.h>
 
 /*******************************************************************************
@@ -175,7 +177,7 @@ retry:
 
 	// No zombies found yet, so we block and wait for a child to exit.
 	enable_preemption();
-	waitqueue_sleep(&child->parent_wq);
+	waitqueue_sleep(&task->parent_wq);
 	goto retry;
 }
 
@@ -195,12 +197,64 @@ void sys_getppid(struct registers* r)
 	}
 }
 
+#include <kernel/limine_requests.h>
+
+// This function will find the requested module from the boot info
+static struct limine_file* find_module(const char* name)
+{
+	struct limine_module_response* mod_resp = mod_request.response;
+
+	for (size_t i = 0; i < mod_resp->module_count; i++) {
+		if (strcmp(mod_resp->modules[i]->path, name) == 0) {
+			return mod_resp->modules[i];
+		}
+	}
+	return NULL;
+}
+
+void sys_exec(struct registers* r)
+{
+	const char* name = (const char*)r->rdi;
+
+	// TODO: Don't trust user pointer
+	struct limine_file* module = find_module(name);
+	if (!module) {
+		log_error("exec: module '%s' not found", name);
+		SYSRET(r, -1); // Return an error
+		return;
+	}
+
+	log_info(
+		"exec: Found module '%s' at address %p", name, module->address);
+
+	struct task* task = get_current_task();
+
+	pgd_t* old_pml4 = task->vas->pml4;
+
+	address_space_destroy(task->vas);
+
+	u64* new_pml4 = vmm_create_address_space();
+	vmm_load_cr3(HHDM_TO_PHYS(new_pml4));
+	vas_set_pml4(task->vas, (pgd_t*)new_pml4);
+
+	// TODO: Make sure there are no page table leaks here
+	free_page(old_pml4);
+
+	int res = load_elf(task, module->address);
+	if (res < 0) {
+		panic("exec: load_elf failed");
+	}
+
+	// laod_elf sets up the stack and entry point, so we just need to
+	// return normally
+}
+
 typedef void (*handler)(struct registers* r);
 static const handler syscall_handlers[] = {
 	[SYS_WRITE] = sys_write,     [SYS_MMAP] = sys_mmap,
 	[SYS_EXIT] = sys_exit,	     [SYS_WAITPID] = sys_waitpid,
 	[SYS_FORK] = sys_fork,	     [SYS_GETPID] = sys_getpid,
-	[SYS_GETPPID] = sys_getppid,
+	[SYS_GETPPID] = sys_getppid, [SYS_EXEC] = sys_exec,
 };
 
 static constexpr int SYSCALL_COUNT =

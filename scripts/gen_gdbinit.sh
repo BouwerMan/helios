@@ -29,7 +29,7 @@ define add-symbol-file-auto
   add-symbol-file \$arg0 \$text_address
 end
 
-add-symbol-file-auto sysroot/usr/bin/hello_world.elf
+add-symbol-file-auto sysroot/usr/bin/init.elf
 
 target remote localhost:1234
 set print pretty on

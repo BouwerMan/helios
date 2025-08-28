@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 int main(void)
@@ -24,7 +25,8 @@ int main(void)
 		printf("Hello from the child process! My PID is %d, my parent's PID is %d.\n",
 		       getpid(),
 		       getppid());
-		exit(0); // Child process exits
+		exec_module("/usr/bin/hello_world.elf");
+		exit(1); // Child process exits
 	} else {
 		// This code block is executed by the parent process
 		printf("Hello from the parent process! My PID is %d, my child's PID is %d.\n",
@@ -32,8 +34,12 @@ int main(void)
 		       pid);
 		// Parent can optionally wait for the child to finish
 		// wait(NULL); // Include <sys/wait.h> for wait()
-		for (;;)
-			;
+		int status;
+		// GDB BREAKPOINT
+		waitpid(pid, &status, 0);
+		printf("Child process %d finished with status %d.\n",
+		       pid,
+		       status);
 	}
 	for (;;)
 		;
