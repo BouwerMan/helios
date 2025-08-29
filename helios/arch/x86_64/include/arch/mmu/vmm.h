@@ -3,7 +3,9 @@
 
 #include <kernel/panic.h>
 #include <kernel/types.h>
+#include <mm/address_space.h>
 #include <mm/page.h>
+#include <mm/page_tables.h>
 #include <stdint.h>
 
 static constexpr int PML4_SIZE_PAGES = 1;
@@ -47,36 +49,6 @@ static constexpr u64 CACHE_UNCACHABLE_ALT = PAGE_PCD;
 static constexpr u64 CACHE_WRITE_COMBINING = PAGE_PAT | PAGE_PWT;
 // PAT=1, PCD=0, PWT=0
 static constexpr u64 CACHE_WRITE_PROTECTED = PAGE_PAT;
-
-// TODO: Use these
-
-/** @brief An entry in the Page Global Directory (PGD), the top-level page table. */
-typedef struct {
-	unsigned long pgd;
-} pgd_t;
-
-/**
- * @brief An entry in the Page 4th-level Directory (P4D).
- * @note We do not support this since we only do 4 level paging.
- */
-typedef struct {
-	unsigned long p4d;
-} p4d_t;
-
-/** @brief An entry in the Page Upper Directory (PUD). */
-typedef struct {
-	unsigned long pud;
-} pud_t;
-
-/** @brief An entry in the Page Middle Directory (PMD). */
-typedef struct {
-	unsigned long pmd;
-} pmd_t;
-
-/** @brief A Page Table Entry (PTE) which points to a physical page frame. */
-typedef struct {
-	unsigned long pte;
-} pte_t;
 
 /**
  * @brief Reads the value of the CR3 register.
@@ -128,7 +100,7 @@ void vmm_init();
 uint64_t* vmm_create_address_space();
 
 // Have to put this here so pgd_t is define :/
-#include <mm/address_space.h>
+// #include <mm/address_space.h>
 
 /**
  * vmm_map_region - Map a memory region by allocating new pages

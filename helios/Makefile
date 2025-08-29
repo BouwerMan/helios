@@ -1,46 +1,50 @@
-BUILDDIR=build
-SRC_DIRS:=kernel drivers lib mm
+include $(HELIOS_ROOT)/toolchain.mk
 
-ARCHDIR=arch/$(HOSTARCH)
-
-CFLAGS:=$(CFLAGS) -isystem$(ARCHDIR)/include  -isysteminclude 
-LDFLAGS:=$(LDFLAGS)
-LIBS:=$(LIBS) -nostdlib -lgcc
+BUILDDIR ?= build
+SRC_DIRS := kernel drivers lib mm
+ARCHDIR  := arch/$(HOST_ARCH)
 
 include $(ARCHDIR)/config.mk
 include ./config.mk
 
-CFLAGS:=$(CFLAGS) $(KERNEL_ARCH_CFLAGS)
-LDFLAGS:=$(LDFLAGS) $(KERNEL_ARCH_LDFLAGS)
-LIBS:=$(LIBS) $(KERNEL_ARCH_LIBS)
+# --- Includes & flags ---------------------------------------------------------
+# Our headers use -I so warnings apply; kernel doesn't use sysroot.
+K_CPPFLAGS := $(CPPFLAGS) -MMD -MP \
+	      -Iinclude -I$(ARCHDIR)/include \
+	      -D__KERNEL__ -DHELIOS_KERNEL \
+	      $(CPPFLAGS_DEBUG) $(CPPFLAGS_TESTS)
 
-# 1) collect & sort
-C_SRCS   = $(shell find $(SRC_DIRS) -type f -name '*.c')
-ASM_SRCS = $(shell find $(SRC_DIRS) -type f -name '*.asm')
+K_CFLAGS   := $(CFLAGS) $(KERNEL_ARCH_CFLAGS) -mcmodel=kernel -mno-red-zone
 
-# 2) map to object paths
-C_OBJS   = $(patsubst %.c,$(BUILDDIR)/%.o,$(C_SRCS))
-ASM_OBJS = $(patsubst %.asm,$(BUILDDIR)/%.o,$(ASM_SRCS))
+# Linker: no libc, pull libgcc for compiler builtins if needed.
+K_LDFLAGS  := $(LDFLAGS) -nostdlib $(KERNEL_ARCH_LDFLAGS) \
+	      -Wl,-Map,$(BUILDDIR)/$(OSNAME).map
+K_LDLIBS   := -lgcc $(KERNEL_ARCH_LIBS)
 
-OBJS=\
-$(KERNEL_ARCH_OBJS) \
-$(C_OBJS) \
-$(ASM_OBJS) \
-$(BUILDDIR)/fonts/font.o \
+# --- Sources ------------------------------------------------------------------
+C_SRCS   := $(sort $(shell find $(SRC_DIRS) -type f -name '*.c'))
+ASM_SRCS := $(sort $(shell find $(SRC_DIRS) -type f -name '*.asm'))
 
-LINK_LIST=\
-$(LDFLAGS) \
-$(OBJS) \
-$(LIBS) \
+C_OBJS   := $(patsubst %.c,$(BUILDDIR)/%.o,$(C_SRCS))
+ASM_OBJS := $(patsubst %.asm,$(BUILDDIR)/%.o,$(ASM_SRCS))
+
+OBJS := $(KERNEL_ARCH_OBJS) \
+        $(C_OBJS) \
+        $(ASM_OBJS) \
+        $(BUILDDIR)/fonts/font.o
+
+
+KERNEL_ELF := $(BUILDDIR)/$(OSNAME).kernel
 
 .PHONY: all clean install install-kernel
 .SUFFIXES: .o .c .s .S .asm
 
-all: $(OSNAME).kernel
+all: $(KERNEL_ELF)
 
-$(OSNAME).kernel: $(OBJS) $(ARCHDIR)/linker.ld
-	@echo "Linking kernel..."
-	@$(CC) -T $(ARCHDIR)/linker.ld -o $(BUILDDIR)/$@ $(CFLAGS) $(LINK_LIST)
+$(KERNEL_ELF): $(OBJS) $(ARCHDIR)/linker.ld
+	@echo "  LD      $@"
+	@mkdir -p $(@D)
+	$(CC) -T $(ARCHDIR)/linker.ld $(K_LDFLAGS) $(OBJS) -o $@ $(K_LDLIBS)
 
 $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 	@OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
@@ -48,40 +52,35 @@ $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 $(BUILDDIR)/%.o: %.c
 	@echo "  CC      $@"
 	@mkdir -p $(@D)
-	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CFLAGS_DEBUG) $(CFLAGS_TESTS)
+	@$(CC) $(K_CPPFLAGS) $(K_CFLAGS) -c $< -o $@
 
 $(BUILDDIR)/%.o: %.asm
-	@echo "  AR      $@"
+	@echo "  AS      $@"
 	@mkdir -p $(@D)
-	@nasm -Wall -felf64 -g -F dwarf $< -o $@
+	@$(NASM) $(NASMFLAGS) $< -o $@
 
-$(BUILDDIR)/%.o: %.S
-	@echo "  AR      $@"
-	@mkdir -p $(@D)
-	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CFLAGS_DEBUG) $(CFLAGS_TESTS)
 
-$(BUILDDIR)/%.o: %.s
-	@echo "  AR      $@"
-	@mkdir -p $(@D)
-	@$(CC) -MD -c $< -o $@ $(CFLAGS) $(CFLAGS_DEBUG) $(CFLAGS_TESTS)
-
+# Embed PSF font as a binary blob
 $(BUILDDIR)/%.o: %.psf
 	@mkdir -p $(@D)
-	@objcopy -O elf64-x86-64 -B i386 -I binary $< $@
+	@$(OBJCOPY) -O elf64-x86-64 -B i386 -I binary $< $@
 
 clean:
 	@echo "Cleaning build directory..."
-	# @rm $(OBJS)
 	@rm -rf $(BUILDDIR)
 
 install: install-headers install-kernel
 
-install-kernel: $(OSNAME).kernel
-	@mkdir -p $(DESTDIR)$(BOOTDIR)
-	@cp $(BUILDDIR)/$(OSNAME).kernel $(DESTDIR)$(BOOTDIR)
+install-kernel: $(KERNEL_ELF)
+	@echo "Installing kernel..."
+	@mkdir -p $(DESTDIR)/$(BOOTDIR)
+	@cp $(BUILDDIR)/$(OSNAME).kernel $(DESTDIR)/$(BOOTDIR)
 
+# TODO: install only UAPI headers, not kernel internals.
 install-headers:
+	@echo "Installing kernel headers..."
 	@mkdir -p $(DESTDIR)/usr/include
 	@cp include/helios $(DESTDIR)/usr/include -r --preserve=timestamps
 
--include $(OBJS:.o=.d)
+# Auto-deps from -MMD -MP
+-include $(C_OBJS:.o=.d)

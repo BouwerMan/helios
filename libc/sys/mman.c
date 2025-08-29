@@ -5,5 +5,6 @@
 
 void* mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
-	__syscall6(SYS_MMAP, (uintptr_t)addr, length, prot, flags, fd, offset);
+	return (void*)__syscall6(
+		SYS_MMAP, (long)addr, (long)length, prot, flags, fd, offset);
 }

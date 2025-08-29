@@ -19,6 +19,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#undef LOG_LEVEL
+#define LOG_LEVEL 1
+#define FORCE_LOG_REDEF
+#include <lib/log.h>
+#undef FORCE_LOG_REDEF
+
 #include <drivers/fs/devfs.h>
 #include <drivers/fs/fat.h>
 #include <drivers/fs/ramfs.h>
@@ -26,7 +32,6 @@
 #include <kernel/panic.h>
 #include <kernel/tasks/scheduler.h>
 #include <lib/hashtable.h>
-#include <lib/log.h>
 #include <lib/string.h>
 #include <mm/kmalloc.h>
 #include <mm/slab.h>

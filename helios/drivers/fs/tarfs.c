@@ -1,6 +1,7 @@
 #include <drivers/fs/tarfs.h>
 #include <drivers/fs/vfs.h>
 #include <kernel/helios.h>
+#include <lib/log.h>
 
 static size_t oct2bin(unsigned char* str, size_t size)
 {

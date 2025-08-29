@@ -1,4 +1,3 @@
-; asmsyntax=nasm
 [BITS 64]
 extern main
 extern exit

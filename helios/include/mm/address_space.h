@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include <arch/mmu/vmm.h>
 #include <helios/mmap.h>
 #include <kernel/types.h>
 #include <lib/list.h>
+#include <mm/page_tables.h>
 
 /**
  * struct address_space - Represents a virtual address space.

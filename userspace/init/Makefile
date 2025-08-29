@@ -1,18 +1,44 @@
-LIBS:=$(LIBS) -nostdlib -L$(PWD)/libc/build -lc -lgcc
+include $(HELIOS_ROOT)/toolchain.mk
 
-CFLAGS := -ffreestanding -I$(PWD)/libc/arch/x86_64/include -I$(PWD)/libc/include -static \
-	  -fno-stack-protector -fno-pie $(LIBS) -mgeneral-regs-only -mno-red-zone -mno-mmx -mno-sse -mno-sse3 -ggdb \
-	  -I$(SYSROOT)/usr/include
+# NOTE: REPLACE THESE WITH YOUR APPLICATION NAME
+APP      := init
+APP_ELF  := $(APP).elf
+BUILDDIR ?= build
 
-OUT_EXE := init.elf
+SRCS  := $(sort $(shell find * -type f \( -name "*.c" \
+				       -o -name "*.asm" \
+				       -o -name "*.S" \)))
 
-all:
-	@echo "  CC      $@"
-	@$(CC) main.c $(CFLAGS) -o $(OUT_EXE)
+OBJS  := $(patsubst %.c,$(BUILDDIR)/%.o,$(filter %.c,$(SRCS))) \
+	 $(patsubst %.S,$(BUILDDIR)/%.o,$(filter %.S,$(SRCS))) \
+	 $(patsubst %.asm,$(BUILDDIR)/%.o,$(filter %.asm,$(SRCS)))
 
-install: all
-	@mkdir -p $(DESTDIR)/usr/bin/
-	@cp $(OUT_EXE) $(DESTDIR)/usr/bin/
+APP_LDLIBS :=
+
+.PHONY: all install clean
+all: $(APP_ELF)
+
+$(BUILDDIR)/%.o: %.c
+	@mkdir -p $(@D)
+	$(CC) -MD -c $< -o $@ $(US_CFLAGS) $(US_CPPFLAGS)
+
+$(BUILDDIR)/%.o: %.S
+	@mkdir -p $(@D)
+	$(CC) -MD -c $< -o $@ $(US_CFLAGS) $(US_CPPFLAGS)
+
+$(BUILDDIR)/%.o: %.asm
+	@mkdir -p $(@D)
+	$(NASM) $(NASMFLAGS) $< -o $@
+
+# Link order: CRT prologue, objects, libs, CRT epilogue
+$(APP_ELF): $(OBJS)
+	$(CC) $(US_LDFLAGS) $(CRT0) $(CRTI) $(OBJS) -o $@ $(US_LDLIBS) $(APP_LDLIBS) $(CRTN)
+
+install: $(APP_ELF)
+	@mkdir -p $(SYSROOT)/usr/bin
+	@cp $(APP_ELF) $(SYSROOT)/usr/bin/
 
 clean:
-	@rm $(OUT_EXE)
+	-@rm -rf $(BUILDDIR) $(APP_ELF)
+
+-include $(OBJS:.o=.d)

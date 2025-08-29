@@ -20,17 +20,20 @@
  */
 
 #include <arch/idt.h>
+#include <arch/mmu/vmm.h>
 #include <drivers/console.h>
 #include <helios/syscall.h>
 #include <kernel/errno.h>
 #include <kernel/exec.h>
 #include <kernel/irq_log.h>
+#include <kernel/panic.h>
 #include <kernel/syscall.h>
 #include <kernel/tasks/fork.h>
 #include <kernel/tasks/scheduler.h>
 #include <lib/log.h>
 #include <lib/string.h>
 #include <mm/mmap.h>
+#include <mm/page.h>
 
 /*******************************************************************************
 * Private Function Prototypes
@@ -76,7 +79,7 @@ void sys_test_cow(struct registers* r)
 	struct page* page = alloc_page(AF_NORMAL);
 	if (!page) {
 		// log_error("CoW test setup failed: OOM");
-		r->rax = -1; // Return an error
+		r->rax = (u64)-1; // Return an error
 		return;
 	}
 	paddr_t paddr = page_to_phys(page);
@@ -132,7 +135,7 @@ void sys_exit(struct registers* r)
 void sys_fork(struct registers* r)
 {
 	pid_t pid = do_fork(r);
-	SYSRET(r, pid);
+	SYSRET(r, (u64)pid);
 }
 
 void sys_waitpid(struct registers* r)
@@ -145,7 +148,7 @@ void sys_waitpid(struct registers* r)
 	struct task* task = get_current_task();
 
 	if (list_empty(&task->children)) {
-		SYSRET(r, -ECHILD);
+		SYSRET(r, (u64)-ECHILD);
 		return;
 	}
 
@@ -170,7 +173,7 @@ retry:
 		reap_task(child);
 
 		enable_preemption();
-		SYSRET(r, child_pid);
+		SYSRET(r, (u64)child_pid);
 		return;
 	}
 
@@ -183,14 +186,14 @@ retry:
 void sys_getpid(struct registers* r)
 {
 	struct task* task = get_current_task();
-	SYSRET(r, task->pid);
+	SYSRET(r, (u64)task->pid);
 }
 
 void sys_getppid(struct registers* r)
 {
 	struct task* task = get_current_task();
 	if (task->parent) {
-		SYSRET(r, task->parent->pid);
+		SYSRET(r, (u64)task->parent->pid);
 	} else {
 		SYSRET(r, 0); // No parent
 	}
@@ -221,7 +224,7 @@ void sys_exec(struct registers* r)
 	if (!module) {
 		log_error("exec: module '%s' not found", name);
 		enable_preemption();
-		SYSRET(r, -1); // Return an error
+		SYSRET(r, (u64)-1); // Return an error
 		return;
 	}
 
