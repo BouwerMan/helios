@@ -248,9 +248,6 @@ void sys_exec(struct registers* r)
 		panic("exec: load_elf failed");
 	}
 
-	// Copy over the registers from load_elf so we return to entry point
-	memcpy(r, task->regs, sizeof(struct registers));
-
 	// load_elf sets up the stack and entry point, so we just need to
 	// return normally
 	enable_preemption();
@@ -281,7 +278,11 @@ void syscall_handler(struct registers* r)
 {
 	if (r->rax > SYSCALL_COUNT) return;
 	handler func = syscall_handlers[r->rax];
-	if (func) func(r);
+	if (func) {
+		struct task* task = get_current_task();
+		task->regs = r; // Update current task's regs
+		func(r);
+	}
 }
 
 void syscall_init()

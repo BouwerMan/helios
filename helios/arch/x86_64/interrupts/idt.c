@@ -409,7 +409,9 @@ static void default_exception_handler(struct registers* registers)
 	scheduler_dump();
 
 	struct task* task = get_current_task();
-	log_error("Faulted in task '%s'", task->name);
+	log_error("Faulted in task '%s' (PID: %d)", task->name, task->pid);
+
+	address_space_dump(task->vas);
 
 	extern struct task* previous_task;
 	log_error("Previous task: %s", previous_task->name);
