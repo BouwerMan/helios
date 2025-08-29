@@ -3,7 +3,7 @@
 #define _SYS_MMAN_H
 #pragma once
 
-#include <helios/mmap.h>
+#include <helios/mman.h>
 #include <stddef.h>
 #include <sys/types.h>
 

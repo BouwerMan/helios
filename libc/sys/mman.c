@@ -1,5 +1,4 @@
 #include <arch/syscall.h>
-#include <helios/syscall.h>
 #include <stdint.h>
 #include <sys/mman.h>
 

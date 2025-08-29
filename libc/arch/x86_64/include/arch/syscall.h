@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#include <helios/syscall.h>
+#include <asm/syscall.h>
 
 extern long __syscall0(long n);
 extern long __syscall1(long n, long a1);

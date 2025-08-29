@@ -21,8 +21,8 @@
 
 #include <arch/idt.h>
 #include <arch/mmu/vmm.h>
+#include <asm/syscall.h>
 #include <drivers/console.h>
-#include <helios/syscall.h>
 #include <kernel/errno.h>
 #include <kernel/exec.h>
 #include <kernel/irq_log.h>

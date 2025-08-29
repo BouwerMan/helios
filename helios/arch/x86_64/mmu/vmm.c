@@ -34,6 +34,7 @@
 #include <arch/mmu/vmm.h>
 #include <arch/regs.h>
 #include <drivers/console.h>
+#include <helios/mman.h>
 #include <kernel/bootinfo.h>
 #include <kernel/errno.h>
 #include <kernel/helios.h>

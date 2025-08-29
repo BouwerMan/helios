@@ -3,14 +3,15 @@ include $(HELIOS_ROOT)/toolchain.mk
 BUILDDIR ?= build
 SRC_DIRS := kernel drivers lib mm
 ARCHDIR  := arch/$(HOST_ARCH)
+UAPI_DIR := include/uapi
 
 include $(ARCHDIR)/config.mk
 include ./config.mk
 
 # --- Includes & flags ---------------------------------------------------------
 # Our headers use -I so warnings apply; kernel doesn't use sysroot.
-K_CPPFLAGS := $(CPPFLAGS) -MMD -MP \
-	      -Iinclude -I$(ARCHDIR)/include \
+K_CPPFLAGS := $(CPPFLAGS) \
+	      -Iinclude -I$(ARCHDIR)/include -I$(UAPI_DIR) \
 	      -D__KERNEL__ -DHELIOS_KERNEL \
 	      $(CPPFLAGS_DEBUG) $(CPPFLAGS_TESTS)
 
@@ -44,7 +45,7 @@ all: $(KERNEL_ELF)
 $(KERNEL_ELF): $(OBJS) $(ARCHDIR)/linker.ld
 	@echo "  LD      $@"
 	@mkdir -p $(@D)
-	$(CC) -T $(ARCHDIR)/linker.ld $(K_LDFLAGS) $(OBJS) -o $@ $(K_LDLIBS)
+	@$(CC) -T $(ARCHDIR)/linker.ld $(K_LDFLAGS) $(OBJS) -o $@ $(K_LDLIBS)
 
 $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 	@OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
@@ -58,7 +59,6 @@ $(BUILDDIR)/%.o: %.asm
 	@echo "  AS      $@"
 	@mkdir -p $(@D)
 	@$(NASM) $(NASMFLAGS) $< -o $@
-
 
 # Embed PSF font as a binary blob
 $(BUILDDIR)/%.o: %.psf
@@ -76,11 +76,10 @@ install-kernel: $(KERNEL_ELF)
 	@mkdir -p $(DESTDIR)/$(BOOTDIR)
 	@cp $(BUILDDIR)/$(OSNAME).kernel $(DESTDIR)/$(BOOTDIR)
 
-# TODO: install only UAPI headers, not kernel internals.
 install-headers:
 	@echo "Installing kernel headers..."
 	@mkdir -p $(DESTDIR)/usr/include
-	@cp include/helios $(DESTDIR)/usr/include -r --preserve=timestamps
+	@cp $(UAPI_DIR)/* $(DESTDIR)/usr/include -r --preserve=timestamps
 
 # Auto-deps from -MMD -MP
 -include $(C_OBJS:.o=.d)

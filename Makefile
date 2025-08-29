@@ -16,7 +16,7 @@ ifneq ($(TOOLCHAIN_BINS),$(EXISTING_TOOLS))
     $(error Missing required tools: $(MISSING_TOOLS). Please check your cross-compiler installation and PREFIX.)
 endif
 
-REQUIRED_PATH_TOOLS := git $(NASM) xorriso bear $(QEMU)
+REQUIRED_PATH_TOOLS := git xorriso bear $(NASM) $(QEMU)
 
 # Helper: returns the tool name if not found
 define _missing_if_not_on_path
@@ -37,18 +37,22 @@ ALLFILES := $(SRCFILES) $(HDRFILES)
 
 .PHONY: all libc helios clean qemu headers iso todolist limine userspace compile_commands
 
-all: headers libc userspace helios
+all: headers helios libc userspace
 
 helios:
+	@echo "Building Helios kernel..."
 	@DESTDIR=$(SYSROOT) $(MAKE) -C ./helios install
 
 libc: headers
+	@echo "Building Helios libc..."
 	@DESTDIR=$(SYSROOT) $(MAKE) -C ./libc install
 
 userspace: libc
+	@echo "Building Helios userspace..."
 	@DESTDIR=$(SYSROOT) $(MAKE) -C ./userspace install
 
 headers:
+	@echo "Installing headers..."
 	@mkdir -p $(SYSROOT)
 	@DESTDIR=$(SYSROOT) $(MAKE) -C ./helios install-headers
 	@DESTDIR=$(SYSROOT) $(MAKE) -C ./libc install-headers
@@ -76,6 +80,7 @@ limine/limine:
 	@$(MAKE) -C limine
 
 iso: limine/limine initramfs
+	@echo "Creating bootable ISO..."
 	@mkdir -p $(SYSROOT)/boot/limine $(SYSROOT)/EFI/BOOT
 	@cp -v limine.conf limine/limine-bios.sys limine/limine-bios-cd.bin \
 		  limine/limine-uefi-cd.bin $(SYSROOT)/boot/limine/
@@ -103,6 +108,7 @@ qemu: iso
 		# -display none
 
 gdbinit:
+	@echo "Generating .gdbinit..."
 	./scripts/gen_gdbinit.sh
 
 qemugdb: iso gdbinit

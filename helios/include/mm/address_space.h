@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include <helios/mmap.h>
 #include <kernel/types.h>
 #include <lib/list.h>
 #include <mm/page_tables.h>

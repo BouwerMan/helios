@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
+#include <helios/mman.h>
 #include <kernel/types.h>
 #include <mm/address_space.h>
 #include <stddef.h>
