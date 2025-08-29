@@ -132,6 +132,7 @@ void waitqueue_wake_one(struct waitqueue* wqueue);
 void waitqueue_wake_all(struct waitqueue* wqueue);
 void waitqueue_dump_waiters(struct waitqueue* wqueue);
 
+int __install_fd_at(struct task* t, struct vfs_file* file, int fd);
 int install_fd(struct task* t, struct vfs_file* file);
 
 /**

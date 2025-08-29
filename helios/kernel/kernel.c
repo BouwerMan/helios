@@ -124,7 +124,6 @@ void kernel_main()
 
 	int fd = vfs_open("/", O_RDONLY);
 	struct vfs_file* f = get_file(fd);
-	// GDB BREAKPOINT
 	vfs_dump_child(f->dentry);
 
 	// goto loop;

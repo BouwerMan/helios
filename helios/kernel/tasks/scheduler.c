@@ -321,6 +321,7 @@ int launch_init()
 	// We are going to use kthread_create to bootstrap this.
 	struct task* task = kthread_create("Init", nullptr);
 	if (!task) {
+		enable_preemption();
 		return -1;
 	}
 
@@ -332,7 +333,26 @@ int launch_init()
 	int res = load_elf(task, mod->modules[0]->address);
 	if (res < 0) {
 		kthread_destroy(task);
+		enable_preemption();
 		return res;
+	}
+
+	// open /dev/console three times and pin them as 0,1,2
+	int fd0 = __vfs_open_for_task(task, "/dev/console", O_RDONLY);
+	int fd1 = __vfs_open_for_task(task, "/dev/console", O_WRONLY);
+	int fd2 = __vfs_open_for_task(task, "/dev/console", O_WRONLY);
+	// ensure they land at 0,1,2 even if earlier slots weren’t empty
+	if (fd0 != 0) {
+		__install_fd_at(task, task->resources[fd0], 0);
+		task->resources[fd0] = NULL;
+	}
+	if (fd1 != 1) {
+		__install_fd_at(task, task->resources[fd1], 1);
+		task->resources[fd1] = NULL;
+	}
+	if (fd2 != 2) {
+		__install_fd_at(task, task->resources[fd2], 2);
+		task->resources[fd2] = NULL;
 	}
 
 	kthread_run(task);
@@ -427,7 +447,9 @@ struct task* __alloc_task()
 	task->pid = squeue.pid_i++;
 
 	// Init lists, maybe default resources (stdio)
-	task->parent = get_current_task();
+	struct task* parent = get_current_task();
+	task->parent = parent;
+
 	list_init(&task->list);
 	list_init(&task->vas->mr_list);
 	list_init(&task->children);
@@ -438,6 +460,8 @@ struct task* __alloc_task()
 	if (task->parent != nullptr && task->parent != task) {
 		list_add_tail(&task->parent->children, &task->sibling);
 	}
+
+	// Initialize stdio
 
 	return task;
 }
@@ -615,6 +639,20 @@ void waitqueue_dump_waiters(struct waitqueue* wqueue)
 			pos->kernel_stack,
 			pos->vas->pml4_phys);
 	}
+}
+
+/**
+ * __install_fd_at - Install @file at a specific descriptor number.
+ * @t:   target task
+ * @fd:  descriptor index (e.g., 0,1,2)
+ * Return: 0 on success, -1 if @fd is out of range or occupied.
+ */
+int __install_fd_at(struct task* t, struct vfs_file* file, int fd)
+{
+	if (fd < 0 || fd >= MAX_RESOURCES) return -1;
+	if (t->resources[fd] != nullptr) return -1;
+	t->resources[fd] = file;
+	return 0;
 }
 
 int install_fd(struct task* t, struct vfs_file* file)

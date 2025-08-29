@@ -276,6 +276,38 @@ void register_filesystem(struct vfs_fs_type* fs);
 struct vfs_superblock* vfs_get_sb(int idx);
 
 // --- Path and Dentry Management ---
+
+/**
+ * DOC: Dentry lifetime & reference counting
+ *
+ * A dentry is owned through a counted reference. The rules are:
+ *
+ * 1) If you HAND a dentry to a new owner, you must hold a reference for them.
+ *    Examples: returning from a lookup helper, storing into a long-lived
+ *    structure (e.g., struct vfs_file), returning "/" from vfs_lookup().
+ *
+ * 2) If you are RETURNING an EXISTING, ALREADY-CACHED dentry (e.g., hash hit),
+ *    you must acquire a reference with dget() before returning it.
+ *
+ * 3) If you are RETURNING the FRESHLY-ALLOCATED child passed into ->lookup()
+ *    (no preexisting cache entry), do NOT add another ref: the child already
+ *    starts at refcount=1 from dentry_alloc().
+ *
+ * 4) Walkers own exactly one reference to the “current” component:
+ *      - dget(start), for each step: next = dentry_lookup(cur,...); dput(cur); cur = next;
+ *      - return cur with one live reference.
+ *
+ * 5) Balance EVERY success path and EVERY error path: if you looked up a
+ *    dentry and then fail later (alloc fail, open fail, install_fd fail),
+ *    dput() it before returning.
+ *
+ * 6) Cache insertion (dentry_add) takes an internal cache reference. This does
+ *    not change the caller’s obligation: the caller still owns exactly one ref
+ *    and must dput() when done.
+ *
+ * 7) Dropping the last reference deallocates the dentry; as part of teardown
+ *    we iput() the inode. Callers must not touch the dentry after dput().
+ */
 struct vfs_dentry* vfs_lookup(const char* path);
 struct vfs_dentry* vfs_resolve_path(const char* path);
 struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path);
@@ -295,6 +327,7 @@ void inode_add(struct vfs_inode* inode);
 
 // --- File Operations (Syscall Layer) ---
 int vfs_open(const char* path, int flags);
+int __vfs_open_for_task(struct task* t, const char* path, int flags);
 int vfs_close(int fd);
 ssize_t vfs_file_write(struct vfs_file* file, const char* buffer, size_t count);
 ssize_t vfs_write(int fd, const char* buffer, size_t count);

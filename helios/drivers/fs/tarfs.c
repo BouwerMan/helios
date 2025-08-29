@@ -19,7 +19,6 @@ void unpack_tarfs(void* archive_address)
 	unsigned char* ptr = archive_address;
 
 	while (true) {
-		// GDB BREAKPOINT
 		struct ustar_header* header = (struct ustar_header*)ptr;
 
 		// The end of a TAR archive is marked by two 512-byte blocks of zeros.

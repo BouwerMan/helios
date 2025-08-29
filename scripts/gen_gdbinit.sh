@@ -30,6 +30,7 @@ define add-symbol-file-auto
 end
 
 add-symbol-file-auto sysroot/usr/bin/init.elf
+add-symbol-file-auto sysroot/usr/bin/hello_world.elf
 
 target remote localhost:1234
 set print pretty on

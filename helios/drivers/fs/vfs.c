@@ -372,35 +372,52 @@ struct vfs_inode* inode_ht_check(struct vfs_superblock* sb, size_t id)
 }
 
 /**
- * @brief Acquires a new reference to a dentry.
+ * dget - Acquire a counted reference to a dentry
+ * @dentry: Dentry to reference (may be NULL)
  *
- * Increments the reference count of the specified dentry, signifying that a
- * new part of the kernel is now using it. This function acts as a "lease,"
- * protecting the dentry from being deallocated while the reference is held.
+ * Increments @dentry->ref_count and returns @dentry. Use dget() whenever:
+ *  - You will return an existing (already-cached) dentry to a caller
+ *    (e.g., a hash-table hit in dentry_lookup()).
+ *  - You store a dentry into a structure that outlives the current scope
+ *    (e.g., file->dentry), transferring ownership to that structure.
  *
- * It is part of the VFS contract: any function that provides a dentry
- * pointer to a new user (e.g., a successful lookup) is responsible for
- * calling dget() on it first. The caller that receives the dentry is then
- * responsible for eventually releasing this reference by calling dput().
+ * Do not add an extra reference when returning the freshly-allocated `child`
+ * that was passed into a filesystem ->lookup() implementation; that dentry
+ * already has refcount==1 from dentry_alloc().
  *
- * @param dentry Pointer to the vfs_dentry to acquire a reference to.
- * This function safely handles a NULL input.
- *
- * @return       Returns a pointer to the same dentry, allowing for easy
- * assignment like `my_dentry = dget(dentry_from_lookup);`.
- * Returns NULL if the input `dentry` was NULL.
+ * Return: @dentry (unchanged), or NULL if @dentry was NULL.
  */
 struct vfs_dentry* dget(struct vfs_dentry* dentry)
 {
-	if (dentry) {
-		dentry->ref_count++;
-		log_debug("Dentry '%s' ref_count: %d",
-			  dentry->name,
-			  dentry->ref_count);
+	if (!dentry) {
+		return dentry;
 	}
+
+	dentry->ref_count++;
+	log_debug("Dentry '%s' ref_count: %d", dentry->name, dentry->ref_count);
+
 	return dentry;
 }
 
+/**
+ * dput - Release a counted reference to a dentry
+ * @dentry: Dentry to release (may be NULL)
+ *
+ * Decrements @dentry->ref_count. When the count reaches zero, the dentry is
+ * torn down: iput() is called on its inode and the dentry memory is freed.
+ *
+ * Typical balanced pairs:
+ *  - vfs_walk_path(): dget(root) on entry; dput(prev) each hop.
+ *  - vfs_open(): on any failure after a successful lookup, dput(dentry).
+ *  - vfs_close(): when a file’s last ref is dropped, dput(file->dentry).
+ *  - vfs_mount(): after grafting, dput(mount_point_dentry).
+ *  - vfs_create()/vfs_mkdir(): always dput(parent) before returning.
+ *
+ * Notes:
+ *  - This helper is NULL-safe; passing NULL is a no-op.
+ *  - After dput(), the caller must not dereference @dentry unless it still
+ *    holds another reference elsewhere.
+ */
 void dput(struct vfs_dentry* dentry)
 {
 	if (!dentry) {
@@ -451,16 +468,21 @@ struct vfs_dentry* dentry_ht_check(struct vfs_dentry* d)
 }
 
 /**
- * dentry_lookup - Searches for a child dentry within a parent dentry.
- * @parent: The parent dentry to search within.
- * @name: The name of the file or directory to search for.
+ * dentry_lookup - Find or construct a child dentry under @parent
+ * @parent: Directory dentry to search
+ * @name:   Child name
  *
- * This function attempts to locate a child dentry by first checking a hash
- * table for an existing entry. If not found, it invokes the parent inode's
- * lookup operation to resolve the dentry. If the lookup fails, the returned
- * dentry will have a NULL inode, indicating a negative dentry.
+ * Semantics & ownership:
+ *  - On a CACHE HIT: return dget(found); the caller owns one reference.
+ *  - On a MISS: call parent->inode->ops->lookup(parent->inode, child),
+ *    where @child is the freshly-allocated dentry from dentry_alloc().
+ *    The filesystem must:
+ *      * Populate @child (and insert with dentry_add(child) if it exists), and
+ *        then return @child WITHOUT adding another reference; OR
+ *      * If it decides to return a DIFFERENT existing dentry, it must
+ *        dget(existing) and arrange to drop/dealloc the unused @child.
  *
- * Return: Pointer to the found dentry, or NULL on failure.
+ * Return: Referenced dentry on success (caller must dput()), or NULL on error.
  */
 struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
 {
@@ -560,7 +582,7 @@ bool dentry_compare(const struct vfs_dentry* d1, const struct vfs_dentry* d2)
 	       (d1->parent->inode->id == d2->parent->inode->id);
 }
 
-int vfs_open(const char* path, int flags)
+int __vfs_open_for_task(struct task* t, const char* path, int flags)
 {
 	// TODO: Rework lookup to check for mount points.
 
@@ -602,7 +624,7 @@ int vfs_open(const char* path, int flags)
 		}
 	}
 
-	int fd = install_fd(get_current_task(), file);
+	int fd = install_fd(t, file);
 	if (fd < 0) {
 		dput(dentry);
 		slab_free(&file_cache, file);
@@ -614,6 +636,11 @@ int vfs_open(const char* path, int flags)
 		  dentry->ref_count);
 
 	return fd;
+}
+
+int vfs_open(const char* path, int flags)
+{
+	return __vfs_open_for_task(get_current_task(), path, flags);
 }
 
 /**

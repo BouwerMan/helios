@@ -48,16 +48,18 @@ static inline void SYSRET(struct registers* r, u64 val)
 void sys_write(struct registers* r)
 {
 	// rdi: file descriptor, rsi: buffer, rdx: size
-	if (r->rdi != 1) { // Only handle stdout for now
-		return;
-	}
-
+	int fd = (int)r->rdi;
 	const char* buf = (const char*)r->rsi;
 	size_t size = r->rdx;
 
+	if (fd != 1) { // Only handle stdout for now
+		return;
+	}
+
 	// TODO: Actually use task resources :)
-	extern struct vfs_file* g_kernel_console;
-	vfs_file_write(g_kernel_console, buf, size);
+	// extern struct vfs_file* g_kernel_console;
+	// vfs_file_write(g_kernel_console, buf, size);
+	vfs_write(fd, buf, size);
 
 	SYSRET(r, size); // Return the number of bytes written
 }
@@ -214,12 +216,14 @@ static struct limine_file* find_module(const char* name)
 
 void sys_exec(struct registers* r)
 {
+	disable_preemption();
 	const char* name = (const char*)r->rdi;
 
 	// TODO: Don't trust user pointer
 	struct limine_file* module = find_module(name);
 	if (!module) {
 		log_error("exec: module '%s' not found", name);
+		enable_preemption();
 		SYSRET(r, -1); // Return an error
 		return;
 	}
@@ -240,13 +244,19 @@ void sys_exec(struct registers* r)
 	// TODO: Make sure there are no page table leaks here
 	free_page(old_pml4);
 
+	// GDB BREAKPOINT
 	int res = load_elf(task, module->address);
 	if (res < 0) {
+		enable_preemption();
 		panic("exec: load_elf failed");
 	}
 
-	// laod_elf sets up the stack and entry point, so we just need to
+	// Copy over the registers from load_elf so we return to entry point
+	memcpy(r, task->regs, sizeof(struct registers));
+
+	// load_elf sets up the stack and entry point, so we just need to
 	// return normally
+	enable_preemption();
 }
 
 typedef void (*handler)(struct registers* r);
