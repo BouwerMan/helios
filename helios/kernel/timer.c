@@ -24,7 +24,7 @@
 #include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
 #include <kernel/types.h>
-#include <util/log.h>
+#include <lib/log.h>
 
 // Some IBM employee had a very fun time when designing this fucker.
 static constexpr u32 PIT_CLK = 1193180;

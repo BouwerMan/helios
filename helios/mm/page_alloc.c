@@ -33,19 +33,18 @@
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
-#include <util/log.h>
+#include <lib/log.h>
 #undef FORCE_LOG_REDEF
 
 #include <kernel/helios.h>
 #include <kernel/kmath.h>
 #include <kernel/panic.h>
 #include <kernel/spinlock.h>
+#include <lib/string.h>
 #include <mm/address_space.h>
 #include <mm/bootmem.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
-#include <stdint.h>
-#include <string.h>
 
 /*******************************************************************************
 * Global Variable Definitions

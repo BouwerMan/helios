@@ -22,11 +22,9 @@
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
 #include <drivers/pci/pci.h>
+#include <lib/log.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <util/log.h>
 
 /* port-bases */
 static const int PORTBASE_PRIMARY = 0x1F0;

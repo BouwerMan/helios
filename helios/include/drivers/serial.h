@@ -2,8 +2,8 @@
 #pragma once
 
 #include <drivers/tty.h>
+#include <kernel/types.h>
 #include <stddef.h>
-#include <sys/types.h>
 
 static constexpr u16 COM1_PORT = 0x3f8;
 

@@ -9,6 +9,10 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
+typedef unsigned char uchar;
+typedef unsigned int uint;
+typedef unsigned long ulong;
+
 // Signed types
 typedef int8_t i8;
 typedef int16_t i16;
@@ -22,6 +26,7 @@ typedef intptr_t iptr;
 // Flags/bitmask type
 typedef unsigned long flags_t;
 
+typedef unsigned long size_t;
 typedef long ssize_t;
 typedef long off_t;
 

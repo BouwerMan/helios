@@ -1,10 +1,31 @@
+/**
+ * @file drivers/vconsole.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <drivers/vconsole.h>
 #include <kernel/panic.h>
 #include <kernel/screen.h>
+#include <kernel/types.h>
+#include <mm/kmalloc.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
-#include <stdlib.h>
-#include <sys/types.h>
 
 /*******************************************************************************
  * Global Variable Definitions
@@ -34,7 +55,7 @@ static constexpr size_t RING_BUFFER_SIZE = RING_BUFFER_SIZE_PAGES * PAGE_SIZE;
  */
 void vconsole_tty_init()
 {
-	struct tty* tty = kzmalloc(sizeof(struct tty));
+	struct tty* tty = kzalloc(sizeof(struct tty));
 	tty->driver = &vconsole_driver;
 	strncpy(tty->name, "tty0", 32);
 

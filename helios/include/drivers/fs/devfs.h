@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 #include <drivers/fs/vfs.h>
-#include <util/hashtable.h>
+#include <lib/hashtable.h>
 
 static constexpr size_t DEVFS_HASH_BITS = 9; // 512 buckets
 

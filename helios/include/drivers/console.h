@@ -2,7 +2,6 @@
 #pragma once
 
 #include <drivers/tty.h>
-#include <sys/types.h>
 
 /**
  * console_init - Initialize the console subsystem

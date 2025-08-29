@@ -26,12 +26,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <stdlib.h>
-#include <string.h>
-
 #include <kernel/types.h>
-#include <util/ht.h>
-#include <util/log.h>
+#include <lib/ht.h>
+#include <lib/log.h>
+#include <lib/string.h>
+#include <mm/kmalloc.h>
 
 // TODO: Implement some sort of LRU deletion
 // TODO: Implement any sort of removal using custom destructors
@@ -44,8 +43,12 @@ struct ht_ops default_ops = {
 	.destructor = NULL,
 };
 
-static const char* ht_set_entry(struct ht_entry* entries, size_t capacity, const void* key, void* value,
-				size_t* plength, struct ht_ops* ops);
+static const char* ht_set_entry(struct ht_entry* entries,
+				size_t capacity,
+				const void* key,
+				void* value,
+				size_t* plength,
+				struct ht_ops* ops);
 static bool ht_expand(struct ht* table);
 
 /**
@@ -92,7 +95,8 @@ void ht_destroy(struct ht* table)
 {
 	// Free allocated keys and values if they have a custom destructor
 	for (size_t i = 0; i < table->capacity; i++) {
-		if (table->ops->destructor) table->ops->destructor(table->entries[i].value);
+		if (table->ops->destructor)
+			table->ops->destructor(table->entries[i].value);
 		kfree((void*)table->entries[i].key);
 	}
 
@@ -161,7 +165,12 @@ const char* ht_set(struct ht* table, const void* key, void* value)
 		if (!ht_expand(table)) return NULL;
 	}
 
-	return ht_set_entry(table->entries, table->capacity, key, value, &table->length, table->ops);
+	return ht_set_entry(table->entries,
+			    table->capacity,
+			    key,
+			    value,
+			    &table->length,
+			    table->ops);
 }
 
 /**
@@ -229,8 +238,9 @@ bool ht_next(struct ht_iter* it)
 	return false;
 }
 
-static constexpr u64 FNV_PRIME = 0x01000193;  ///< The FNV prime constant.
-static constexpr u64 FNV_OFFSET = 0x811c9dc5; ///< The FNV offset basis constant.
+static constexpr u64 FNV_PRIME = 0x01000193; ///< The FNV prime constant.
+static constexpr u64 FNV_OFFSET =
+	0x811c9dc5;			     ///< The FNV offset basis constant.
 
 // https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
 /**
@@ -282,8 +292,12 @@ bool compare_key(const void* key1, const void* key2)
  * @return Pointer to the key in the hash table,
  *         or NULL if memory allocation fails.
  */
-static const char* ht_set_entry(struct ht_entry* entries, size_t capacity, const void* key, void* value,
-				size_t* plength, struct ht_ops* ops)
+static const char* ht_set_entry(struct ht_entry* entries,
+				size_t capacity,
+				const void* key,
+				void* value,
+				size_t* plength,
+				struct ht_ops* ops)
 {
 	uint32_t hash = ops->hash(key);
 	size_t index = (size_t)(hash & (uint32_t)(capacity - 1));
@@ -327,14 +341,20 @@ static bool ht_expand(struct ht* table)
 {
 	size_t new_capacity = table->capacity * 2;
 	if (new_capacity < table->capacity) return false; // overflow
-	struct ht_entry* new_entries = kcalloc(new_capacity, sizeof(struct ht_entry));
+	struct ht_entry* new_entries =
+		kcalloc(new_capacity, sizeof(struct ht_entry));
 	if (new_entries == NULL) return false;
 
 	// Iterate entries, move non-empty to new table
 	for (size_t i = 0; i < table->capacity; i++) {
 		struct ht_entry entry = table->entries[i];
 		if (entry.key != NULL) {
-			ht_set_entry(new_entries, new_capacity, entry.key, entry.value, NULL, table->ops);
+			ht_set_entry(new_entries,
+				     new_capacity,
+				     entry.key,
+				     entry.value,
+				     NULL,
+				     table->ops);
 		}
 	}
 

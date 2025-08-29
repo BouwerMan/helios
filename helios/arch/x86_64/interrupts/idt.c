@@ -24,12 +24,11 @@
 #include <arch/ports.h>
 #include <drivers/console.h>
 #include <kernel/container_of.h>
-#include <kernel/dmesg.h>
 #include <kernel/irq_log.h>
 #include <kernel/screen.h>
 #include <kernel/tasks/scheduler.h>
-#include <string.h>
-#include <util/log.h>
+#include <lib/log.h>
+#include <lib/string.h>
 
 /*******************************************************************************
 * Global Variable Definitions

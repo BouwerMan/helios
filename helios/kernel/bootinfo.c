@@ -26,7 +26,7 @@
 #undef LOG_LEVEL
 #define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
-#include <util/log.h>
+#include <lib/log.h>
 #undef FORCE_LOG_REDEF
 
 #include <kernel/bootinfo.h>
@@ -37,13 +37,15 @@
 #include <mm/bootmem.h>
 #include <mm/page.h>
 
-static constexpr size_t MAX_MEMMAP_ENTRIES_PER_PAGE = PAGE_SIZE / sizeof(struct bootinfo_memmap_entry);
+static constexpr size_t MAX_MEMMAP_ENTRIES_PER_PAGE =
+	PAGE_SIZE / sizeof(struct bootinfo_memmap_entry);
 
 void bootinfo_init()
 {
 	struct limine_memmap_response* mmap = memmap_request.response;
 	struct limine_hhdm_response* hhdm = hhdm_request.response;
-	struct limine_executable_address_response* exec_addr = exe_addr_req.response;
+	struct limine_executable_address_response* exec_addr =
+		exe_addr_req.response;
 	struct limine_module_response* mod = mod_request.response;
 	struct bootinfo* bootinfo = &kernel.bootinfo;
 
@@ -55,11 +57,16 @@ void bootinfo_init()
 	kassert(mmap->entry_count <= MAX_MEMMAP_ENTRIES_PER_PAGE &&
 		"Boot info memory map entry count exceeds maximum allowed entries per page");
 
-	struct bootinfo_memmap_entry* mmap_entries = (void*)PHYS_TO_HHDM(bootmem_alloc_page());
+	struct bootinfo_memmap_entry* mmap_entries =
+		(void*)PHYS_TO_HHDM(bootmem_alloc_page());
 
 	for (size_t i = 0; i < mmap->entry_count; i++) {
 		struct limine_memmap_entry* entry = mmap->entries[i];
-		log_debug("%zu. Start Addr: %lx | Length: %lx | Type: %lu", i, entry->base, entry->length, entry->type);
+		log_debug("%zu. Start Addr: %lx | Length: %lx | Type: %lu",
+			  i,
+			  entry->base,
+			  entry->length,
+			  entry->type);
 		mmap_entries[i].base = entry->base;
 		mmap_entries[i].length = entry->length;
 		mmap_entries[i].type = entry->type;
@@ -78,6 +85,8 @@ void bootinfo_init()
 	if (!mod) panic("Module response missing");
 	log_info("Module count: %zu", mod->module_count);
 	for (size_t i = 0; i < mod->module_count; i++) {
-		log_debug("path: %s, string: %s\n", mod->modules[i]->path, mod->modules[i]->string);
+		log_debug("path: %s, string: %s\n",
+			  mod->modules[i]->path,
+			  mod->modules[i]->string);
 	}
 }

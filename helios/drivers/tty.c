@@ -1,18 +1,36 @@
+/**
+ * @file drivers/tty.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <drivers/console.h>
 #include <drivers/device.h>
 #include <drivers/fs/vfs.h>
 #include <drivers/serial.h>
 #include <drivers/tty.h>
 #include <drivers/vconsole.h>
-#include <kernel/dmesg.h>
 #include <kernel/screen.h>
 #include <kernel/spinlock.h>
+#include <kernel/types.h>
 #include <kernel/work_queue.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
-#include <util/log.h>
+#include <lib/log.h>
+#include <lib/string.h>
 
 /*******************************************************************************
  * Global Variable Definitions

@@ -1,8 +1,29 @@
+/**
+ * @file drivers/fs/devfs.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <drivers/device.h>
 #include <drivers/fs/devfs.h>
 #include <kernel/helios.h>
-#include <stdlib.h>
-#include <util/log.h>
+#include <lib/log.h>
+#include <mm/kmalloc.h>
 
 /*******************************************************************************
  * Global Variable Definitions
@@ -49,13 +70,13 @@ struct vfs_superblock* devfs_mount(const char* source, int flags)
 
 	(void)source; // should always be nullptr for devfs
 
-	struct vfs_superblock* sb = kzmalloc(sizeof(struct vfs_superblock));
+	struct vfs_superblock* sb = kzalloc(sizeof(struct vfs_superblock));
 	if (!sb) {
 		log_error("Failed to allocate superblock");
 		return nullptr;
 	}
 
-	struct devfs_sb_info* info = kzmalloc(sizeof(struct devfs_sb_info));
+	struct devfs_sb_info* info = kzalloc(sizeof(struct devfs_sb_info));
 	if (!info) {
 		log_error("Failed to allocate superblock info");
 		goto clean_sb;
@@ -144,7 +165,7 @@ struct vfs_inode* devfs_alloc_inode(struct vfs_superblock* sb)
 {
 	(void)sb;
 
-	struct vfs_inode* inode = kzmalloc(sizeof(struct vfs_inode));
+	struct vfs_inode* inode = kzalloc(sizeof(struct vfs_inode));
 	if (!inode) {
 		return nullptr;
 	}

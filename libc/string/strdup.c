@@ -18,11 +18,11 @@
  */
 char* strdup(const char* src)
 {
-	if (src == NULL) return NULL;
+	if (src == nullptr) return nullptr;
 
 	size_t len = strlen(src);
-	char* new  = LIBC_MALLOC(len + 1);
-	if (new == NULL) return NULL;
+	char* new = malloc(len + 1);
+	if (new == nullptr) return nullptr;
 
 	return strcpy(new, src);
 }

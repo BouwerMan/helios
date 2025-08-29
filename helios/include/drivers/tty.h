@@ -4,7 +4,6 @@
 #include <drivers/fs/vfs.h>
 #include <kernel/spinlock.h>
 #include <kernel/tasks/scheduler.h>
-#include <sys/types.h>
 
 // TODO: Actually use waitqueue
 

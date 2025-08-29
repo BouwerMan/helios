@@ -26,7 +26,6 @@
 #include <drivers/pci/pci.h>
 #include <drivers/serial.h>
 #include <drivers/tty.h>
-#include <kernel/dmesg.h>
 #include <kernel/exec.h>
 #include <kernel/helios.h>
 #include <kernel/irq_log.h>
@@ -38,16 +37,13 @@
 #include <kernel/tasks/scheduler.h>
 #include <kernel/timer.h>
 #include <kernel/work_queue.h>
+#include <lib/log.h>
 #include <limine.h>
 #include <mm/bootmem.h>
+#include <mm/kmalloc.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
-#include <util/log.h>
-
-#include <stdlib.h>
-#define __STDC_WANT_LIB_EXT1__
-#include <string.h>
 
 struct limine_framebuffer* framebuffer;
 
@@ -81,7 +77,7 @@ void kernel_console_init()
 	struct vfs_dentry* dentry = vfs_lookup("/dev/console");
 	if (dentry && dentry->inode) {
 		log_debug("Found /dev/console, setting up kernel console");
-		g_kernel_console = kzmalloc(sizeof(struct vfs_file));
+		g_kernel_console = kzalloc(sizeof(struct vfs_file));
 		g_kernel_console->dentry = dget(dentry);
 		g_kernel_console->fops = dentry->inode->fops;
 		g_kernel_console->ref_count = 1;

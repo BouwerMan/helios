@@ -19,6 +19,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#if 0
+
 // https://wiki.osdev.org/FAT#Reading_the_Boot_Sector
 #include <ctype.h>
 #include <stdlib.h>
@@ -34,7 +36,6 @@
 
 #include <util/log.h>
 
-#if 0
 // https://unix.stackexchange.com/questions/209566/how-to-format-a-partition-inside-of-an-img-file
 
 static int fat_open_sector(const struct fat_fs* fs, uint8_t* buffer, uint16_t buffer_size, uint32_t sector);

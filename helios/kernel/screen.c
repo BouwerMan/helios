@@ -19,13 +19,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <string.h>
-
 #include <kernel/helios.h>
 #include <kernel/limine_requests.h>
 #include <kernel/screen.h>
 #include <kernel/spinlock.h>
-#include <util/log.h>
+#include <lib/log.h>
+#include <lib/string.h>
 
 /*******************************************************************************
 * Global Variable Definitions

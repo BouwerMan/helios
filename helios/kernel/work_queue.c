@@ -1,10 +1,31 @@
+/**
+ * @file kernel/work_queue.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <drivers/serial.h>
 #include <kernel/spinlock.h>
 #include <kernel/tasks/scheduler.h>
 #include <kernel/work_queue.h>
-#include <stdlib.h>
-#include <util/list.h>
-#include <util/log.h>
+#include <lib/list.h>
+#include <lib/log.h>
+#include <mm/kmalloc.h>
 
 /*******************************************************************************
  * Global Variable Definitions
@@ -43,7 +64,7 @@ static struct work_item* take_from_queue();
 void work_queue_init()
 {
 	list_init(&g_work_queue.queue);
-	spinlock_init(&g_work_queue.lock);
+	spin_init(&g_work_queue.lock);
 	wq_task = kthread_create("Worker Queue task",
 				 (entry_func)worker_thread_entry);
 	kthread_run(wq_task);

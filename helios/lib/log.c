@@ -1,5 +1,5 @@
 /**
- * @file util/log.c
+ * @file lib/log.c
  *
  * Copyright (C) 2025  Dylan Parks
  *
@@ -25,10 +25,7 @@
 #include <kernel/irq_log.h>
 #include <kernel/screen.h>
 #include <kernel/work_queue.h>
-#include <liballoc.h>
-#include <stdlib.h>
-#include <string.h>
-#include <util/log.h>
+#include <lib/log.h>
 
 static constexpr char interrupt_context_str[] = LOG_COLOR_MAGENTA
 	"[INT] " LOG_COLOR_RESET;

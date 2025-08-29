@@ -19,30 +19,30 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <drivers/fs/vfs.h>
-#include <kernel/spinlock.h>
 #undef LOG_LEVEL
 #define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
-#include <util/log.h>
+#include <lib/log.h>
 #undef FORCE_LOG_REDEF
 
 #include <arch/gdt/gdt.h>
 #include <arch/idt.h>
 #include <arch/mmu/vmm.h>
 #include <arch/regs.h>
+#include <drivers/fs/vfs.h>
 #include <kernel/errno.h>
 #include <kernel/exec.h>
 #include <kernel/limine_requests.h>
 #include <kernel/panic.h>
+#include <kernel/spinlock.h>
 #include <kernel/tasks/scheduler.h>
+#include <lib/list.h>
+#include <lib/string.h>
 #include <mm/address_space.h>
+#include <mm/kmalloc.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
-#include <stdlib.h>
-#include <string.h>
-#include <util/list.h>
 
 /*******************************************************************************
 * Global Variable Definitions
@@ -435,7 +435,7 @@ struct task* __alloc_task()
 		log_error("OOM error from slab_alloc");
 		return nullptr;
 	}
-	struct address_space* vas = kzmalloc(sizeof(struct address_space));
+	struct address_space* vas = kzalloc(sizeof(struct address_space));
 	if (!vas) {
 		log_error("OOM error from kzmalloc");
 		slab_free(squeue.cache, task);
@@ -557,7 +557,7 @@ void waitqueue_init(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;
 	list_init(&wqueue->waiters_list);
-	spinlock_init(&wqueue->waiters_lock);
+	spin_init(&wqueue->waiters_lock);
 }
 
 void waitqueue_sleep(struct waitqueue* wqueue)
@@ -600,30 +600,34 @@ void waitqueue_sleep_unlock(struct waitqueue* wqueue,
 void waitqueue_wake_one(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;
-	spinlock_acquire(&wqueue->waiters_lock);
+
+	ulong flags;
+	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
 
 	struct task* next =
 		list_first_entry(&wqueue->waiters_list, struct task, list);
-	// log_debug("Waking task %lu", next->PID);
 	next->wait = nullptr;
 	task_wake(next);
 
-	spinlock_release(&wqueue->waiters_lock);
+	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
 }
 
 void waitqueue_wake_all(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;
-	spinlock_acquire(&wqueue->waiters_lock);
+
+	ulong flags;
+	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
+
 	struct task* pos = nullptr;
 	struct task* temp = nullptr;
 	list_for_each_entry_safe(pos, temp, &wqueue->waiters_list, list)
 	{
-		// log_debug("Waking task %lu", pos->PID);
 		pos->wait = nullptr;
 		task_wake(pos);
 	}
-	spinlock_release(&wqueue->waiters_lock);
+
+	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
 }
 
 void waitqueue_dump_waiters(struct waitqueue* wqueue)

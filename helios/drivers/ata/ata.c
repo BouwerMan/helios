@@ -24,7 +24,7 @@
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
-#include <util/log.h>
+#include <lib/log.h>
 #undef FORCE_LOG_REDEF
 #else
 #include <util/log.h>
@@ -35,11 +35,10 @@
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
 #include <kernel/panic.h>
+#include <lib/string.h>
 #include <limits.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
-#include <stdlib.h>
-#include <string.h>
 
 static bool bmr_poll(sATADevice* device);
 static uint16_t get_command(sATADevice* device, uint16_t op);

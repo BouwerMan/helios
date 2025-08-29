@@ -24,11 +24,11 @@
 #include <arch/regs.h>
 #include <kernel/exec.h>
 #include <kernel/panic.h>
+#include <lib/string.h>
 #include <mm/mmap.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/page_alloc_flags.h>
-#include <string.h>
 
 /*******************************************************************************
 * Private Function Prototypes

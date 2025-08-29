@@ -1,11 +1,11 @@
 BUILDDIR=build
-SRC_DIRS:=kernel drivers util mm
+SRC_DIRS:=kernel drivers lib mm
 
 ARCHDIR=arch/$(HOSTARCH)
 
-CFLAGS:=$(CFLAGS) -isystem$(ARCHDIR)/include  -isysteminclude -isystem$(PWD)/libc/include -D__is_libk
+CFLAGS:=$(CFLAGS) -isystem$(ARCHDIR)/include  -isysteminclude 
 LDFLAGS:=$(LDFLAGS)
-LIBS:=$(LIBS) -nostdlib -L$(PWD)/libc/build -lk -lgcc
+LIBS:=$(LIBS) -nostdlib -lgcc
 
 include $(ARCHDIR)/config.mk
 include ./config.mk

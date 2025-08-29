@@ -1,10 +1,31 @@
+/**
+ * @file kernel/tasks/fork.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <arch/mmu/vmm.h>
 #include <drivers/fs/vfs.h>
 #include <kernel/tasks/fork.h>
 #include <kernel/tasks/scheduler.h>
+#include <lib/log.h>
+#include <lib/string.h>
 #include <mm/address_space.h>
-#include <string.h>
-#include <util/log.h>
 
 /**
  * do_fork: Syscall handler for fork().

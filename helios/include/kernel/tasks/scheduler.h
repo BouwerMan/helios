@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
+#include <lib/list.h>
 #include <mm/address_space.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <util/list.h>
 
 typedef void (*entry_func)(void);
 

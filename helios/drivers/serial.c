@@ -23,9 +23,9 @@
 #include <drivers/serial.h>
 #include <drivers/tty.h>
 #include <kernel/panic.h>
+#include <mm/kmalloc.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
-#include <stdlib.h>
 
 /*******************************************************************************
  * Global Variable Definitions
@@ -100,7 +100,7 @@ int serial_port_init()
  */
 void serial_tty_init()
 {
-	struct tty* tty = kzmalloc(sizeof(struct tty));
+	struct tty* tty = kzalloc(sizeof(struct tty));
 	tty->driver = &serial_driver;
 	strncpy(tty->name, "ttyS0", 32);
 

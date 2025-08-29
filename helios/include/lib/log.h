@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
-#include <printf.h>
+#include <lib/printf.h>
 
 // LOG_LEVEL: Determines the minimum level of logs to be compiled.
 // (e.g., LOG_LEVEL_INFO will compile INFO, WARN, and ERROR logs, but not DEBUG)

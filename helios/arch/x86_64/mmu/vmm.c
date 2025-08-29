@@ -35,18 +35,17 @@
 #include <arch/regs.h>
 #include <drivers/console.h>
 #include <kernel/bootinfo.h>
-#include <kernel/dmesg.h>
 #include <kernel/errno.h>
 #include <kernel/helios.h>
 #include <kernel/irq_log.h>
 #include <kernel/panic.h>
 #include <kernel/tasks/scheduler.h>
+#include <lib/log.h>
+#include <lib/string.h>
 #include <mm/address_space.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <stdint.h>
-#include <string.h>
-#include <util/log.h>
 
 /*******************************************************************************
 * Private Function Prototypes

@@ -6,7 +6,7 @@
 #include <kernel/helios.h>
 #include <kernel/spinlock.h>
 
-#include <util/list.h>
+#include <lib/list.h>
 
 // TODO: Try using a free list stored in the freed object's slab slice similar to the linux kernel
 

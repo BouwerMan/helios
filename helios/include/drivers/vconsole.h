@@ -2,7 +2,7 @@
 #pragma once
 
 #include <drivers/tty.h>
-#include <sys/types.h>
+#include <kernel/types.h>
 
 /**
  * vconsole_tty_init - Initialize the VGA console TTY device

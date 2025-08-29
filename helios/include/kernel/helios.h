@@ -6,8 +6,8 @@
 #include <kernel/bootinfo.h>
 #include <kernel/compiler_attributes.h>
 #include <kernel/types.h>
+#include <lib/list.h>
 #include <limine.h>
-#include <util/list.h>
 
 /* Kernel Strings */
 #define KERNEL_NAME    "HELIOS"

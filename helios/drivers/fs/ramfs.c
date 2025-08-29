@@ -1,12 +1,33 @@
+/**
+ * @file drivers/fs/ramfs.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <drivers/fs/ramfs.h>
 #include <drivers/fs/vfs.h>
+#include <lib/hashtable.h>
+#include <lib/log.h>
+#include <lib/string.h>
+#include <mm/kmalloc.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
-#include <stdlib.h>
-#include <string.h>
-#include <util/hashtable.h>
-#include <util/log.h>
 
 // TODO: Locking
 
@@ -89,13 +110,13 @@ struct vfs_superblock* ramfs_mount(const char* source, int flags)
 {
 	(void)source; // should always be nullptr for ramfs
 
-	struct vfs_superblock* sb = kzmalloc(sizeof(struct vfs_superblock));
+	struct vfs_superblock* sb = kzalloc(sizeof(struct vfs_superblock));
 	if (!sb) {
 		log_error("Failed to allocate superblock");
 		return nullptr;
 	}
 
-	struct ramfs_sb_info* info = kzmalloc(sizeof(struct ramfs_sb_info));
+	struct ramfs_sb_info* info = kzalloc(sizeof(struct ramfs_sb_info));
 	if (!info) {
 		log_error("Failed to allocate superblock info");
 		goto clean_sb;
@@ -118,7 +139,7 @@ struct vfs_superblock* ramfs_mount(const char* source, int flags)
 
 	root_dentry->flags = DENTRY_DIR | DENTRY_ROOT;
 
-	struct ramfs_dentry* rdent = kzmalloc(sizeof(struct ramfs_dentry));
+	struct ramfs_dentry* rdent = kzalloc(sizeof(struct ramfs_dentry));
 	if (!rdent) {
 		log_error("Failed to allocate root ramfs dentry");
 		goto clean_dentry;
@@ -179,6 +200,8 @@ clean_sb:
  */
 int ramfs_mkdir(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode)
 {
+	(void)mode;
+
 	// TODO: Make sure we put some sort of info into our hashtable
 	if (!dir || !dentry || !dentry->parent ||
 	    dentry->parent->inode != dir) {
@@ -220,7 +243,7 @@ int ramfs_mkdir(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode)
 		return -VFS_ERR_NOMEM;
 	}
 
-	struct ramfs_dentry* rdent = kzmalloc(sizeof(struct ramfs_dentry));
+	struct ramfs_dentry* rdent = kzalloc(sizeof(struct ramfs_dentry));
 	if (!rdent) {
 		log_error("failed to create dir '%s': %s",
 			  dentry->name,
@@ -357,7 +380,7 @@ int ramfs_create(struct vfs_inode* dir,
 		return -VFS_ERR_NOMEM;
 	}
 
-	struct ramfs_file* rfile = kzmalloc(sizeof(struct ramfs_file));
+	struct ramfs_file* rfile = kzalloc(sizeof(struct ramfs_file));
 	if (!rfile) {
 		// TODO: Destroy inode
 		// kfree(inode);
@@ -378,7 +401,7 @@ int ramfs_create(struct vfs_inode* dir,
 
 	dentry->inode = inode;
 
-	struct ramfs_dentry* rdent = kzmalloc(sizeof(struct ramfs_dentry));
+	struct ramfs_dentry* rdent = kzalloc(sizeof(struct ramfs_dentry));
 	if (!rdent) {
 		log_error("failed to create dir '%s': %s",
 			  dentry->name,
@@ -417,7 +440,7 @@ struct vfs_inode* ramfs_alloc_inode(struct vfs_superblock* sb)
 	}
 
 	struct ramfs_inode_info* rinode =
-		kzmalloc(sizeof(struct ramfs_inode_info));
+		kzalloc(sizeof(struct ramfs_inode_info));
 	if (!rinode) {
 		kfree(inode);
 		return nullptr;
@@ -476,7 +499,7 @@ static struct vfs_inode* get_root_inode(struct vfs_superblock* sb)
 	}
 
 	struct ramfs_inode_info* r_info =
-		kzmalloc(sizeof(struct ramfs_inode_info));
+		kzalloc(sizeof(struct ramfs_inode_info));
 	if (!r_info) {
 		log_error("Failed to allocate root inode info");
 		kfree(r_node);
@@ -581,7 +604,7 @@ static struct vfs_inode* _alloc_inode_raw(struct vfs_superblock* sb)
 {
 	(void)sb;
 
-	struct vfs_inode* inode = kzmalloc(sizeof(struct vfs_inode));
+	struct vfs_inode* inode = kzalloc(sizeof(struct vfs_inode));
 	if (!inode) {
 		log_error("Failed to allocate raw inode");
 		return nullptr;

@@ -11,9 +11,9 @@
 
 #include <kernel/helios.h>
 #include <kernel/spinlock.h>
+#include <lib/list.h>
 #include <mm/page_alloc_flags.h>
 #include <mm/zones.h>
-#include <util/list.h>
 
 static constexpr int MAX_ORDER = 10; // 2^10 pages (1024 pages), or 4MiB blocks
 

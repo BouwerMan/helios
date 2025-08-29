@@ -2,10 +2,9 @@
 #pragma once
 
 #include <arch/mmu/vmm.h>
-#include <kernel/types.h>
-#include <util/list.h>
-
 #include <helios/mmap.h>
+#include <kernel/types.h>
+#include <lib/list.h>
 
 /**
  * struct address_space - Represents a virtual address space.

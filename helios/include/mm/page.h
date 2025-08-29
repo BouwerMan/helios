@@ -3,9 +3,9 @@
 
 #include <arch/atomic.h>
 #include <kernel/types.h>
+#include <lib/list.h>
 #include <mm/page_alloc.h>
 #include <stddef.h>
-#include <util/list.h>
 
 static constexpr int PAGE_SHIFT = 12;
 static constexpr size_t PAGE_SIZE = (1UL << PAGE_SHIFT);

@@ -25,12 +25,11 @@
 #include <drivers/fs/vfs.h>
 #include <kernel/panic.h>
 #include <kernel/tasks/scheduler.h>
+#include <lib/hashtable.h>
+#include <lib/log.h>
+#include <lib/string.h>
+#include <mm/kmalloc.h>
 #include <mm/slab.h>
-#include <stdlib.h>
-#include <string.h>
-#include <util/hashtable.h>
-#include <util/ht.h>
-#include <util/log.h>
 
 // TODO: Find a better way to handle some of these icky globals, also def need
 // some locks

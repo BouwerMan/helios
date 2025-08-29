@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 #include <drivers/fs/vfs.h>
-#include <util/hashtable.h>
+#include <lib/hashtable.h>
 
 // TODO: Make sure when things are fully deallocated we can still find the data later.
 

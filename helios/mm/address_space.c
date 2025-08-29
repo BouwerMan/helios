@@ -1,9 +1,9 @@
 #include <arch/mmu/vmm.h>
 #include <kernel/errno.h>
 #include <kernel/panic.h>
+#include <lib/list.h>
 #include <mm/address_space.h>
 #include <mm/slab.h>
-#include <util/list.h>
 
 static struct slab_cache mem_cache = { 0 };
 

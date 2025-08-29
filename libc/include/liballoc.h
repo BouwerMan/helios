@@ -21,11 +21,7 @@
 // typedef	unsigned long	uintptr_t;
 
 // This lets you prefix malloc and friends
-#if defined(__is_libk)
-#define PREFIX(func) k##func
-#else
 #define PREFIX(func) func
-#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -71,7 +67,7 @@ extern void* liballoc_alloc(size_t);
 extern int liballoc_free(void*, size_t);
 
 [[nodiscard, gnu::malloc, gnu::alloc_size(1), gnu::nothrow]]
-extern void* PREFIX(malloc)(size_t); ///< The standard function.
+extern void* PREFIX(malloc)(size_t);	     ///< The standard function.
 
 [[nodiscard, gnu::alloc_size(2), gnu::nothrow]]
 extern void* PREFIX(realloc)(void*, size_t); ///< The standard function.
@@ -79,7 +75,7 @@ extern void* PREFIX(realloc)(void*, size_t); ///< The standard function.
 [[nodiscard, gnu::malloc, gnu::alloc_size(1, 2), gnu::nothrow]]
 extern void* PREFIX(calloc)(size_t, size_t); ///< The standard function.
 
-extern void PREFIX(free)(void*); ///< The standard function.
+extern void PREFIX(free)(void*);	     ///< The standard function.
 
 [[gnu::malloc, gnu::alloc_size(1), gnu::nothrow]]
 static inline void* PREFIX(zmalloc)(size_t size)

@@ -27,10 +27,10 @@
 #include <kernel/helios.h>
 #include <kernel/limine_requests.h>
 #include <kernel/screen.h>
+#include <lib/log.h>
 #include <limine.h>
 #include <mm/bootmem.h>
 #include <mm/page_alloc.h>
-#include <util/log.h>
 
 [[noreturn]]
 extern void __switch_to_new_stack(void* new_stack_top,

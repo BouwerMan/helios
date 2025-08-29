@@ -27,7 +27,7 @@
 
 #include <kernel/kmath.h>
 #include <kernel/types.h>
-#include <util/list.h>
+#include <lib/list.h>
 
 /*
  * This hash multiplies the input by a large odd number and takes the
@@ -73,8 +73,9 @@ static inline u64 hash_64(u64 val, unsigned int bits)
 	return (val * GOLDEN_RATIO_64) >> (64 - bits);
 }
 
-#define DEFINE_HASHTABLE(name, bits) \
-	struct hlist_head name[1 << (bits)] = { [0 ...((1 << (bits)) - 1)] = HLIST_HEAD_INIT }
+#define DEFINE_HASHTABLE(name, bits)                                         \
+	struct hlist_head name[1 << (bits)] = { [0 ...((1 << (bits)) - 1)] = \
+							HLIST_HEAD_INIT }
 
 #define DECLARE_HASHTABLE(name, bits) struct hlist_head name[1 << (bits)]
 
@@ -82,7 +83,8 @@ static inline u64 hash_64(u64 val, unsigned int bits)
 #define HASH_BITS(name) ilog2(HASH_SIZE(name))
 
 /* Use hash_32 when possible to allow for fast 32bit hashing in 64bit kernels. */
-#define hash_min(val, bits) (sizeof(val) <= 4 ? hash_32(val, bits) : hash_64(val, bits))
+#define hash_min(val, bits) \
+	(sizeof(val) <= 4 ? hash_32(val, bits) : hash_64(val, bits))
 
 static inline void __hash_init(struct hlist_head* ht, unsigned int sz)
 {
@@ -110,7 +112,8 @@ static inline void __hash_init(struct hlist_head* ht, unsigned int sz)
  * @node: the &struct hlist_node of the object to be added
  * @key: the key of the object to be added
  */
-#define hash_add(hashtable, node, key) hlist_add_head(&hashtable[hash_min(key, HASH_BITS(hashtable))], node)
+#define hash_add(hashtable, node, key) \
+	hlist_add_head(&hashtable[hash_min(key, HASH_BITS(hashtable))], node)
 
 /**
  * hash_hashed - check whether an object is in any hashtable
@@ -156,8 +159,9 @@ static inline void hash_del(struct hlist_node* node)
  * @obj: the type * to use as a loop cursor for each entry
  * @member: the name of the hlist_node within the struct
  */
-#define hash_for_each(name, bkt, obj, member)                                        \
-	for ((bkt) = 0, obj = NULL; obj == NULL && (bkt) < HASH_SIZE(name); (bkt)++) \
+#define hash_for_each(name, bkt, obj, member)                               \
+	for ((bkt) = 0, obj = NULL; obj == NULL && (bkt) < HASH_SIZE(name); \
+	     (bkt)++)                                                       \
 		hlist_for_each_entry (obj, &name[bkt], member)
 
 /**
@@ -169,4 +173,5 @@ static inline void hash_del(struct hlist_node* node)
  * @key: the key of the objects to iterate over
  */
 #define hash_for_each_possible(name, obj, member, key) \
-	hlist_for_each_entry (obj, &name[hash_min(key, HASH_BITS(name))], member)
+	hlist_for_each_entry (                         \
+		obj, &name[hash_min(key, HASH_BITS(name))], member)
