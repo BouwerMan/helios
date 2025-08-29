@@ -32,10 +32,7 @@ int main(void)
 		printf("Hello from the parent process! My PID is %d, my child's PID is %d.\n",
 		       getpid(),
 		       pid);
-		// Parent can optionally wait for the child to finish
-		// wait(NULL); // Include <sys/wait.h> for wait()
 		int status;
-		// GDB BREAKPOINT
 		waitpid(pid, &status, 0);
 		printf("Child process %d finished with status %d.\n",
 		       pid,

@@ -403,6 +403,10 @@ struct vfs_dentry* dget(struct vfs_dentry* dentry)
 
 void dput(struct vfs_dentry* dentry)
 {
+	if (!dentry) {
+		return;
+	}
+
 	dentry->ref_count--;
 	log_debug("Dentry %s ref_count: %d", dentry->name, dentry->ref_count);
 	if (dentry->ref_count <= 0) {
@@ -422,8 +426,10 @@ void dentry_add(struct vfs_dentry* dentry)
 	struct hlist_head* bucket = &d_ht[hash_min(hash, HASH_BITS(d_ht))];
 	dentry->bucket = bucket;
 	hash_add(d_ht, &dentry->hash, hash);
-	dentry->inode->nlink++;
 	dget(dentry);
+	log_debug("Added dentry %s to hash table, ref_count: %d",
+		  dentry->name,
+		  dentry->ref_count);
 }
 
 /**
@@ -576,8 +582,8 @@ int vfs_open(const char* path, int flags)
 
 	struct vfs_file* file = slab_alloc(&file_cache);
 	if (!file) {
-		// TODO: release dentry?
 		log_error("Could not allocate vfs_file");
+		dput(dentry);
 		return -VFS_ERR_NOMEM;
 	}
 
@@ -590,6 +596,7 @@ int vfs_open(const char* path, int flags)
 	if (file->fops->open) {
 		int res = file->fops->open(dentry->inode, file);
 		if (res < 0) {
+			dput(dentry);
 			slab_free(&file_cache, file);
 			return res;
 		}
@@ -597,6 +604,7 @@ int vfs_open(const char* path, int flags)
 
 	int fd = install_fd(get_current_task(), file);
 	if (fd < 0) {
+		dput(dentry);
 		slab_free(&file_cache, file);
 		return -VFS_ERR_NOSPC; // Is this the right code?
 	}
@@ -637,14 +645,24 @@ int vfs_close(int fd)
 	return VFS_OK;
 }
 
+void register_child(struct vfs_dentry* parent, struct vfs_dentry* child)
+{
+	if (!parent || !child) {
+		return;
+	}
+
+	list_add_tail(&parent->children, &child->siblings);
+}
+
 void vfs_dump_child(struct vfs_dentry* parent)
 {
 	struct vfs_dentry* child;
 	list_for_each_entry (child, &parent->children, siblings) {
 		struct vfs_superblock* sb = child->inode->sb;
-		log_debug("%s - type: %d, sb: '%s'(%p)",
+		log_debug("%s - type: %d, ref_count: %d, sb: '%s'(%p)",
 			  child->name,
 			  child->inode->filetype,
+			  child->ref_count,
 			  sb->mount_point,
 			  (void*)sb);
 	}
@@ -682,6 +700,7 @@ int vfs_create(const char* path,
 	struct vfs_dentry* pdentry = vfs_lookup(parent);
 	if (!pdentry || !pdentry->inode ||
 	    !(pdentry->inode->filetype == FILETYPE_DIR)) {
+		dput(pdentry);
 		kfree(path_copy);
 		return -VFS_ERR_NOTDIR;
 	}
@@ -697,18 +716,21 @@ int vfs_create(const char* path,
 		}
 		// File exists but not O_EXCL — treat as success?
 		*out_dentry = child;
+		dput(pdentry);
 		kfree(path_copy);
 		return VFS_OK;
 	}
 
 	child = dentry_alloc(pdentry, name);
 	if (!child) {
+		dput(pdentry);
 		kfree(path_copy);
 		return -VFS_ERR_NOMEM;
 	}
 
 	if (!pdentry->inode->ops || !pdentry->inode->ops->create) {
 		dentry_dealloc(child);
+		dput(pdentry);
 		kfree(path_copy);
 		return -VFS_ERR_NODEV;
 	}
@@ -718,10 +740,12 @@ int vfs_create(const char* path,
 					      mode); // or default mode
 	if (res < 0) {
 		dentry_dealloc(child);
+		dput(pdentry);
 		kfree(path_copy);
 		return res;
 	}
 	dentry_add(child); // Now track the new dentry in the hashtable
+	dput(pdentry);
 
 	*out_dentry = child;
 
@@ -766,24 +790,34 @@ int vfs_mkdir(const char* path, uint16_t mode)
 
 	// Optionally, check for existing child with the same name
 	if (vfs_does_name_exist(pdentry, name)) {
+		dput(pdentry);
 		kfree(buf);
 		return -VFS_ERR_EXIST;
 	}
 
 	struct vfs_dentry* child = dentry_alloc(pdentry, name);
 	if (!child) {
+		dput(pdentry);
 		kfree(buf);
 		return -VFS_ERR_NOMEM;
 	}
 
+	if (!pinode->ops || !pinode->ops->mkdir) {
+		dput(pdentry);
+		kfree(buf);
+		return -VFS_ERR_NODEV;
+	}
+
 	int res = pinode->ops->mkdir(pinode, child, mode);
 	if (res < 0) {
+		dput(pdentry);
 		dentry_dealloc(child);
 		kfree(buf);
 		return res;
 	}
 
 	dentry_add(child);
+	dput(pdentry);
 
 	kfree(buf);
 	return VFS_OK;
@@ -893,13 +927,21 @@ int vfs_mount(const char* source,
 	//    superblock.
 	struct vfs_superblock* sb = fs->mount(source, flags);
 	if (!sb) {
+		dput(mount_point_dentry);
 		return -VFS_ERR_NODEV; // The FS failed to mount
 	}
 
-	// 4. "Graft" the new filesystem onto the mount point.
-	//    The dentry for the mount point should now point to the new
-	//    superblock's root.
+	// The dentry for the mount point should now point to the new
+	// superblock's root.
+	struct vfs_inode* old = mount_point_dentry->inode;
 	mount_point_dentry->inode = sb->root_dentry->inode;
+	if (mount_point_dentry->inode) {
+		// TODO: inode refcount api
+		mount_point_dentry->inode->ref_count++;
+	}
+	if (old) {
+		old->ref_count--;
+	}
 	// You'll also want to link the mount information so you can unmount it
 	// later. Your vfs_mount struct is good for this.
 	struct vfs_mount* new_mount =
@@ -910,6 +952,7 @@ int vfs_mount(const char* source,
 	new_mount->flags = flags;
 	register_mount(new_mount);
 
+	dput(mount_point_dentry);
 	log_info("Mounted %s on %s type %s", source, target, fstype);
 	return VFS_OK; // Success!
 }
@@ -1056,16 +1099,20 @@ struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path)
 	const char* token;
 	size_t len = 0;
 	struct path_tokenizer tok = { .path = path };
-	struct vfs_dentry* parent = root;
+	struct vfs_dentry* parent = dget(root);
 
 	while ((token = path_next_token(&tok, &len))) {
 		char token_buf[len + 1];
 		memcpy(token_buf, token, len);
 		token_buf[len] = '\0';
-		parent = dentry_lookup(parent, token_buf);
-		if (!parent) {
+
+		struct vfs_dentry* child = dentry_lookup(parent, token_buf);
+		// parent = dentry_lookup(parent, token_buf);
+		dput(parent);
+		if (!child) {
 			return nullptr;
 		}
+		parent = child;
 	}
 
 	return parent;
@@ -1086,6 +1133,7 @@ struct vfs_dentry* dentry_alloc(struct vfs_dentry* parent, const char* name)
 	dentry->parent = parent;
 
 	dentry->inode = nullptr;
+	// TODO: Do we start at 1 or 0?
 	dentry->ref_count = 1;
 	dentry->flags = 0; // The caller can set flags like DENTRY_DIR later
 
@@ -1114,10 +1162,6 @@ void dentry_dealloc(struct vfs_dentry* d)
 
 	if (d->name) {
 		kfree(d->name);
-	}
-
-	if (d->inode) {
-		d->inode->nlink--;
 	}
 
 	slab_free(&dentry_cache, d);

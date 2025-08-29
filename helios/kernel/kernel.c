@@ -21,6 +21,7 @@
 #include <arch/mmu/vmm.h>
 #include <drivers/ata/controller.h>
 #include <drivers/console.h>
+#include <drivers/fs/tarfs.h>
 #include <drivers/fs/vfs.h>
 #include <drivers/pci/pci.h>
 #include <drivers/serial.h>
@@ -91,6 +92,8 @@ void kernel_console_init()
 						     g_kernel_console);
 		}
 		set_log_mode(LOG_BUFFERED);
+	} else {
+		log_error("Could not find /dev/console for kernel console!");
 	}
 }
 
@@ -116,9 +119,26 @@ void kernel_main()
 	log_info("Initializing VFS and mounting root ramfs");
 	vfs_init();
 
+	log_info("Mounting initial root filesystem");
+	unpack_tarfs(mod_request.response->modules[2]->address);
+
+	int fd = vfs_open("/", O_RDONLY);
+	struct vfs_file* f = get_file(fd);
+	// GDB BREAKPOINT
+	vfs_dump_child(f->dentry);
+
+	// goto loop;
+
 	log_info("Mounting /dev");
 	vfs_mkdir("/dev", VFS_PERM_ALL);
-	vfs_mount(nullptr, "/dev", "devfs", 0);
+	int res = vfs_mount(nullptr, "/dev", "devfs", 0);
+	if (res < 0) {
+		log_error("Could not mount /dev: %d", res);
+		panic("Could not mount /dev");
+	}
+
+	vfs_dump_child(f->dentry);
+	vfs_close(fd);
 
 	tty_init();
 
@@ -147,7 +167,7 @@ void kernel_main()
 	console_flush();
 	outword(0x604, 0x2000);
 #endif
-	// This thread will now become the cleanup task
+loop:
 	log_info("Entering idle loop");
 	for (;;) {
 		halt();

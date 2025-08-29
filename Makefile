@@ -75,13 +75,23 @@ headers:
 todolist:
 	-@grep --color=auto 'TODO.*' -rno $(PROJDIRS)
 
+INITRAMFS_DIR := $(CURDIR)/isodir/boot
+INITRAMFS_TAR := $(INITRAMFS_DIR)/initramfs.tar
+
+initramfs: all
+	@echo "Creating initramfs..."
+	@mkdir -p $(INITRAMFS_DIR)
+# Create a tar archive from the contents of sysroot
+	tar -v --transform 's,^\./,/,' -cf $(INITRAMFS_TAR) -C $(SYSROOT) .
+
+
 limine/limine:
 	# Download the latest Limine binary release for the 9.x branch.
 	if ! [ -d "limine" ]; then git clone https://github.com/limine-bootloader/limine.git --branch=v9.x-binary --depth=1; fi
 	# Build "limine" utility.
 	make -C limine
 
-iso: limine/limine all
+iso: limine/limine initramfs
 	@mkdir -p isodir/boot/limine isodir/EFI/BOOT
 	@cp sysroot/* isodir/ -r
 	# @cp sysroot/boot/$(OSNAME).kernel isodir/boot/

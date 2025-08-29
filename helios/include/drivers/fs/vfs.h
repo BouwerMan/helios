@@ -285,6 +285,7 @@ void dput(struct vfs_dentry* dentry);
 void dentry_add(struct vfs_dentry* dentry);
 struct vfs_dentry* dentry_alloc(struct vfs_dentry* parent, const char* name);
 void dentry_dealloc(struct vfs_dentry* d);
+void register_child(struct vfs_dentry* parent, struct vfs_dentry* child);
 
 // --- Inode Management ---
 struct vfs_inode* new_inode(struct vfs_superblock* sb, size_t id);

@@ -929,7 +929,7 @@ static void page_fault_fail(struct registers* r)
 	log_error("=== PAGE FAULT ===");
 
 	struct task* task = get_current_task();
-	log_error("Faulting task: %s", task->name);
+	log_error("Faulting task: '%s' (PID: %d)", task->name, task->pid);
 
 	address_space_dump(task->vas);
 

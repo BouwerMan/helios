@@ -242,6 +242,7 @@ int ramfs_mkdir(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode)
 	sync_to_info(node);
 
 	add_child_to_list(RAMFS_DENTRY(parent), RAMFS_DENTRY(dentry));
+	register_child(parent, dentry);
 
 	dentry->inode = node;
 	dentry->flags = DENTRY_DIR;
@@ -339,7 +340,7 @@ struct vfs_dentry* ramfs_lookup(struct vfs_inode* dir_inode,
 		child->inode->fs_data = found->inode_info;
 		sync_to_inode(child->inode);
 		dentry_add(child);
-		return dget(child);
+		return child;
 	}
 
 	// TODO: Should always return a dentry, just negative if doesn't exist
@@ -394,6 +395,7 @@ int ramfs_create(struct vfs_inode* dir,
 	dentry->fs_data = rdent;
 
 	add_child_to_list(RAMFS_DENTRY(dentry->parent), RAMFS_DENTRY(dentry));
+	register_child(dentry->parent, dentry);
 
 	log_debug("Created file '%s' (inode %zu)", dentry->name, inode->id);
 	log_debug(

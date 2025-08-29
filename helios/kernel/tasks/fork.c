@@ -13,7 +13,6 @@
  */
 pid_t do_fork(struct registers* regs)
 {
-	// GDB BREAKPOINT
 	disable_preemption();
 
 	struct task* parent = get_current_task();

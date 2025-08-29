@@ -134,7 +134,7 @@ struct vfs_dentry* devfs_lookup(struct vfs_inode* dir_inode,
 
 	child->inode = inode;
 	dentry_add(child);
-	return dget(child);
+	return child;
 }
 
 /**
