@@ -328,8 +328,10 @@ int launch_init()
 	task->type = USER_TASK;
 	vas_set_pml4(task->vas, (pgd_t*)vmm_create_address_space());
 
+	// int fd = vfs_open("/usr/bin/init.elf",O_RDONLY);
 	struct limine_module_response* mod = mod_request.response;
 
+	// exec(task, "/usr/bin/init.elf");
 	int res = load_elf(task, mod->modules[0]->address);
 	if (res < 0) {
 		kthread_destroy(task);

@@ -836,6 +836,10 @@ static void log_page_table_walk(u64* pml4, uptr vaddr)
 	}
 }
 
+static bool check_demand_paging(struct registers* r)
+{
+}
+
 static void page_fault(struct registers* r)
 {
 	uint64_t fault_addr;
@@ -849,6 +853,7 @@ static void page_fault(struct registers* r)
 	if (!is_write_fault || !is_present_fault) {
 		// This is not a CoW fault. It might be a real error (like a segfault)
 		// or something else like demand paging. For now, we'll treat it as a failure.
+		// check_demand_paging(r);
 		goto fail;
 	}
 

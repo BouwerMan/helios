@@ -19,9 +19,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "kernel/errno.h"
 #include <arch/gdt/gdt.h>
 #include <arch/mmu/vmm.h>
 #include <arch/regs.h>
+#include <drivers/fs/vfs.h>
 #include <kernel/exec.h>
 #include <kernel/panic.h>
 #include <lib/string.h>
@@ -67,6 +69,22 @@ static int setup_user_stack(struct task* task,
 /*******************************************************************************
 * Public Function Definitions
 *******************************************************************************/
+
+int exec(struct task* task, const char* path)
+{
+	struct vfs_dentry* dentry = vfs_lookup(path);
+	if (!dentry || !dentry->inode) {
+		log_error("execve: Could not find file at path: %s", path);
+		dput(dentry);
+		return -ENOENT;
+	}
+	struct vfs_inode* inode = dentry->inode;
+
+	log_info("Loading binary at path: %s", path);
+	log_debug("inode f_size: %lu", inode->f_size);
+
+	return 0;
+}
 
 int load_elf(struct task* task, struct elf_file_header* header)
 {

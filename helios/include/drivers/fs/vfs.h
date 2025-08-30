@@ -5,6 +5,8 @@
 #include <drivers/ata/partition.h>
 #include <kernel/semaphores.h>
 #include <kernel/types.h>
+#include <lib/hashtable.h>
+#include <mm/page.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -160,6 +162,20 @@ struct vfs_mount {
 	struct list_head* list;	   // Linked list of active mounts
 };
 
+static constexpr size_t INODE_MAPPING_PG_CACHE_BITS = 8;
+
+struct inode_mapping {
+	struct vfs_inode* owner;
+	struct inode_mapping_ops* ops;
+	// Put page cache here
+	DECLARE_HASHTABLE(page_cache, INODE_MAPPING_PG_CACHE_BITS);
+};
+
+struct inode_mapping_ops {
+	int (*readpage)(struct vfs_inode* inode, struct page* page);
+	int (*writepage)(struct vfs_inode* inode, struct page* page);
+};
+
 // TODO: Add timestamp stuff
 struct vfs_inode {
 	size_t id;
@@ -169,6 +185,7 @@ struct vfs_inode {
 	uint16_t permissions;
 	uint8_t flags;
 	semaphore_t lock;
+	struct inode_mapping* mapping;
 	struct inode_ops* ops; // What can you DO with this inode?
 	struct file_ops* fops; // Default file ops
 

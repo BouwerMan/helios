@@ -317,6 +317,21 @@ ssize_t ramfs_read(struct vfs_file* file, char* buffer, size_t count)
 	return (ssize_t)to_read;
 }
 
+int readpage(struct vfs_inode* inode, struct page* page)
+{
+	if (!inode || !page) {
+		return -VFS_ERR_INVAL;
+	}
+
+	vaddr_t vaddr = PHYS_TO_HHDM(page_to_phys(page));
+	struct ramfs_file* rf = RAMFS_INODE_INFO(inode)->file;
+	pfn_t pfn = page_to_pfn(page);
+
+	size_t offset = pfn * PAGE_SIZE;
+
+	return VFS_OK;
+}
+
 ssize_t ramfs_write(struct vfs_file* file, const char* buffer, size_t count)
 {
 	struct ramfs_file* rf = file->private_data;

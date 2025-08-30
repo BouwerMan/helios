@@ -92,3 +92,4 @@ struct elf_program_header {
 } __attribute__((packed));
 
 int load_elf(struct task* task, struct elf_file_header* header);
+int exec(struct task* task, const char* path);

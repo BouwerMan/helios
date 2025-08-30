@@ -15,8 +15,11 @@ static constexpr uintptr_t HHDM_OFFSET = 0xffff800000000000UL;
 
 static constexpr flags_t PG_RESERVED = (1UL << 0);
 static constexpr flags_t PG_BUDDY = (1UL << 1);
+static constexpr flags_t PG_UPTODATE = (1UL << 2);
+static constexpr flags_t PG_DIRTY = (1UL << 3);
 
 typedef size_t pfn_t;
+typedef unsigned long pgoff_t;
 
 extern struct page* mem_map;
 extern pfn_t max_pfn;
@@ -34,14 +37,21 @@ struct page {
 	struct list_head list;
 	atomic_t ref_count;  // Reference count for the page
 	unsigned long flags; // Flags for the page (e.g., dirty, accessed)
+	spinlock_t lock;
 
 	union {
 		unsigned long private;
 
-		// Buddy allocator stuff
+		/* Buddy allocator stuff */
 		struct {
 			uint8_t order;
 			uint8_t state;
+		};
+
+		/* File mapping */
+		struct {
+			struct inode_mapping* mapping;
+			pgoff_t index;
 		};
 	};
 };
