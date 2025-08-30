@@ -354,3 +354,4 @@ int vfs_get_next_id();
 int vfs_get_id();
 
 void test_tokenizer();
+int test_split_path();

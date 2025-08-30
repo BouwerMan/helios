@@ -244,7 +244,6 @@ void sys_exec(struct registers* r)
 	// TODO: Make sure there are no page table leaks here
 	free_page(old_pml4);
 
-	// GDB BREAKPOINT
 	int res = load_elf(task, module->address);
 	if (res < 0) {
 		enable_preemption();

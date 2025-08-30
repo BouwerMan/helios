@@ -19,10 +19,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#undef LOG_LEVEL
+#define LOG_LEVEL 1
+#define FORCE_LOG_REDEF
+#include <lib/log.h>
+#undef FORCE_LOG_REDEF
+
 #include <drivers/fs/ramfs.h>
 #include <drivers/fs/vfs.h>
 #include <lib/hashtable.h>
-#include <lib/log.h>
 #include <lib/string.h>
 #include <mm/kmalloc.h>
 #include <mm/page.h>

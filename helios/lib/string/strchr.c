@@ -3,9 +3,6 @@
 /**
  * @brief Locates the first occurrence of a character in a string.
  *
- * Historically the character argument was of type int, but I'm not like K&C I'm
- * significantly worse so I get to use char.
- *
  * @param   str         The null-terminated string to search.
  * @param   character   The character to find.
  *
@@ -41,4 +38,32 @@ char* strrchr(const char* s, int c)
 	} while (*s++);
 
 	return (char*)last;
+}
+
+/**
+ * strrnechr - Find the last character in a string that is not equal to c
+ * 
+ * @param s    String to search (must not be NULL)
+ * @param c    Character to avoid (cast to char internally)
+ * @return     Pointer to last non-matching character, or NULL if not found
+ * 
+ * @note       Excludes null terminator from search
+ * @example    strrnechr("hello", 'l') returns pointer to 'o'
+ */
+char* strrnechr(const char* s, int c)
+{
+	if (!s) return nullptr;
+
+	char ch = (char)c;
+	const char* end = s + strlen(s);
+
+	// Work backwards from the end (excluding null terminator)
+	while (end > s) {
+		--end;
+		if (*end != ch) {
+			return (char*)end;
+		}
+	}
+
+	return nullptr;
 }

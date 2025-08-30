@@ -101,6 +101,19 @@ static inline u32 inode_key(const struct vfs_superblock* sb, const size_t id)
 	return (u32)((uptr)sb ^ id);
 }
 
+/**
+ * @brief Splits a filesystem path into parent directory and basename.
+ *
+ * @param path       Input path string (must be non-NULL).
+ * @param parent_out On success, allocated buffer containing parent path.
+ * @param name_out   On success, allocated buffer containing basename.
+ *
+ * @return VFS_OK on success, negative VFS_ERR_* on error.
+ *
+ * @note Both @p parent_out and @p name_out must be freed with kfree() by the caller.
+ */
+static int split_path(const char* path, char** parent_out, char** name_out);
+
 /*******************************************************************************
  * Public Function Definitions
  *******************************************************************************/
@@ -862,30 +875,22 @@ int vfs_create(const char* path,
 		return arg_check;
 	}
 
-	// Split path into parent + basename
-	char* path_copy = strdup(path);
-	trim_trailing(path_copy, '/');
-	char* name = strrchr(path_copy, '/');
+	char* parent;
+	char* name;
+	int res = split_path(path, &parent, &name);
 
-	if (!name || !*(name + 1)) {
-		kfree(path_copy);
-		return -VFS_ERR_INVAL;
+	if (res < 0 || !parent || !name) {
+		if (parent) kfree(parent);
+		if (name) kfree(name);
+		return res;
 	}
-
-	// Split into parent and name
-	*name = '\0';
-	name++; // Now, name points to the last component
-
-	// Determine parent string
-	const char* parent = (path_copy[0] == '\0') ? "/" : path_copy;
-
-	log_debug("Path: %s, p: %s, name: %s", path, parent, name);
 
 	struct vfs_dentry* pdentry = vfs_lookup(parent);
 	if (!pdentry || !pdentry->inode ||
 	    !(pdentry->inode->filetype == FILETYPE_DIR)) {
 		dput(pdentry);
-		kfree(path_copy);
+		kfree(parent);
+		kfree(name);
 		return -VFS_ERR_NOTDIR;
 	}
 
@@ -893,39 +898,46 @@ int vfs_create(const char* path,
 	struct vfs_dentry* child = dentry_lookup(pdentry, name);
 
 	if (child && child->inode) {
+		log_debug("child: %p, name: %p", child->name, name);
 		if (flags & O_EXCL) {
 			dput(child);
-			kfree(path_copy);
+			kfree(parent);
+			kfree(name);
 			return -VFS_ERR_EXIST;
 		}
 		// File exists but not O_EXCL — treat as success?
 		*out_dentry = child;
 		dput(pdentry);
-		kfree(path_copy);
+		kfree(parent);
+		kfree(name);
 		return VFS_OK;
 	}
 
 	child = dentry_alloc(pdentry, name);
+	log_debug("child: %p, name: %p", child->name, name);
 	if (!child) {
 		dput(pdentry);
-		kfree(path_copy);
+		kfree(parent);
+		kfree(name);
 		return -VFS_ERR_NOMEM;
 	}
 
 	if (!pdentry->inode->ops || !pdentry->inode->ops->create) {
 		dentry_dealloc(child);
 		dput(pdentry);
-		kfree(path_copy);
+		kfree(parent);
+		kfree(name);
 		return -VFS_ERR_NODEV;
 	}
 
-	int res = pdentry->inode->ops->create(pdentry->inode,
-					      child,
-					      mode); // or default mode
+	res = pdentry->inode->ops->create(pdentry->inode,
+					  child,
+					  mode); // or default mode
 	if (res < 0) {
 		dentry_dealloc(child);
 		dput(pdentry);
-		kfree(path_copy);
+		kfree(parent);
+		kfree(name);
 		return res;
 	}
 	dentry_add(child); // Now track the new dentry in the hashtable
@@ -933,6 +945,8 @@ int vfs_create(const char* path,
 
 	*out_dentry = child;
 
+	kfree(parent);
+	kfree(name);
 	return VFS_OK;
 }
 
@@ -946,27 +960,38 @@ int vfs_mkdir(const char* path, uint16_t mode)
 		return -VFS_ERR_EXIST;
 	}
 
-	char* buf = strdup(path);
-	trim_trailing(buf, '/');
-	char* name = strrchr(buf, '/');
+	char* parent;
+	char* name;
+	int res = split_path(path, &parent, &name);
 
-	if (!name || !*(name + 1)) {
-		kfree(buf);
-		return -VFS_ERR_INVAL;
+	if (res < 0 || !parent || !name) {
+		if (parent) kfree(parent);
+		if (name) kfree(name);
+		return res;
 	}
 
-	// Split into parent and name
-	*name = '\0';
-	name++; // Now, name points to the last component
-
-	// Determine parent string
-	const char* parent = (buf[0] == '\0') ? "/" : buf;
-
-	log_debug("Path: %s, p: %s, name: %s", path, parent, name);
+	// char* buf = strdup(path);
+	// trim_trailing(buf, '/');
+	// char* name = strrchr(buf, '/');
+	//
+	// if (!name || !*(name + 1)) {
+	// 	kfree(buf);
+	// 	return -VFS_ERR_INVAL;
+	// }
+	//
+	// // Split into parent and name
+	// *name = '\0';
+	// name++; // Now, name points to the last component
+	//
+	// // Determine parent string
+	// const char* parent = (buf[0] == '\0') ? "/" : buf;
+	//
+	// log_debug("Path: %s, p: %s, name: %s", path, parent, name);
 
 	struct vfs_dentry* pdentry = vfs_lookup(parent);
 	if (!pdentry) {
-		kfree(buf);
+		kfree(parent);
+		kfree(name);
 		return -VFS_ERR_NOENT;
 	}
 
@@ -975,35 +1000,40 @@ int vfs_mkdir(const char* path, uint16_t mode)
 	// Optionally, check for existing child with the same name
 	if (vfs_does_name_exist(pdentry, name)) {
 		dput(pdentry);
-		kfree(buf);
+		kfree(parent);
+		kfree(name);
 		return -VFS_ERR_EXIST;
 	}
 
 	struct vfs_dentry* child = dentry_alloc(pdentry, name);
 	if (!child) {
 		dput(pdentry);
-		kfree(buf);
+		kfree(parent);
+		kfree(name);
 		return -VFS_ERR_NOMEM;
 	}
 
 	if (!pinode->ops || !pinode->ops->mkdir) {
 		dput(pdentry);
-		kfree(buf);
+		kfree(parent);
+		kfree(name);
 		return -VFS_ERR_NODEV;
 	}
 
-	int res = pinode->ops->mkdir(pinode, child, mode);
+	res = pinode->ops->mkdir(pinode, child, mode);
 	if (res < 0) {
 		dput(pdentry);
 		dentry_dealloc(child);
-		kfree(buf);
+		kfree(parent);
+		kfree(name);
 		return res;
 	}
 
 	dentry_add(child);
 	dput(pdentry);
 
-	kfree(buf);
+	kfree(parent);
+	kfree(name);
 	return VFS_OK;
 }
 
@@ -1291,7 +1321,6 @@ struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path)
 		token_buf[len] = '\0';
 
 		struct vfs_dentry* child = dentry_lookup(parent, token_buf);
-		// parent = dentry_lookup(parent, token_buf);
 		dput(parent);
 		if (!child) {
 			return nullptr;
@@ -1304,7 +1333,6 @@ struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path)
 
 struct vfs_dentry* dentry_alloc(struct vfs_dentry* parent, const char* name)
 {
-	// Basic allocation
 	struct vfs_dentry* dentry = slab_alloc(&dentry_cache);
 	if (!dentry) return nullptr;
 
@@ -1317,7 +1345,6 @@ struct vfs_dentry* dentry_alloc(struct vfs_dentry* parent, const char* name)
 	dentry->parent = parent;
 
 	dentry->inode = nullptr;
-	// TODO: Do we start at 1 or 0?
 	dentry->ref_count = 1;
 	dentry->flags = 0; // The caller can set flags like DENTRY_DIR later
 
@@ -1373,9 +1400,378 @@ void test_tokenizer()
 	log_info(TESTING_FOOTER, "Path Tokenizer");
 }
 
+/* Self-test for parse_path_components().
+ * Returns number of failed checks; 0 means all tests passed.
+ * Assumes:
+ *   - VFS_OK == 0
+ *   - Negative error codes like -VFS_ERR_INVAL, -VFS_ERR_NAMETOOLONG
+ *   - VFS_MAX_NAME defined (e.g., 255)
+ *   - log_info/log_error available
+ *   - kfree available (to free outputs on success cases)
+ *
+ *   I'll be honest this shit is ChatGPT
+ */
+int test_split_path()
+{
+	size_t fails = 0;
+	size_t tests = 0;
+
+	struct test_case {
+		const char* path;
+		int exp_rc;
+		const char* exp_parent; /* nullptr means expect error */
+		const char* exp_name;	/* nullptr means expect error */
+	};
+
+	/* Core success and error cases. */
+	static const struct test_case cases[] = {
+		/* --- Success cases --- */
+		{ "/a/b/c",
+		  VFS_OK,
+		  "/",
+		  "c" }, /* parent will be "/a/b" (verified below) */
+		{ "/a/b//c///", VFS_OK, "/a/b", "c" },
+		{ "a/b/c", VFS_OK, "a/b", "c" },
+		{ "a////b", VFS_OK, "a", "b" },
+		{ "/c", VFS_OK, "/", "c" },
+		{ "c", VFS_OK, ".", "c" },
+		{ "./a", VFS_OK, ".", "a" },
+		{ "//a", VFS_OK, "/", "a" },
+		{ "a/../b", VFS_OK, "a/..", "b" },
+		{ "/.hidden", VFS_OK, "/", ".hidden" },
+
+		/* --- Error cases --- */
+		{ "", -VFS_ERR_INVAL, nullptr, nullptr },
+		{ "/", -VFS_ERR_INVAL, nullptr, nullptr },
+		{ "////", -VFS_ERR_INVAL, nullptr, nullptr },
+		{ "a/.", -VFS_ERR_INVAL, nullptr, nullptr },
+		{ "a/..", -VFS_ERR_INVAL, nullptr, nullptr },
+
+		/* Additional edge-y successes */
+		{ "a//", VFS_OK, ".", "a" },
+		{ "///a///", VFS_OK, "/", "a" },
+	};
+
+	log_info(TESTING_HEADER, "Path Splitter");
+
+	/* Run the table-driven tests. */
+	for (size_t t = 0; t < sizeof(cases) / sizeof(cases[0]); ++t) {
+		const struct test_case* tc = &cases[t];
+		char* parent =
+			(char*)0x1; /* sentinel non-nullptr so we can verify error paths null them */
+		char* name = (char*)0x1;
+
+		int rc = split_path(tc->path, &parent, &name);
+		++tests;
+
+		if (tc->exp_rc == VFS_OK) {
+			if (rc != VFS_OK) {
+				log_error(
+					"[T%zu] expected VFS_OK, got %d for path='%s'",
+					t,
+					rc,
+					tc->path);
+				++fails;
+			}
+			if (!parent || !name) {
+				log_error(
+					"[T%zu] outputs are nullptr on success for path='%s'",
+					t,
+					tc->path);
+				++fails;
+			} else {
+				/* Parent can be more than just "/" or "."; check exact string expectations. */
+				if (strcmp(tc->exp_parent, "/") == 0 &&
+				    strcmp(tc->path, "/a/b/c") == 0) {
+					/* Special verify for the first test: parent should be "/a/b". */
+					if (strcmp(parent, "/a/b") != 0) {
+						log_error(
+							"[T%zu] parent mismatch path='%s' got='%s' want='/a/b'",
+							t,
+							tc->path,
+							parent);
+						++fails;
+					}
+				} else {
+					if (strcmp(parent, tc->exp_parent) !=
+					    0) {
+						log_error(
+							"[T%zu] parent mismatch path='%s' got='%s' want='%s'",
+							t,
+							tc->path,
+							parent,
+							tc->exp_parent);
+						++fails;
+					}
+				}
+				if (strcmp(name, tc->exp_name) != 0) {
+					log_error(
+						"[T%zu] name mismatch path='%s' got='%s' want='%s'",
+						t,
+						tc->path,
+						name,
+						tc->exp_name);
+					++fails;
+				}
+			}
+			/* Always free on success to avoid leaks even if a check failed. */
+			if (parent) kfree(parent);
+			if (name) kfree(name);
+		} else {
+			/* Expect an error. */
+			if (rc != tc->exp_rc) {
+				log_error(
+					"[T%zu] expected rc=%d, got %d for path='%s'",
+					t,
+					tc->exp_rc,
+					rc,
+					tc->path);
+				++fails;
+			}
+			if (parent != nullptr || name != nullptr) {
+				log_error(
+					"[T%zu] outputs must be nullptr on error for path='%s' (parent=%p, name=%p)",
+					t,
+					tc->path,
+					(void*)parent,
+					(void*)name);
+				++fails;
+				/* Defensive: avoid freeing sentinels. */
+				if (parent && parent != (char*)0x1)
+					kfree(parent);
+				if (name && name != (char*)0x1) kfree(name);
+			}
+		}
+	}
+
+	/* ---- Length boundary tests for VFS_MAX_NAME ---- */
+
+	/* Too-long name: "x/" + (VFS_MAX_NAME+1) of 'a' -> -VFS_ERR_NAMETOOLONG */
+	{
+		const size_t too_long = VFS_MAX_NAME + 1;
+		char buf[VFS_MAX_NAME + 4 +
+			 8]; /* "x/" + name + NUL; a little slack */
+		char* p = buf;
+
+		*p++ = 'x';
+		*p++ = '/';
+		for (size_t i = 0; i < too_long; ++i)
+			*p++ = 'a';
+		*p = '\0';
+
+		char* parent = (char*)0x1;
+		char* name = (char*)0x1;
+		int rc = split_path(buf, &parent, &name);
+		++tests;
+		if (rc != -VFS_ERR_NAMETOOLONG) {
+			log_error(
+				"[LEN1] expected -VFS_ERR_NAMETOOLONG, got %d for path of len=%zu",
+				rc,
+				strlen(buf));
+			++fails;
+		}
+		if (parent != nullptr || name != nullptr) {
+			log_error(
+				"[LEN1] outputs must be nullptr on error (parent=%p, name=%p)",
+				(void*)parent,
+				(void*)name);
+			++fails;
+			if (parent && parent != (char*)0x1) kfree(parent);
+			if (name && name != (char*)0x1) kfree(name);
+		}
+	}
+
+	/* Exactly-at-limit name: "x/" + (VFS_MAX_NAME) of 'a' -> success, name length == VFS_MAX_NAME */
+	{
+		const size_t exact = VFS_MAX_NAME;
+		char buf[VFS_MAX_NAME + 4 + 8];
+		char* p = buf;
+
+		*p++ = 'x';
+		*p++ = '/';
+		for (size_t i = 0; i < exact; ++i)
+			*p++ = 'a';
+		*p = '\0';
+
+		char* parent = nullptr;
+		char* name = nullptr;
+		int rc = split_path(buf, &parent, &name);
+		++tests;
+
+		if (rc != VFS_OK) {
+			log_error("[LEN2] expected VFS_OK, got %d", rc);
+			++fails;
+		} else {
+			if (!parent || !name) {
+				log_error(
+					"[LEN2] outputs are nullptr on success");
+				++fails;
+			} else {
+				if (strcmp(parent, "x") != 0) {
+					log_error(
+						"[LEN2] parent mismatch got='%s' want='x'",
+						parent);
+					++fails;
+				}
+				size_t nlen = strlen(name);
+				if (nlen != VFS_MAX_NAME) {
+					log_error(
+						"[LEN2] name length mismatch got=%zu want=%zu",
+						nlen,
+						(size_t)VFS_MAX_NAME);
+					++fails;
+				}
+			}
+		}
+		if (parent) kfree(parent);
+		if (name) kfree(name);
+	}
+
+	log_info("parse_path_components: %zu/%zu tests passed",
+		 tests - fails,
+		 tests);
+
+	kassert(fails == 0 && "Some tests failed!");
+
+	log_info(TESTING_FOOTER, "Path Splitter");
+
+	return (int)fails;
+}
+
 /*******************************************************************************
  * Private Function Definitions
  *******************************************************************************/
+
+/**
+ * @brief Parse a filesystem path into parent directory and basename components.
+ *
+ * This function takes a canonical filesystem path and splits it into two parts:
+ * - The *parent path* (e.g., `/usr/bin` from `/usr/bin/ls`)
+ * - The *basename* (e.g., `ls` from `/usr/bin/ls`)
+ *
+ * Contract and Policy
+ * - @p path must be a valid, null-terminated string.
+ * - Trailing slashes are ignored (`/usr/bin/` → parent=`/usr`, name=`bin`).
+ * - Multiple adjacent slashes are treated as a single separator.
+ * - A root-only path (`/`) or all-slash input (`///`) is invalid.
+ * - `.` and `..` are not valid basenames and will return `-VFS_ERR_INVAL`.
+ * - The basename length must not exceed `VFS_MAX_NAME`, otherwise
+ *   `-VFS_ERR_NAMETOOLONG` is returned.
+ * - On success, both `parent_out` and `name_out` are allocated with `kzalloc`.
+ *   The caller owns these buffers and must free them with `kfree()`.
+ * - On allocation failure, both outputs are set to `nullptr` and
+ *   `-VFS_ERR_NOMEM` is returned.
+ * - On any failure, both `*parent_out` and `*name_out` are set to `nullptr`
+ *   to ensure predictable cleanup behavior.
+ *
+ * Examples
+ * | Input path       | parent_out | name_out | Return         |
+ * |------------------|------------|----------|----------------|
+ * | "/usr/bin/ls"    | "/usr/bin" | "ls"     | VFS_OK         |
+ * | "foo/bar/"       | "foo"      | "bar"    | VFS_OK         |
+ * | "/"              | nullptr    | nullptr  | -VFS_ERR_INVAL |
+ * | "/.."            | nullptr    | nullptr  | -VFS_ERR_INVAL |
+ * | "////"           | nullptr    | nullptr  | -VFS_ERR_INVAL |
+ *
+ * @param path       Input path string.
+ * @param parent_out Pointer to receive allocated parent string.
+ * @param name_out   Pointer to receive allocated basename string.
+ *
+ * @return VFS_OK on success, or a negative VFS_ERR_* code on error.
+ */
+static int split_path(const char* path, char** parent_out, char** name_out)
+{
+	if (!path || !parent_out || !name_out) {
+		return -VFS_ERR_INVAL;
+	}
+
+	const char* parent_begin;
+	const char* name_begin;
+	size_t parent_len;
+	size_t name_len;
+	size_t name_last;
+
+	size_t path_len = strlen(path);
+	if (path_len == 0) {
+		*parent_out = *name_out = nullptr;
+		return -VFS_ERR_INVAL;
+	}
+
+	ssize_t scan = (ssize_t)path_len - 1;
+
+	// After this loop, scan points to last non-'/' character,
+	// or is < 0 if there is only slashes
+	while (scan >= 0 && path[scan] == '/') {
+		scan--;
+	}
+
+	if (scan < 0) {
+		log_error("All slashes: '%s'", path);
+		*parent_out = *name_out = nullptr;
+		return -VFS_ERR_INVAL;
+	}
+
+	name_last = (size_t)scan;
+
+	// After this loop, scan points to the slash immediately before the basename,
+	// or -1 if there is no parent slice.
+	while (scan >= 0 && path[scan] != '/') {
+		scan--;
+	}
+
+	name_len = name_last - (size_t)scan;
+	name_begin = &path[scan + 1];
+
+	if (name_len > VFS_MAX_NAME) {
+		log_error("Name too long: '%s'", name_begin);
+		*parent_out = *name_out = nullptr;
+		return -VFS_ERR_NAMETOOLONG;
+	}
+
+	// After this loop, scan points to final char of parent,
+	// or -1 if there is no parent slice
+	while (scan >= 0 && path[scan] == '/') {
+		scan--;
+	}
+
+	if (scan < 0) {
+		// parent is either '/' or '.'
+		parent_begin = path[0] == '/' ? "/" : ".";
+		parent_len = 1;
+	} else {
+		// Parent is valid
+		parent_begin = path;
+		parent_len = (size_t)scan + 1;
+	}
+
+	// Name being "." or ".." is usually invalid (especially for creation)
+	if (name_begin[0] == '.' &&
+	    (name_begin[1] == '.' || name_begin[1] == '\0')) {
+		log_error("Invalid basename: '%s'", name_begin);
+		*parent_out = *name_out = nullptr;
+		return -VFS_ERR_INVAL;
+	}
+
+	*parent_out = kzalloc(parent_len + 1);
+	*name_out = kzalloc(name_len + 1);
+	if (!*parent_out || !*name_out) {
+		log_error("Could not allocate buffer");
+		if (*parent_out) {
+			kfree(*parent_out);
+			*parent_out = nullptr;
+		}
+		if (*name_out) {
+			kfree(*name_out);
+			*name_out = nullptr;
+		}
+		return -VFS_ERR_NOMEM;
+	}
+
+	memcpy(*parent_out, parent_begin, parent_len);
+	memcpy(*name_out, name_begin, name_len);
+
+	return VFS_OK;
+}
 
 static struct vfs_fs_type* find_filesystem(const char* fs_type)
 {

@@ -117,6 +117,8 @@ void kernel_main()
 	log_info("Initializing VFS and mounting root ramfs");
 	vfs_init();
 
+	test_split_path();
+
 	log_info("Mounting initial root filesystem");
 	unpack_tarfs(mod_request.response->modules[2]->address);
 
@@ -132,6 +134,21 @@ void kernel_main()
 	if (res < 0) {
 		log_error("Could not mount /dev: %d", res);
 		panic("Could not mount /dev");
+	}
+
+	log_info("Opening directory for reading");
+	int fd2 = vfs_open("/usr/include/", O_RDONLY);
+	struct vfs_file* f2 = get_file(fd2);
+	struct dirent* dirent = kzalloc(sizeof(struct dirent));
+	off_t offset = 0;
+	while (vfs_readdir(f2, dirent, offset++)) {
+		log_debug(
+			"Found entry: %s, d_ino: %lu, d_off: %lu, d_reclen: %d, d_type: %d",
+			dirent->d_name,
+			dirent->d_ino,
+			dirent->d_off,
+			dirent->d_reclen,
+			dirent->d_type);
 	}
 
 	// vfs_dump_child(f->dentry);
@@ -155,21 +172,6 @@ void kernel_main()
 	}
 
 	scheduler_dump();
-
-	log_info("Opening directory for reading");
-	int fd2 = vfs_open("/usr/include/", O_RDONLY);
-	struct vfs_file* f2 = get_file(fd2);
-	struct dirent* dirent = kzalloc(sizeof(struct dirent));
-	off_t offset = 0;
-	while (vfs_readdir(f2, dirent, offset++)) {
-		log_debug(
-			"Found entry: %s, d_ino: %lu, d_off: %lu, d_reclen: %d, d_type: %d",
-			dirent->d_name,
-			dirent->d_ino,
-			dirent->d_off,
-			dirent->d_reclen,
-			dirent->d_type);
-	}
 
 #if 0
 	log_warn("Shutting down in 1 second");

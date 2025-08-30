@@ -27,6 +27,7 @@ int strncmp(const char* s1, const char* s2, size_t n);
 [[gnu::pure]]
 char* strchr(const char* s, int c);
 char* strrchr(const char* s, int c);
+char* strrnechr(const char* s, int c);
 
 char* strtok(char* restrict s1, const char* restrict s2);
 
