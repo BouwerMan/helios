@@ -52,6 +52,7 @@ struct file_ops ramfs_fops = {
 	.read = ramfs_read,
 	.open = ramfs_open,
 	.close = ramfs_close,
+	.readdir = ramfs_readdir,
 };
 
 static struct sb_ops ramfs_sb_ops = {
@@ -93,6 +94,9 @@ static void sync_to_info(struct vfs_inode* inode);
  * Just allocates main inode and op pointers.
  */
 static struct vfs_inode* _alloc_inode_raw(struct vfs_superblock* sb);
+
+static struct vfs_dentry* find_child(struct vfs_dentry* parent,
+				     const char* name);
 
 /*******************************************************************************
  * Public Function Definitions
@@ -484,9 +488,50 @@ void ramfs_destroy_inode(struct vfs_inode* inode)
 	kfree(inode);
 }
 
+int ramfs_readdir(struct vfs_file* file, struct dirent* dirent, off_t offset)
+{
+	if (!file || !dirent || offset < 0) {
+		return -VFS_ERR_INVAL;
+	}
+
+	struct vfs_dentry* pdentry = file->dentry;
+
+	off_t current_off = 0;
+	struct vfs_dentry* child;
+	list_for_each_entry (child, &pdentry->children, siblings) {
+		if (child->inode == nullptr) {
+			continue;
+		}
+
+		if (current_off++ < offset) {
+			continue;
+		}
+
+		__fill_dirent(child, dirent);
+		dirent->d_off = current_off + 1;
+
+		return 1;
+	}
+
+	return 0;
+}
+
 /*******************************************************************************
  * Private Function Definitions
  *******************************************************************************/
+
+static struct vfs_dentry* find_child(struct vfs_dentry* parent,
+				     const char* name)
+{
+	struct vfs_dentry* child = nullptr;
+	list_for_each_entry (child, &parent->children, siblings) {
+		if (!strcmp(child->name, name)) {
+			return child;
+		}
+	}
+
+	return child;
+}
 
 static struct vfs_inode* get_root_inode(struct vfs_superblock* sb)
 {
@@ -612,6 +657,8 @@ static struct vfs_inode* _alloc_inode_raw(struct vfs_superblock* sb)
 
 	inode->ops = &ramfs_ops;
 	inode->fops = &ramfs_fops;
+
+	sem_init(&inode->lock, 1);
 
 	return inode;
 }

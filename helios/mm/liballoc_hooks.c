@@ -29,6 +29,7 @@ int liballoc_unlock()
 // Returns and allocs [pages] number of contiguous pages
 void* liballoc_alloc(size_t pages)
 {
+	log_debug("Allocating %zu pages", pages);
 	void* alloc = get_free_pages(AF_KERNEL, pages);
 	return alloc;
 }

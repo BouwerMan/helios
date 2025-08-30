@@ -285,6 +285,8 @@ struct vfs_inode* iget(struct vfs_superblock* sb, size_t id)
 	inode->id = id;
 	inode->ref_count = 1;
 
+	sem_init(&inode->lock, 1);
+
 	if (sb->sops->read_inode(inode) < 0) {
 		log_error("Failed to read inode %zu from superblock %p",
 			  id,
@@ -584,6 +586,157 @@ bool dentry_compare(const struct vfs_dentry* d1, const struct vfs_dentry* d2)
 {
 	return (strcmp(d1->name, d2->name) == 0) &&
 	       (d1->parent->inode->id == d2->parent->inode->id);
+}
+
+/**
+ * __fill_dirent - Populate a VFS dirent from a (stable) dentry
+ * @dentry: Dentry whose inode/name/type will be copied (must not be freed during the call)
+ * @dirent:        Output record to fill (caller-provided)
+ *
+ * Copies the inode number, type, record length policy, and name from @locked_dentry
+ * into @dirent. This helper does not set @dirent->d_off; the caller (typically
+ * the VFS readdir wrapper) is responsible for assigning the resume position.
+ *
+ * Type mapping:
+ *    Maps internal FILETYPE_* to DT_* (DT_UNKNOWN when the type cannot be determined).
+ *
+ * Name handling:
+ *    Copies up to NAME_MAX bytes and NUL-terminates. If the underlying name exceeds
+ *    NAME_MAX, the current behavior truncates; consider enforcing a strict policy
+ *    (reject/skip with a warning) to avoid silent truncation.
+ *
+ * Record length:
+ *    Sets d_reclen according to the in-kernel policy. My policy is currently a fixed-size
+ *    record, this will be sizeof(struct dirent). If I later adopt variable-length
+ *    records, compute header + strlen(name)+1 and align as needed.
+ *
+ * Return:
+ *    VFS_OK (0) on success; negative -VFS_ERR_* if I add stricter validation and
+ *    choose to signal oversize names or invalid inputs.
+ */
+int __fill_dirent(struct vfs_dentry* dentry, struct dirent* dirent)
+{
+	dirent->d_ino = dentry->inode->id;
+
+	switch (dentry->inode->filetype) {
+	case FILETYPE_DIR:
+		dirent->d_type = DT_DIR;
+		break;
+	case FILETYPE_FILE:
+		dirent->d_type = DT_REG;
+		break;
+	case FILETYPE_CHAR_DEV:
+		dirent->d_type = DT_CHR;
+		break;
+	default:
+		dirent->d_type = DT_UNKNOWN;
+	}
+	dirent->d_reclen = sizeof(struct dirent);
+
+	strncpy(dirent->d_name, dentry->name, 255);
+	dirent->d_name[255] = '\0';
+
+	return VFS_OK;
+}
+
+/**
+ * vfs_readdir - Iterate a directory one entry at a time (VFS view)
+ * @dir:    Opened directory file object (must reference a directory inode)
+ * @out:    Output dirent to fill
+ * @offset: Global position (a.k.a. "cookie"): 0=".", 1="..", >=2=children
+ *
+ * Semantics:
+ *    - Positions 0 and 1 are synthesized by the VFS for "." and ".." respectively.
+ *      For these, @out->d_off is set to the next global position (1 for ".",
+ *      2 for "..") and @dir->f_pos is updated to match.
+ *
+ *    - For positions >= 2, the VFS translates the global position to a filesystem
+ *      child index as: child_index = @offset - 2, and invokes the filesystem's
+ *      ->readdir() with that child_index. The filesystem returns one entry and
+ *      sets @out->d_off to the next child index (typically child_index+1 for
+ *      simple list-ordered directories). The VFS then converts this back to a global
+ *      position by adding 2:
+ *
+ *           out->d_off  = (filesystem_next_child_index) + 2;
+ *           dir->f_pos  = out->d_off;   // stateful "next" position
+ *
+ *    - This function always returns at most one entry per call.
+ *
+ * Returns:
+ *    @retval  1  One entry was emitted and @out is valid; @out->d_off is where to resume.
+ *    @retval  0  End of directory (no entry at @offset / no more children).
+ *    @retval <0  Negative -VFS_ERR_* on error (e.g., -VFS_ERR_INVAL, -VFS_ERR_NOTDIR,
+ *                -VFS_ERR_OPNOTSUPP).
+ *
+ * Locking & concurrency:
+ *    - Acquires the directory inode's read lock for the duration of the operation.
+ *      Filesystem mutations (create/unlink/rename) should take the write lock.
+ *    - Provides a best-effort snapshot: under concurrent mutations, an iterator may
+ *      skip or re-see entries but must never crash or return partially initialized data.
+ *
+ * Interaction with lseek/f_pos:
+ *    - @offset is a global position compatible with directory lseek: 0=".", 1="..",
+ *      >=2 children. Implementations should treat absurdly large @offset as EOF (0),
+ *      not an error.
+ *    - On a successful emission, @dir->f_pos is advanced to @out->d_off so a subsequent
+ *      "read next" can use @dir->f_pos as its starting point.
+ */
+int vfs_readdir(struct vfs_file* dir, struct dirent* out, long pos)
+{
+	if (pos == DIRENT_GET_NEXT) {
+		pos = dir->f_pos;
+	}
+
+	if (!dir || !out || pos < 0) {
+		return -VFS_ERR_INVAL;
+	}
+
+	if (dir->dentry->inode->filetype != FILETYPE_DIR) {
+		return -VFS_ERR_NOTDIR;
+	}
+
+	int ret_val = 1;
+	struct vfs_dentry* pdentry = dir->dentry;
+
+	sem_wait(&pdentry->inode->lock);
+
+	switch (pos) {
+	case 0: {
+		__fill_dirent(pdentry, out);
+		strncpy(out->d_name, ".", 255);
+		out->d_off = 1;
+		dir->f_pos = 1;
+		break;
+	}
+	case 1: {
+		struct vfs_dentry* ppdentry = pdentry->parent;
+		if (!ppdentry) {
+			ppdentry = pdentry; // Root dir case
+		}
+		__fill_dirent(ppdentry, out);
+		strncpy(out->d_name, "..", 255);
+		out->d_off = 2;
+		dir->f_pos = 2;
+		break;
+	}
+	default: {
+		int res = dir->fops->readdir(dir, out, pos - 2);
+		if (res <= 0) {
+			// Error or end of directory
+			ret_val = res;
+			goto ret;
+		}
+
+		// Set offset to next entry
+		out->d_off += 2;
+		dir->f_pos = out->d_off;
+		break;
+	}
+	}
+
+ret:
+	sem_signal(&pdentry->inode->lock);
+	return ret_val;
 }
 
 int __vfs_open_for_task(struct task* t, const char* path, int flags)

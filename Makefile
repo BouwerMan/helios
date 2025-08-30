@@ -126,4 +126,3 @@ clean:
 	-@$(MAKE) -C ./userspace clean
 	-@rm -rf sysroot
 	-@rm -rf *.iso
-	-@rm .gdbinit

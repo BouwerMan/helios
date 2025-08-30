@@ -82,6 +82,8 @@ int ramfs_open(struct vfs_inode* inode, struct vfs_file* file);
 int ramfs_close(struct vfs_inode* inode, struct vfs_file* file);
 ssize_t ramfs_read(struct vfs_file* file, char* buffer, size_t count);
 ssize_t ramfs_write(struct vfs_file* file, const char* buffer, size_t count);
+int ramfs_readdir(struct vfs_file* file, struct dirent* dirent, off_t offset);
+
 struct vfs_dentry* ramfs_lookup(struct vfs_inode* dir_inode,
 				struct vfs_dentry* child);
 int ramfs_mkdir(struct vfs_inode* dir,

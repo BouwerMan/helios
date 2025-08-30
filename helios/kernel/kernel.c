@@ -45,6 +45,8 @@
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
 
+#include <drivers/fs/ramfs.h>
+
 struct limine_framebuffer* framebuffer;
 
 struct kernel_context kernel = { 0 };
@@ -120,7 +122,7 @@ void kernel_main()
 
 	int fd = vfs_open("/", O_RDONLY);
 	struct vfs_file* f = get_file(fd);
-	vfs_dump_child(f->dentry);
+	// vfs_dump_child(f->dentry);
 
 	// goto loop;
 
@@ -132,8 +134,8 @@ void kernel_main()
 		panic("Could not mount /dev");
 	}
 
-	vfs_dump_child(f->dentry);
-	vfs_close(fd);
+	// vfs_dump_child(f->dentry);
+	// vfs_close(fd);
 
 	tty_init();
 
@@ -153,6 +155,21 @@ void kernel_main()
 	}
 
 	scheduler_dump();
+
+	log_info("Opening directory for reading");
+	int fd2 = vfs_open("/usr/include/", O_RDONLY);
+	struct vfs_file* f2 = get_file(fd2);
+	struct dirent* dirent = kzalloc(sizeof(struct dirent));
+	off_t offset = 0;
+	while (vfs_readdir(f2, dirent, offset++)) {
+		log_debug(
+			"Found entry: %s, d_ino: %lu, d_off: %lu, d_reclen: %d, d_type: %d",
+			dirent->d_name,
+			dirent->d_ino,
+			dirent->d_off,
+			dirent->d_reclen,
+			dirent->d_type);
+	}
 
 #if 0
 	log_warn("Shutting down in 1 second");

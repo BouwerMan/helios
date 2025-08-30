@@ -34,7 +34,6 @@
 #include <arch/mmu/vmm.h>
 #include <arch/regs.h>
 #include <drivers/console.h>
-#include <helios/mman.h>
 #include <kernel/bootinfo.h>
 #include <kernel/errno.h>
 #include <kernel/helios.h>
@@ -47,6 +46,7 @@
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <stdint.h>
+#include <uapi/helios/mman.h>
 
 /*******************************************************************************
 * Private Function Prototypes

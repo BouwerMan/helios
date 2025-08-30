@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <uapi/helios/dirent.h>
 
 static constexpr size_t FS_TYPE_LEN = 8;
 static constexpr size_t VFS_MAX_NAME = 255; // Not including null terminator
@@ -190,21 +191,22 @@ struct inode_ops {
 		      struct vfs_dentry* dentry,
 		      uint16_t mode);
 
-	// This is for navigating directories
 	struct vfs_dentry* (*lookup)(struct vfs_inode* dir_inode,
 				     struct vfs_dentry* child);
 };
 
 struct file_ops {
-	// These are for opening/closing the file handle
 	int (*open)(struct vfs_inode* inode, struct vfs_file* file);
 	int (*close)(struct vfs_inode* inode, struct vfs_file* file);
 
-	// These are for I/O!
 	ssize_t (*read)(struct vfs_file* file, char* buffer, size_t count);
 	ssize_t (*write)(struct vfs_file* file,
 			 const char* buffer,
 			 size_t count);
+
+	int (*readdir)(struct vfs_file* file,
+		       struct dirent* dirent,
+		       off_t offset);
 };
 
 // TODO: Make helper function for creating new dentries???
@@ -318,6 +320,7 @@ void dentry_add(struct vfs_dentry* dentry);
 struct vfs_dentry* dentry_alloc(struct vfs_dentry* parent, const char* name);
 void dentry_dealloc(struct vfs_dentry* d);
 void register_child(struct vfs_dentry* parent, struct vfs_dentry* child);
+int __fill_dirent(struct vfs_dentry* dentry, struct dirent* dirent);
 
 // --- Inode Management ---
 struct vfs_inode* new_inode(struct vfs_superblock* sb, size_t id);
@@ -329,6 +332,7 @@ void inode_add(struct vfs_inode* inode);
 int vfs_open(const char* path, int flags);
 int __vfs_open_for_task(struct task* t, const char* path, int flags);
 int vfs_close(int fd);
+int vfs_readdir(struct vfs_file* dir, struct dirent* out, long pos);
 ssize_t vfs_file_write(struct vfs_file* file, const char* buffer, size_t count);
 ssize_t vfs_write(int fd, const char* buffer, size_t count);
 ssize_t vfs_read(int fd, char* buffer, size_t count);

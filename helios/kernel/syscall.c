@@ -21,7 +21,6 @@
 
 #include <arch/idt.h>
 #include <arch/mmu/vmm.h>
-#include <asm/syscall.h>
 #include <drivers/console.h>
 #include <kernel/errno.h>
 #include <kernel/exec.h>
@@ -34,6 +33,7 @@
 #include <lib/string.h>
 #include <mm/mmap.h>
 #include <mm/page.h>
+#include <uapi/asm/syscall.h>
 
 /*******************************************************************************
 * Private Function Prototypes

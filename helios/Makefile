@@ -11,7 +11,7 @@ include ./config.mk
 # --- Includes & flags ---------------------------------------------------------
 # Our headers use -I so warnings apply; kernel doesn't use sysroot.
 K_CPPFLAGS := $(CPPFLAGS) \
-	      -Iinclude -I$(ARCHDIR)/include -I$(UAPI_DIR) \
+	      -Iinclude -I$(ARCHDIR)/include \
 	      -D__KERNEL__ -DHELIOS_KERNEL \
 	      $(CPPFLAGS_DEBUG) $(CPPFLAGS_TESTS)
 

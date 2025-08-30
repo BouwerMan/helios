@@ -496,6 +496,7 @@ static struct page* alloc_pages_core(struct buddy_allocator* allocator,
 {
 	(void)flags;
 	if (order >= allocator->max_order) {
+		// GDB BREAKPOINT
 		log_error("Order: %zu, larger than max order: %zu",
 			  order,
 			  allocator->max_order);

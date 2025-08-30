@@ -55,7 +55,7 @@ constexpr u64 GOLDEN_RATIO_64 = 0x61C8864680B583EB;
  * @return A 32-bit hash value.
  */
 [[gnu::const, gnu::always_inline]]
-static inline u32 hash_32(u32 val, unsigned int bits)
+static inline u32 hash_32(u32 val, int bits)
 {
 	return (val * GOLDEN_RATIO_32) >> (32 - bits);
 }
@@ -67,7 +67,7 @@ static inline u32 hash_32(u32 val, unsigned int bits)
  * @return A hash value containing `bits` number of significant bits.
  */
 [[gnu::const, gnu::always_inline]]
-static inline u64 hash_64(u64 val, unsigned int bits)
+static inline u64 hash_64(u64 val, int bits)
 {
 	/* 64x64-bit multiply is efficient on all 64-bit processors */
 	return (val * GOLDEN_RATIO_64) >> (64 - bits);
@@ -80,11 +80,11 @@ static inline u64 hash_64(u64 val, unsigned int bits)
 #define DECLARE_HASHTABLE(name, bits) struct hlist_head name[1 << (bits)]
 
 #define HASH_SIZE(name) (ARRAY_SIZE(name))
-#define HASH_BITS(name) ilog2(HASH_SIZE(name))
+#define HASH_BITS(name) ilog2((unsigned long)HASH_SIZE(name))
 
 /* Use hash_32 when possible to allow for fast 32bit hashing in 64bit kernels. */
 #define hash_min(val, bits) \
-	(sizeof(val) <= 4 ? hash_32(val, bits) : hash_64(val, bits))
+	(sizeof(val) <= 4 ? hash_32((u32)val, bits) : hash_64((u64)val, bits))
 
 static inline void __hash_init(struct hlist_head* ht, unsigned int sz)
 {
