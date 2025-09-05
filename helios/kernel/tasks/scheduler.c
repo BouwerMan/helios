@@ -200,6 +200,9 @@ void schedule(struct registers* regs)
  */
 void scheduler_init(void)
 {
+	squeue.kernel_pid_counter = KERNEL_PID_BASE;
+	squeue.user_pid_counter = USER_PID_BASE;
+
 	squeue.cache = kmalloc(sizeof(struct slab_cache));
 	if (!squeue.cache) {
 		log_error("OOM error from kmalloc");
@@ -226,7 +229,7 @@ void scheduler_init(void)
 	setup_first_kernel_task();
 	setup_idle_task();
 
-	squeue.inited = true; // TODO: Is this used?
+	squeue.inited = true;
 	log_debug("Probably inited the scheduler");
 	scheduler_dump();
 	g_preempt_enabled = true;
@@ -265,6 +268,7 @@ struct task* kthread_create(const char* name, entry_func entry)
 
 	task->type = KERNEL_TASK;
 	task->parent = kernel_task;
+	task->pid = squeue.kernel_pid_counter++;
 
 	// Kernel threads don't get their own address space
 	// Nor do they get any regions (for now)
@@ -326,6 +330,7 @@ int launch_init()
 	}
 
 	task->type = USER_TASK;
+	task->pid = INIT_PID;
 	vas_set_pml4(task->vas, (pgd_t*)vmm_create_address_space());
 
 	static constexpr char init_path[] = "/usr/bin/init.elf";
@@ -394,6 +399,7 @@ void reap_task(struct task* task)
 
 		free_page(pos->vas->pml4);
 
+		list_del(&pos->sibling);
 		slab_free(squeue.cache, pos);
 	}
 }
@@ -461,7 +467,7 @@ struct task* __alloc_task()
 
 	memset(task, 0, sizeof(struct task));
 	task->vas = vas;
-	task->pid = squeue.pid_i++;
+	// task->pid = squeue.pid_i++;
 
 	// Init lists, maybe default resources (stdio)
 	struct task* parent = get_current_task();
@@ -872,6 +878,7 @@ static void setup_first_kernel_task()
 
 	kernel_task->type = KERNEL_TASK;
 	kernel_task->parent = kernel_task;
+	kernel_task->pid = squeue.kernel_pid_counter++;
 
 	// Set kernel_stack to stack we set from __arch_entry
 	extern void* g_entry_new_stack;

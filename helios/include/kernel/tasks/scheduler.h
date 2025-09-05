@@ -9,6 +9,13 @@
 
 typedef void (*entry_func)(void);
 
+// Negative PIDs for kernel threads
+static constexpr pid_t KERNEL_PID_BASE = -1000;
+// Reserved for init
+static constexpr pid_t INIT_PID = 1;
+// Start user processes from 2
+static constexpr pid_t USER_PID_BASE = 2;
+
 static constexpr size_t STACK_SIZE_PAGES = 32;
 static constexpr int MAX_TASK_NAME_LEN = 32;
 
@@ -89,7 +96,8 @@ struct scheduler_queue {
 	struct task* current_task;
 	struct slab_cache* cache;
 	size_t task_count;
-	pid_t pid_i;
+	pid_t kernel_pid_counter;
+	pid_t user_pid_counter;
 	bool inited;
 };
 

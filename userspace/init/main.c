@@ -42,11 +42,13 @@ int main(int argc, char** argv, char** envp)
 		printf("Hello from the parent process! My PID is %d, my child's PID is %d.\n",
 		       getpid(),
 		       pid);
-		int status;
-		waitpid(pid, &status, 0);
-		printf("Child process %d finished with status %d.\n",
-		       pid,
-		       status);
+		while (true) {
+			int status;
+			int fin_pid = waitpid(-1, &status, 0);
+			printf("Child process %d finished with status %d.\n",
+			       fin_pid,
+			       status);
+		}
 	}
 	for (;;)
 		;

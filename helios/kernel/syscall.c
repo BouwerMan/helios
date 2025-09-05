@@ -149,6 +149,9 @@ void sys_waitpid(struct registers* r)
 	struct task* task = get_current_task();
 
 	if (list_empty(&task->children)) {
+		if (task->pid == INIT_PID) {
+			goto wait;
+		}
 		SYSRET(r, (u64)-ECHILD);
 		return;
 	}
@@ -175,6 +178,7 @@ retry:
 		return;
 	}
 
+wait:
 	// No zombies found yet, so we block and wait for a child to exit.
 	waitqueue_sleep(&task->parent_wq);
 	goto retry;

@@ -27,6 +27,8 @@
 #include <lib/string.h>
 #include <mm/address_space.h>
 
+extern struct scheduler_queue squeue;
+
 /**
  * do_fork: Syscall handler for fork().
  *
@@ -51,6 +53,7 @@ pid_t do_fork(struct registers* regs)
 
 	child->type = USER_TASK;
 	child->parent = parent;
+	child->pid = squeue.user_pid_counter++;
 
 	strncpy(child->name, parent->name, MAX_TASK_NAME_LEN);
 	child->name[MAX_TASK_NAME_LEN - 1] = '\0';
@@ -72,7 +75,7 @@ pid_t do_fork(struct registers* regs)
 	disable_preemption();
 	child->state = READY;
 	__task_add(child);
-
 	enable_preemption();
+
 	return child->pid;
 }
