@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
+#include "fs/imapping.h"
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
 #include <drivers/ata/partition.h>
@@ -160,20 +161,6 @@ struct vfs_mount {
 	int flags;		   // Optional: e.g., read-only
 	struct vfs_mount* next;	   // Linked list of active mounts
 	struct list_head* list;	   // Linked list of active mounts
-};
-
-static constexpr size_t INODE_MAPPING_PG_CACHE_BITS = 8;
-
-struct inode_mapping {
-	struct vfs_inode* owner;
-	struct inode_mapping_ops* ops;
-	// Put page cache here
-	DECLARE_HASHTABLE(page_cache, INODE_MAPPING_PG_CACHE_BITS);
-};
-
-struct inode_mapping_ops {
-	int (*readpage)(struct vfs_inode* inode, struct page* page);
-	int (*writepage)(struct vfs_inode* inode, struct page* page);
 };
 
 // TODO: Add timestamp stuff
@@ -352,6 +339,7 @@ int vfs_close(int fd);
 int vfs_readdir(struct vfs_file* dir, struct dirent* out, long pos);
 ssize_t vfs_file_write(struct vfs_file* file, const char* buffer, size_t count);
 ssize_t vfs_write(int fd, const char* buffer, size_t count);
+ssize_t vfs_file_read(struct vfs_file* file, char* buffer, size_t count);
 ssize_t vfs_read(int fd, char* buffer, size_t count);
 off_t vfs_lseek(int fd, off_t offset, int whence);
 int vfs_mkdir(const char* path, uint16_t mode);

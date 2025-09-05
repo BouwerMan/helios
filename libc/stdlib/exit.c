@@ -4,7 +4,7 @@
 [[noreturn]]
 void _exit(int status)
 {
-	__syscall1(SYS_EXIT, (uintptr_t)status);
+	__syscall1(SYS_EXIT, (long)status);
 	while (1) {
 		__builtin_ia32_pause();
 	}
@@ -12,12 +12,5 @@ void _exit(int status)
 
 void exit(int status)
 {
-#ifdef __is_libk
-	(void)status;
-	while (1) {
-		__builtin_ia32_pause();
-	}
-#else
 	_exit(status);
-#endif
 }

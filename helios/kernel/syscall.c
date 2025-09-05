@@ -22,7 +22,6 @@
 #include <arch/idt.h>
 #include <arch/mmu/vmm.h>
 #include <drivers/console.h>
-#include <kernel/errno.h>
 #include <kernel/exec.h>
 #include <kernel/irq_log.h>
 #include <kernel/panic.h>
@@ -34,6 +33,7 @@
 #include <mm/mmap.h>
 #include <mm/page.h>
 #include <uapi/asm/syscall.h>
+#include <uapi/helios/errno.h>
 
 /*******************************************************************************
 * Private Function Prototypes
@@ -153,8 +153,6 @@ void sys_waitpid(struct registers* r)
 	}
 
 retry:
-	disable_preemption();
-
 	// Iterate through children, find terminated, then reap and return
 	struct task* child = nullptr;
 	list_for_each_entry (child, &task->children, sibling) {
@@ -172,13 +170,11 @@ retry:
 
 		reap_task(child);
 
-		enable_preemption();
 		SYSRET(r, (u64)child_pid);
 		return;
 	}
 
 	// No zombies found yet, so we block and wait for a child to exit.
-	enable_preemption();
 	waitqueue_sleep(&task->parent_wq);
 	goto retry;
 }
@@ -216,14 +212,14 @@ static struct limine_file* find_module(const char* name)
 
 void sys_exec(struct registers* r)
 {
-	disable_preemption();
+	// disable_preemption();
 	const char* name = (const char*)r->rdi;
 
 	// TODO: Don't trust user pointer
 	struct limine_file* module = find_module(name);
 	if (!module) {
 		log_error("exec: module '%s' not found", name);
-		enable_preemption();
+		// enable_preemption();
 		SYSRET(r, (u64)-1); // Return an error
 		return;
 	}
@@ -246,13 +242,13 @@ void sys_exec(struct registers* r)
 
 	int res = load_elf(task, module->address);
 	if (res < 0) {
-		enable_preemption();
+		// enable_preemption();
 		panic("exec: load_elf failed");
 	}
 
 	// load_elf sets up the stack and entry point, so we just need to
 	// return normally
-	enable_preemption();
+	// enable_preemption();
 }
 
 typedef void (*handler)(struct registers* r);

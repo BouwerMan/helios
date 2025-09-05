@@ -26,7 +26,6 @@
 #undef FORCE_LOG_REDEF
 
 #include <arch/cache.h>
-#include <kernel/errno.h>
 #include <kernel/kmath.h>
 #include <kernel/panic.h>
 #include <kernel/spinlock.h>
@@ -35,6 +34,7 @@
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
+#include <uapi/helios/errno.h>
 
 /*******************************************************************************
 * Global Variable Definitions
@@ -208,8 +208,10 @@ int slab_cache_init(struct slab_cache* cache,
 	// Zero out cache just to make sure there is no garbage data there
 	memset(cache, 0, sizeof(struct slab_cache));
 
-	spinlock_init(&cache->lock);
-	spinlock_acquire(&cache->lock);
+	spin_init(&cache->lock);
+
+	unsigned long flags;
+	spin_lock_irqsave(&cache->lock, &flags);
 
 	cache->object_size = object_size;
 
@@ -267,7 +269,7 @@ int slab_cache_init(struct slab_cache* cache,
 		cache->header_size,
 		cache->objects_per_slab);
 
-	spinlock_release(&cache->lock);
+	spin_unlock_irqrestore(&cache->lock, flags);
 	return 0;
 }
 
@@ -297,7 +299,8 @@ void* slab_alloc(struct slab_cache* cache)
 	struct slab* slab = NULL;
 	int res = 0;
 
-	spinlock_acquire(&cache->lock);
+	unsigned long flags;
+	spin_lock_irqsave(&cache->lock, &flags);
 
 	log_debug("Asked to allocate from cache %s(%p) by caller %p",
 		  cache->name,
@@ -319,7 +322,7 @@ retry:
 	} else {
 		log_error("Could not create more slabs, slab_grow returned: %d",
 			  res);
-		spinlock_release(&cache->lock);
+		spin_unlock_irqrestore(&cache->lock, flags);
 		return NULL;
 	}
 
@@ -351,7 +354,7 @@ retry:
 
 	cache->used_objects++;
 
-	spinlock_release(&cache->lock);
+	spin_unlock_irqrestore(&cache->lock, flags);
 	return obj_start;
 }
 
@@ -388,13 +391,14 @@ void slab_free(struct slab_cache* cache, void* object)
 		return;
 	}
 
-	spinlock_acquire(&cache->lock);
+	unsigned long flags;
+	spin_lock_irqsave(&cache->lock, &flags);
 
 	struct slab* slab = slab_from_object(object);
 	if (slab->parent != cache) {
 		log_error(
 			"Somehow got the wrong slab (parent doesn't match the cache), good luck debugging this one");
-		spinlock_release(&cache->lock);
+		spin_unlock_irqrestore(&cache->lock, flags);
 		return;
 	}
 
@@ -402,7 +406,7 @@ void slab_free(struct slab_cache* cache, void* object)
 		log_error("Free top overflow for slab %p in cache %s",
 			  (void*)slab,
 			  cache->name);
-		spinlock_release(&cache->lock);
+		spin_unlock_irqrestore(&cache->lock, flags);
 		return;
 	}
 
@@ -414,7 +418,7 @@ void slab_free(struct slab_cache* cache, void* object)
 
 	if (!quarantine) {
 		slab_quarantine(slab);
-		spinlock_release(&cache->lock);
+		spin_unlock_irqrestore(&cache->lock, flags);
 		return;
 	}
 
@@ -450,7 +454,7 @@ void slab_free(struct slab_cache* cache, void* object)
 		  slab->free_top,
 		  cache->objects_per_slab);
 
-	spinlock_release(&cache->lock);
+	spin_unlock_irqrestore(&cache->lock, flags);
 }
 
 /**
@@ -479,7 +483,7 @@ void slab_cache_destroy(struct slab_cache* cache)
 	}
 
 	// Never release it because we are deleting everything anyways
-	spinlock_acquire(&cache->lock);
+	spin_lock(&cache->lock);
 
 	log_debug("Destroying cache %s", cache->name);
 

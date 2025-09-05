@@ -1,9 +1,10 @@
+#include "uapi/helios/mman.h"
 #include <arch/mmu/vmm.h>
-#include <kernel/errno.h>
 #include <kernel/panic.h>
 #include <lib/list.h>
 #include <mm/address_space.h>
 #include <mm/slab.h>
+#include <uapi/helios/errno.h>
 
 static struct slab_cache mem_cache = { 0 };
 
@@ -97,11 +98,15 @@ void vas_set_pml4(struct address_space* vas, pgd_t* pml4)
 }
 
 int map_region(struct address_space* vas,
+	       struct vfs_inode* inode,
+	       off_t file_offset,
 	       uptr start,
 	       uptr end,
 	       unsigned long prot,
 	       unsigned long flags)
 {
+	// TODO: Accept inode input as well for file-backed mappings.
+	// And maybe file offset
 	log_debug(
 		"Mapping region: start=0x%lx, end=0x%lx, prot=0x%lx, flags=0x%lx",
 		start,
@@ -113,10 +118,16 @@ int map_region(struct address_space* vas,
 		return -ENOMEM;
 	}
 
-	int err = vmm_map_region(vas, mr);
-	if (err < 0) {
-		return err;
+	if (flags & MAP_ANONYMOUS) {
+		// Anonymous mapping, not backed by a file
+		int err = vmm_map_anon_region(vas, mr);
+		if (err < 0) {
+			return err;
+		}
 	}
+
+	mr->file_inode = inode;
+	mr->file_offset = file_offset;
 
 	add_region(vas, mr);
 

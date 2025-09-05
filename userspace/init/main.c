@@ -4,7 +4,6 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
 int main(void)
 {
 	pid_t pid;

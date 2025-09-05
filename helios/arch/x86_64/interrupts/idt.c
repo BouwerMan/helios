@@ -413,9 +413,9 @@ static void default_exception_handler(struct registers* registers)
 
 	address_space_dump(task->vas);
 
-	extern struct task* previous_task;
-	log_error("Previous task: %s", previous_task->name);
+	void* return_address = (void*)(*(u64*)(registers->rbp + 8));
 
+	log_error("Return address: %p", return_address);
 	log_error("RIP: %lx, RSP: %lx, RBP: %lx",
 		  registers->rip,
 		  registers->rsp,

@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "kernel/align.h"
+#include "kernel/bitops.h"
 #include <kernel/bootinfo.h>
 #include <kernel/compiler_attributes.h>
 #include <kernel/types.h>
@@ -25,20 +27,11 @@
  * @return The smallest integer greater than or equal to a / b.
  */
 #define CEIL_DIV(a, b)                  \
-	__extension__({                 \
+	({                              \
 		__typeof__(a) _a = (a); \
 		__typeof__(b) _b = (b); \
 		((_a + _b - 1) / _b);   \
 	})
-
-/**
- * @brief Aligns a given size up to the nearest multiple of the specified alignment.
- * 
- * @param size The size to align.
- * @param align The alignment boundary.
- * @return The aligned size.
- */
-#define ALIGN_UP(size, align) (((size + align - 1) / align) * align)
 
 /**
  * @brief Return the maximum of two values.
@@ -71,16 +64,6 @@
  * @return Number of elements.
  */
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-
-/**
- * @brief Set a single bit in a value.
- */
-#define SET_BIT(n) (1ULL << (n))
-
-/**
- * @brief Get a single bit in a value.
- */
-#define GET_BIT(val, n) (((val) >> (n)) & 1U)
 
 /**
  * @brief Macro to indicate that the given expression is unlikely to be true.
@@ -123,14 +106,6 @@ static inline unsigned long long get_rsp_value()
 	__asm__ __volatile__("movq %%rsp, %0" : "=r"(rsp_val));
 	return rsp_val;
 }
-
-// enum ERROR_CODES {
-// 	ENONE = 0,
-// 	EOOM,
-// 	EALIGN,
-// 	ENULLPTR,
-//
-// };
 
 struct kernel_context {
 	uint64_t* pml4;

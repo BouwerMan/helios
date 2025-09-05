@@ -35,7 +35,6 @@
 #include <arch/regs.h>
 #include <drivers/console.h>
 #include <kernel/bootinfo.h>
-#include <kernel/errno.h>
 #include <kernel/helios.h>
 #include <kernel/irq_log.h>
 #include <kernel/panic.h>
@@ -46,6 +45,7 @@
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <stdint.h>
+#include <uapi/helios/errno.h>
 #include <uapi/helios/mman.h>
 
 /*******************************************************************************
@@ -367,7 +367,7 @@ paddr_t get_phys_addr(pgd_t* pml4, vaddr_t vaddr)
 }
 
 /**
- * vmm_map_region - Map a memory region by allocating new pages
+ * vmm_map_anon_region - Map a memory region by allocating new pages
  * @vas: Target address space to map the region into
  * @mr: Memory region descriptor containing virtual address range and permissions
  *
@@ -392,7 +392,7 @@ paddr_t get_phys_addr(pgd_t* pml4, vaddr_t vaddr)
  * Note: On failure, all successfully mapped pages are automatically unmapped
  *       during cleanup to prevent memory leaks.
  */
-int vmm_map_region(struct address_space* vas, struct memory_region* mr)
+int vmm_map_anon_region(struct address_space* vas, struct memory_region* mr)
 {
 	int err = 0;
 	vaddr_t v = 0;
@@ -836,8 +836,67 @@ static void log_page_table_walk(u64* pml4, uptr vaddr)
 	}
 }
 
-static bool check_demand_paging(struct registers* r)
+static int do_demand_paging(struct registers* r)
 {
+	struct task* task = get_current_task();
+	struct address_space* vas = task->vas;
+
+	uint64_t fault_addr;
+	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
+	fault_addr &= PAGE_FRAME_MASK;
+
+	if (!is_within_vas(vas, fault_addr)) {
+		return -ENOENT;
+	}
+
+	log_info("Demand paging in address_space %lx", vas->pml4_phys);
+
+	struct memory_region* mr = get_region(vas, fault_addr);
+	struct vfs_inode* inode = mr->file_inode;
+	struct inode_mapping* map = inode->mapping;
+	if (!inode || !map) {
+		// TODO: Zero fill the page instead of failing
+		// since it is in a valid region
+		return -ENOENT;
+	}
+
+	u64 offset_in_region = fault_addr - mr->start;
+	u64 file_position = (u64)mr->file_offset + offset_in_region;
+	pgoff_t index = file_position / PAGE_SIZE;
+	struct page* page = imap_lookup_or_create(map, index);
+	if (!page) {
+		log_error("OOM during demand paging!");
+		return -ENOMEM;
+	}
+
+	if (!(page->flags & PG_UPTODATE)) {
+		if (map->imops->readpage) {
+			int res = map->imops->readpage(inode, page);
+			if (res < 0) {
+				log_error("Failed to read page from inode");
+				imap_remove(map, page);
+				return -EIO;
+			}
+		} else {
+			// No read_page operation, just zero the page
+			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
+			memset(kvaddr, 0, PAGE_SIZE);
+		}
+	}
+	// Now the page has the content, add it to the mapping and set UPTODATE
+
+	page->flags |= PG_UPTODATE;
+
+	flags_t prot_flags = PAGE_PRESENT | PAGE_USER;
+	prot_flags |= (mr->prot & PROT_WRITE) ? PAGE_WRITE : 0;
+	prot_flags |= (mr->prot & PROT_EXEC) ? 0 : PAGE_NO_EXECUTE;
+
+	// Map page into cr3
+	vmm_map_page(vas->pml4, fault_addr, page_to_phys(page), prot_flags);
+
+	unlock_page(page);
+
+	return 0;
 }
 
 static void page_fault(struct registers* r)
@@ -853,7 +912,9 @@ static void page_fault(struct registers* r)
 	if (!is_write_fault || !is_present_fault) {
 		// This is not a CoW fault. It might be a real error (like a segfault)
 		// or something else like demand paging. For now, we'll treat it as a failure.
-		// check_demand_paging(r);
+		if (do_demand_paging(r) == 0) {
+			goto pass;
+		}
 		goto fail;
 	}
 
@@ -908,6 +969,7 @@ static void page_fault(struct registers* r)
 		vmm_protect_page(vas, page_aligned_addr, new_flags);
 	}
 
+pass:
 	return;
 
 fail:
@@ -927,6 +989,8 @@ static void page_fault_fail(struct registers* r)
 	int user = r->err_code & 0x4;
 	int reserved = r->err_code & 0x8;
 	int id = r->err_code & 0x10;
+
+	// GDB BREAKPOINT
 	set_log_mode(LOG_DIRECT);
 	irq_log_flush();
 	console_flush();
@@ -937,6 +1001,10 @@ static void page_fault_fail(struct registers* r)
 	log_error("Faulting task: '%s' (PID: %d)", task->name, task->pid);
 
 	address_space_dump(task->vas);
+
+	void* return_address = (void*)(*(u64*)(r->rbp + 8));
+
+	log_error("Return address: %p", return_address);
 
 	log_error(
 		"PAGE FAULT! err %lu (p:%d,rw:%d,user:%d,res:%d,id:%d) at 0x%lx. Caused by 0x%lx in address space %lx",

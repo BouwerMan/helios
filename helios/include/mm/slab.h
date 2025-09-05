@@ -1,12 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include <stddef.h>
-
 #include <kernel/helios.h>
 #include <kernel/spinlock.h>
-
 #include <lib/list.h>
+#include <stddef.h>
 
 // TODO: Try using a free list stored in the freed object's slab slice similar to the linux kernel
 

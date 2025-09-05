@@ -25,8 +25,9 @@
 #include <lib/log.h>
 #undef FORCE_LOG_REDEF
 
-#include <drivers/fs/ramfs.h>
-#include <drivers/fs/vfs.h>
+#include "fs/ramfs/ramfs.h"
+#include "fs/vfs.h"
+#include "kernel/panic.h"
 #include <lib/hashtable.h>
 #include <lib/string.h>
 #include <mm/kmalloc.h>
@@ -63,6 +64,11 @@ struct file_ops ramfs_fops = {
 static struct sb_ops ramfs_sb_ops = {
 	.alloc_inode = ramfs_alloc_inode,
 	.destroy_inode = ramfs_destroy_inode,
+};
+
+static struct inode_mapping_ops ramfs_imops = {
+	.readpage = ramfs_readpage,
+	// .writepage = ramfs_writepage, // You can add this later
 };
 
 /*******************************************************************************
@@ -317,17 +323,42 @@ ssize_t ramfs_read(struct vfs_file* file, char* buffer, size_t count)
 	return (ssize_t)to_read;
 }
 
-int readpage(struct vfs_inode* inode, struct page* page)
+int ramfs_readpage(struct vfs_inode* inode, struct page* page)
 {
 	if (!inode || !page) {
 		return -VFS_ERR_INVAL;
 	}
 
-	vaddr_t vaddr = PHYS_TO_HHDM(page_to_phys(page));
-	struct ramfs_file* rf = RAMFS_INODE_INFO(inode)->file;
-	pfn_t pfn = page_to_pfn(page);
+	void* page_vaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
 
-	size_t offset = pfn * PAGE_SIZE;
+	// Ramfs specific file data
+	struct ramfs_file* rf = RAMFS_INODE_INFO(inode)->file;
+	if (!rf || !rf->data) {
+		memset(page_vaddr, 0, PAGE_SIZE);
+		return VFS_OK;
+	}
+
+	size_t source_offset = (size_t)page->index * PAGE_SIZE;
+
+	if (source_offset >= rf->size) {
+		// Reading past end of file, so we just write a "hole"
+		memset(page_vaddr, 0, PAGE_SIZE);
+		return VFS_OK;
+	}
+
+	size_t bytes_to_copy = PAGE_SIZE;
+	if (source_offset + bytes_to_copy > rf->size) {
+		bytes_to_copy = rf->size - source_offset;
+	}
+
+	memcpy(page_vaddr, rf->data + source_offset, bytes_to_copy);
+
+	// Zero the remainder
+	if (bytes_to_copy < PAGE_SIZE) {
+		memset((void*)((uptr)page_vaddr + bytes_to_copy),
+		       0,
+		       PAGE_SIZE - bytes_to_copy);
+	}
 
 	return VFS_OK;
 }
@@ -470,6 +501,18 @@ struct vfs_inode* ramfs_alloc_inode(struct vfs_superblock* sb)
 		return nullptr;
 	}
 
+	// Allocate mapping
+	inode->mapping = kzalloc(sizeof(struct inode_mapping));
+	if (!inode->mapping) {
+		kfree(rinode);
+		kfree(inode);
+		return nullptr;
+	}
+
+	inode->mapping->owner = inode;
+	inode->mapping->imops = &ramfs_imops;
+	hash_init(inode->mapping->page_cache);
+
 	inode->fs_data = rinode;
 
 	return inode;
@@ -534,6 +577,81 @@ int ramfs_readdir(struct vfs_file* file, struct dirent* dirent, off_t offset)
 	}
 
 	return 0;
+}
+
+void test_ramfs_readpage()
+{
+	log_info("--- Starting ramfs readpage test ---");
+
+	const char* file_path = "/testfile.txt";
+	char write_buffer[PAGE_SIZE * 2]; // Create 2 pages of data
+
+	// Fill page 0 with 'A's and page 1 with 'B's
+	memset(write_buffer, 'A', PAGE_SIZE);
+	memset(write_buffer + PAGE_SIZE, 'B', PAGE_SIZE);
+
+	int fd = vfs_open(file_path, O_CREAT | O_RDWR);
+	if (fd < 0) {
+		panic("Failed to create testfile!");
+	}
+	vfs_write(fd, write_buffer, sizeof(write_buffer));
+
+	// Get file and inode
+	struct vfs_file* file = get_file(fd);
+	struct vfs_inode* inode = file->dentry->inode;
+	log_info("Test file created with inode %p", (void*)inode);
+
+	// Allocate destination page
+	struct page* dest_page = alloc_page(AF_KERNEL);
+	if (!dest_page) {
+		panic("Failed to allocate destination page!");
+	}
+	void* dest_vaddr = (void*)PHYS_TO_HHDM(page_to_phys(dest_page));
+
+	// Set the page's metadata to request the SECOND page of the file
+	dest_page->index = 1;		     // We want the page full of 'B's
+	dest_page->mapping = inode->mapping; // Point it to the correct mapping
+
+	log_info("Calling readpage for file index %lu...", dest_page->index);
+
+	int result = inode->mapping->imops->readpage(inode, dest_page);
+	if (result < 0) {
+		panic("readpage_test: readpage returned an error!");
+	}
+
+	// Verify the contents
+	bool success = true;
+	for (size_t i = 0; i < PAGE_SIZE; i++) {
+		if (((char*)dest_vaddr)[i] != 'B') {
+			log_error(
+				"Verification failed at byte %zu! Expected 'B', got '%c'",
+				i,
+				((char*)dest_vaddr)[i]);
+			success = false;
+			break;
+		}
+	}
+
+	if (success) {
+		log_info("SUCCESS: Page contents verified correctly!");
+	} else {
+		panic("readpage_test: Page contents were incorrect!");
+	}
+
+	// Clean up
+	free_page(dest_vaddr);
+	vfs_close(fd);
+
+	log_info("--- ramfs readpage test finished ---");
+}
+
+void ramfs_test()
+{
+	log_info(TESTING_HEADER, "Ramfs");
+
+	test_ramfs_readpage();
+
+	log_info(TESTING_FOOTER, "Ramfs");
 }
 
 /*******************************************************************************

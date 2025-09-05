@@ -24,6 +24,13 @@ enum TASK_STATE {
 	TERMINATED,
 };
 
+enum TASK_WAIT_STATE {
+	WAIT_NONE,	// Not waiting on anything
+	WAIT_PREPARING, // Added to waitqueue but not sleeping yet
+	WAIT_SLEEPING,	// Actually blocked and sleeping
+	WAIT_WOKEN,	// Woken during prepare phase
+};
+
 enum TASK_TYPE {
 	KERNEL_TASK,
 	USER_TASK,
@@ -53,19 +60,21 @@ struct task {
 	struct address_space* vas;
 	uintptr_t kernel_stack; // The top of the kernel stack
 	enum TASK_STATE state;
+	enum TASK_WAIT_STATE wait_state;
 	enum TASK_TYPE type;
 	uint8_t priority;
 	int preempt_count;
 	pid_t pid;
 	volatile uint64_t sleep_ticks;
 	struct vfs_file* resources[MAX_RESOURCES];
-	struct task* parent;	    // Should this just be parent PID?
+	struct task* parent;	     // Should this just be parent PID?
 
-	struct list_head list;	    // For the scheduler's main task list
-	struct list_head children;  // Head of this task's children list
-	struct list_head sibling;   // Node in the parent's children list
-	int exit_code;		    // Store the exit code
-	struct waitqueue parent_wq; // For parents to wait on
+	struct list_head sched_list; // For the scheduler's main task list
+	struct list_head wait_list;  // For waitqueues
+	struct list_head children;   // Head of this task's children list
+	struct list_head sibling;    // Node in the parent's children list
+	int exit_code;		     // Store the exit code
+	struct waitqueue parent_wq;  // For parents to wait on
 
 	struct waitqueue*
 		wait; // For debugging, stores current blocking waitqueue
@@ -125,6 +134,10 @@ void scheduler_dump();
 /// Waitqueue
 
 void waitqueue_init(struct waitqueue* wqueue);
+bool waitqueue_has_waiters(struct waitqueue* wqueue);
+void waitqueue_prepare_wait(struct waitqueue* wqueue);
+void waitqueue_commit_sleep(struct waitqueue* wqueue);
+void waitqueue_cancel_wait(struct waitqueue* wqueue);
 void waitqueue_sleep(struct waitqueue* wqueue);
 void waitqueue_sleep_unlock(struct waitqueue* wqueue,
 			    spinlock_t* lock,

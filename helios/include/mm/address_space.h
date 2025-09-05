@@ -24,6 +24,9 @@ struct memory_region {
 	unsigned long prot;	     /* Memory protection flags. */
 	unsigned long flags;	     /* Additional flags for the region. */
 
+	struct vfs_inode* file_inode;
+	off_t file_offset;	     /* Offset within the file, if mapped. */
+
 	struct address_space* owner; /* Owning address space. */
 	struct list_head list; /* Links into the address_space's mr_list. */
 };
@@ -104,6 +107,7 @@ void vas_set_pml4(struct address_space* vas, pgd_t* pml4);
 
 /**
  * map_region - Creates and maps a new memory region.
+ * FIXME:
  * @vas: The address space to add the new region to.
  * @start: The starting virtual address of the region.
  * @end: The ending virtual address of the region.
@@ -113,6 +117,8 @@ void vas_set_pml4(struct address_space* vas, pgd_t* pml4);
  * Return: 0 on success, negative error code on failure
  */
 int map_region(struct address_space* vas,
+	       struct vfs_inode* inode,
+	       off_t file_offset,
 	       uptr start,
 	       uptr end,
 	       unsigned long prot,

@@ -1,7 +1,7 @@
 include $(HELIOS_ROOT)/toolchain.mk
 
 BUILDDIR ?= build
-SRC_DIRS := kernel drivers lib mm
+SRC_DIRS := kernel drivers lib mm fs
 ARCHDIR  := arch/$(HOST_ARCH)
 UAPI_DIR := include/uapi
 

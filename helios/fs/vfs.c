@@ -25,10 +25,9 @@
 #include <lib/log.h>
 #undef FORCE_LOG_REDEF
 
-#include <drivers/fs/devfs.h>
-#include <drivers/fs/fat.h>
-#include <drivers/fs/ramfs.h>
-#include <drivers/fs/vfs.h>
+#include "fs/devfs/devfs.h"
+#include "fs/ramfs/ramfs.h"
+#include "fs/vfs.h"
 #include <kernel/panic.h>
 #include <kernel/tasks/scheduler.h>
 #include <lib/hashtable.h>
@@ -1052,14 +1051,19 @@ ssize_t vfs_write(int fd, const char* buffer, size_t count)
 	return vfs_file_write(file, buffer, count);
 }
 
-ssize_t vfs_read(int fd, char* buffer, size_t count)
+ssize_t vfs_file_read(struct vfs_file* file, char* buffer, size_t count)
 {
-	struct vfs_file* file = get_file(fd);
 	if (!file) {
 		return -VFS_ERR_INVAL;
 	}
 
 	return file->fops->read(file, buffer, count);
+}
+
+ssize_t vfs_read(int fd, char* buffer, size_t count)
+{
+	struct vfs_file* file = get_file(fd);
+	return vfs_file_read(file, buffer, count);
 }
 
 off_t vfs_lseek(int fd, off_t offset, int whence)

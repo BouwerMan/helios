@@ -1,11 +1,13 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include <arch/atomic.h>
-#include <kernel/types.h>
-#include <lib/list.h>
-#include <mm/page_alloc.h>
 #include <stddef.h>
+
+#include "arch/atomic.h"
+#include "kernel/bitops.h"
+#include "kernel/tasks/scheduler.h"
+#include "kernel/types.h"
+#include "mm/page_alloc.h"
 
 static constexpr int PAGE_SHIFT = 12;
 static constexpr size_t PAGE_SIZE = (1UL << PAGE_SHIFT);
@@ -13,13 +15,22 @@ static constexpr unsigned long PAGE_MASK = (~(PAGE_SIZE - 1));
 
 static constexpr uintptr_t HHDM_OFFSET = 0xffff800000000000UL;
 
-static constexpr flags_t PG_RESERVED = (1UL << 0);
-static constexpr flags_t PG_BUDDY = (1UL << 1);
-static constexpr flags_t PG_UPTODATE = (1UL << 2);
-static constexpr flags_t PG_DIRTY = (1UL << 3);
+enum PG_FLAGS_BITS {
+	PG_RESERVED_BIT,
+	PG_BUDDY_BIT,
+	PG_UPTODATE_BIT,
+	PG_DIRTY_BIT,
+	PG_LOCKED_BIT,
+};
+
+static constexpr flags_t PG_RESERVED = BIT(0);
+static constexpr flags_t PG_BUDDY = BIT(1);
+static constexpr flags_t PG_UPTODATE = BIT(2);
+static constexpr flags_t PG_DIRTY = BIT(3);
+static constexpr flags_t PG_LOCKED = BIT(4);
 
 typedef size_t pfn_t;
-typedef unsigned long pgoff_t;
+typedef long pgoff_t;
 
 extern struct page* mem_map;
 extern pfn_t max_pfn;
@@ -36,8 +47,8 @@ enum BLOCK_STATE {
 struct page {
 	struct list_head list;
 	atomic_t ref_count;  // Reference count for the page
-	unsigned long flags; // Flags for the page (e.g., dirty, accessed)
-	spinlock_t lock;
+	flags_t flags;	     // Flags for the page (e.g., dirty, accessed)
+	struct waitqueue wq; // Waitqueue for those waiting on PG_DIRTY
 
 	union {
 		unsigned long private;
@@ -51,6 +62,7 @@ struct page {
 		/* File mapping */
 		struct {
 			struct inode_mapping* mapping;
+			struct hlist_node map_node;
 			pgoff_t index;
 		};
 	};
@@ -146,3 +158,13 @@ static inline void put_page(struct page* pg)
 		__free_page(pg);
 	}
 }
+
+bool trylock_page(struct page* page);
+
+void lock_page(struct page* page);
+
+bool tryunlock_page(struct page* page);
+
+void unlock_page(struct page* page);
+
+void wait_on_page_locked(struct page* page);

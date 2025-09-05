@@ -19,8 +19,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "fs/devfs/devfs.h"
 #include <drivers/device.h>
-#include <drivers/fs/devfs.h>
 #include <kernel/helios.h>
 #include <lib/log.h>
 #include <mm/kmalloc.h>

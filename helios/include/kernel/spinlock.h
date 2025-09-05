@@ -114,9 +114,9 @@ static inline void spin_unlock_irqrestore(spinlock_t* lock, unsigned long flags)
 // TODO: Flesh these out with proper documentation and such, in the meantime
 // just know that you probably shouldn't use these :)
 
-// Should be used if in interrupt context
-#define spin_lock(lock)	  spinlock_acquire(lock)
-#define spin_unlock(lock) spinlock_release(lock)
+// Should be used if in interrupt context or no intention to release the lock
+#define spin_lock(lock)	  __spinlock_raw_acquire(lock)
+#define spin_unlock(lock) __spinlock_raw_release(lock)
 
 static inline void spin_lock_irq(spinlock_t* lock)
 {

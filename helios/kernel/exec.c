@@ -19,11 +19,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "kernel/errno.h"
+#include "fs/vfs.h"
 #include <arch/gdt/gdt.h>
 #include <arch/mmu/vmm.h>
 #include <arch/regs.h>
-#include <drivers/fs/vfs.h>
 #include <kernel/exec.h>
 #include <kernel/panic.h>
 #include <lib/string.h>
@@ -31,6 +30,7 @@
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/page_alloc_flags.h>
+#include <uapi/helios/errno.h>
 
 /*******************************************************************************
 * Private Function Prototypes
@@ -42,15 +42,18 @@
  * @param header Pointer to the ELF file header.
  */
 static bool validate(struct elf_file_header* header);
+
 /**
  * @brief Loads a program header from an ELF file into the task's address space.
  *
+ * FIXME:
  * @param task Pointer to the task structure.
  * @param elf Pointer to the ELF file.
  * @param prog Pointer to the ELF program header.
  * @return 0 on success, -1 on failure.
  */
 static int load_program_header(struct task* task,
+			       struct vfs_inode* inode,
 			       void* elf,
 			       struct elf_program_header* prog);
 
@@ -72,17 +75,100 @@ static int setup_user_stack(struct task* task,
 
 int exec(struct task* task, const char* path)
 {
-	struct vfs_dentry* dentry = vfs_lookup(path);
-	if (!dentry || !dentry->inode) {
-		log_error("execve: Could not find file at path: %s", path);
-		dput(dentry);
+	int fd = vfs_open(path, O_RDONLY);
+	if (fd < 0) {
+		log_error("execve: Failed to open file %s: %d", path, fd);
 		return -ENOENT;
 	}
-	struct vfs_inode* inode = dentry->inode;
 
-	log_info("Loading binary at path: %s", path);
-	log_debug("inode f_size: %lu", inode->f_size);
+	__load_elf(task, get_file(fd));
 
+	vfs_close(fd);
+
+	return 0;
+}
+
+int __load_elf(struct task* task, struct vfs_file* file)
+{
+	void* temp_buf = get_free_page(AF_KERNEL);
+	if (!temp_buf) {
+		log_error("Failed to allocate temporary buffer");
+		return -ENOMEM;
+	}
+
+	vfs_file_read(file, temp_buf, PAGE_SIZE);
+
+	struct elf_file_header* header = temp_buf;
+
+	if (!validate(header)) {
+		log_error("Invalid ELF header");
+		return -ENOEXEC;
+	}
+
+	log_info("Loading ELF binary with entry point at 0x%lx", header->entry);
+
+	if (header->type != ET_EXE) {
+		log_error("Invalid elf type: %d", header->type);
+		return -1;
+	}
+
+	log_debug("Valid type, reading program headers");
+
+	// TODO: Proper section header handling for .bss and such
+
+	uptr highest = 0;
+	struct elf_program_header* prog =
+		(struct elf_program_header*)((uintptr_t)header +
+					     header->header_size);
+	for (size_t i = 0; i < header->program_header_entry_count; i++) {
+
+		log_debug(
+			"ELF Program Header: type=0x%x, flags=0x%x, offset=0x%lx,"
+			" virtual_address=0x%lx, size_in_file=0x%lx, size_in_memory=0x%lx, align=0x%lx",
+			prog->type,
+			prog->flags,
+			prog->offset,
+			prog->virtual_address,
+			prog->size_in_file,
+			prog->size_in_memory,
+			prog->align);
+
+		switch (prog->type) {
+		case PT_LOAD:
+			if (load_program_header(
+				    task, file->dentry->inode, header, prog) <
+			    0) {
+				// TODO: Free previous program sections
+				log_error("Failed to load program header");
+				return -1;
+			}
+			uptr end = align_up_page(prog->virtual_address +
+						 prog->size_in_memory);
+			if (end > highest) highest = end;
+			break;
+		default:
+			log_error("Unknown program type %d", prog->type);
+			return -1;
+		}
+		prog++;
+	}
+
+	uptr stack_base = align_up_page(highest);
+	int err = setup_user_stack(task, stack_base, STACK_SIZE_PAGES);
+
+	if (err < 0) {
+		log_error("Failed to setup user stack");
+		return -1;
+	}
+
+	task->regs->rip = header->entry; // Set the entry point
+
+	task->regs->cs = USER_CS;
+	task->regs->ds = USER_DS;
+	task->regs->ss = USER_DS;
+	return 0;
+
+	free_page(temp_buf);
 	return 0;
 }
 
@@ -124,7 +210,8 @@ int load_elf(struct task* task, struct elf_file_header* header)
 
 		switch (prog->type) {
 		case PT_LOAD:
-			if (load_program_header(task, header, prog) < 0) {
+			if (load_program_header(task, nullptr, header, prog) <
+			    0) {
 				// TODO: Free previous program sections
 				log_error("Failed to load program header");
 				return -1;
@@ -189,6 +276,7 @@ static bool validate(struct elf_file_header* header)
 }
 
 static int load_program_header(struct task* task,
+			       struct vfs_inode* inode,
 			       void* elf,
 			       struct elf_program_header* prog)
 {
@@ -201,11 +289,30 @@ static int load_program_header(struct task* task,
 	prot |= prog->flags & PF_WRITE ? PROT_WRITE : 0;
 	prot |= prog->flags & PF_READ ? PROT_READ : 0;
 
-	map_region(task->vas, vaddr_start, vaddr_end, prot, prog->flags);
+	if (inode) {
+		// Map as file backed
+		map_region(task->vas,
+			   inode,
+			   (off_t)prog->offset,
+			   vaddr_start,
+			   vaddr_end,
+			   prot,
+			   MAP_PRIVATE);
+	} else {
+		// For now we will keep supporting non anonymous mapping
+		map_region(task->vas,
+			   nullptr,
+			   0,
+			   vaddr_start,
+			   vaddr_end,
+			   prot,
+			   MAP_PRIVATE | MAP_ANONYMOUS);
 
-	void* data = (void*)((uptr)elf + prog->offset);
+		void* data = (void*)((uptr)elf + prog->offset);
 
-	vmm_write_region(task->vas, vaddr_start, data, prog->size_in_file);
+		vmm_write_region(
+			task->vas, vaddr_start, data, prog->size_in_file);
+	}
 
 	return 0;
 }
@@ -219,7 +326,13 @@ static int setup_user_stack(struct task* task,
 		  stack_base,
 		  stack_top);
 
-	map_region(task->vas, stack_base, stack_top, PROT_READ | PROT_WRITE, 0);
+	map_region(task->vas,
+		   nullptr,
+		   -1,
+		   stack_base,
+		   stack_top,
+		   PROT_READ | PROT_WRITE,
+		   MAP_ANONYMOUS | MAP_PRIVATE | MAP_GROWSDOWN);
 
 	task->regs->rsp =
 		stack_top; // Set the stack pointer to the top of the stack

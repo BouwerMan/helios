@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
-#include <drivers/fs/vfs.h>
+
+#include "fs/vfs.h"
 #include <lib/hashtable.h>
 
 // TODO: Make sure when things are fully deallocated we can still find the data later.
@@ -83,6 +84,7 @@ int ramfs_close(struct vfs_inode* inode, struct vfs_file* file);
 ssize_t ramfs_read(struct vfs_file* file, char* buffer, size_t count);
 ssize_t ramfs_write(struct vfs_file* file, const char* buffer, size_t count);
 int ramfs_readdir(struct vfs_file* file, struct dirent* dirent, off_t offset);
+int ramfs_readpage(struct vfs_inode* inode, struct page* page);
 
 struct vfs_dentry* ramfs_lookup(struct vfs_inode* dir_inode,
 				struct vfs_dentry* child);
@@ -95,3 +97,5 @@ int ramfs_create(struct vfs_inode* dir,
 struct vfs_inode* ramfs_alloc_inode(struct vfs_superblock* sb);
 void ramfs_destroy_inode(struct vfs_inode* inode);
 int ramfs_read_inode(struct vfs_inode* inode);
+
+void ramfs_test();

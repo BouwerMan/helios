@@ -25,12 +25,11 @@
 #include <lib/log.h>
 #undef FORCE_LOG_REDEF
 
+#include "fs/vfs.h"
 #include <arch/gdt/gdt.h>
 #include <arch/idt.h>
 #include <arch/mmu/vmm.h>
 #include <arch/regs.h>
-#include <drivers/fs/vfs.h>
-#include <kernel/errno.h>
 #include <kernel/exec.h>
 #include <kernel/limine_requests.h>
 #include <kernel/panic.h>
@@ -43,6 +42,7 @@
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
+#include <uapi/helios/errno.h>
 
 /*******************************************************************************
 * Global Variable Definitions
@@ -110,7 +110,7 @@ static inline bool preempt_is_enabled()
 static inline void __task_block(struct task* task, struct list_head* block_list)
 {
 	task->state = BLOCKED;
-	list_move_tail(&task->list, block_list);
+	list_move_tail(&task->sched_list, block_list);
 }
 
 static inline bool should_reschedule()
@@ -286,7 +286,7 @@ void kthread_destroy(struct task* task)
 	// TODO: Free vm_mm
 
 	// TODO: Do we need to make sure the list is initialized?
-	list_del(&task->list);
+	list_del(&task->sched_list);
 	free_pages((void*)task->kernel_stack, STACK_SIZE_PAGES);
 	slab_free(squeue.cache, task);
 
@@ -332,7 +332,9 @@ int launch_init()
 	struct limine_module_response* mod = mod_request.response;
 
 	// exec(task, "/usr/bin/init.elf");
-	int res = load_elf(task, mod->modules[0]->address);
+	// GDB BREAKPOINT
+	// int res = load_elf(task, mod->modules[0]->address);
+	int res = exec(task, "/usr/bin/init.elf");
 	if (res < 0) {
 		kthread_destroy(task);
 		enable_preemption();
@@ -368,7 +370,7 @@ void reap_task(struct task* task)
 	struct task* pos = nullptr;
 	struct task* temp = nullptr;
 
-	list_for_each_entry_safe(pos, temp, &squeue.terminated_list, list)
+	list_for_each_entry_safe(pos, temp, &squeue.terminated_list, sched_list)
 	{
 		log_info("Cleaning up task '%s' (PID %d)", pos->name, pos->pid);
 		task_remove(pos);
@@ -385,6 +387,7 @@ void reap_task(struct task* task)
 [[noreturn]]
 void task_end(int status)
 {
+	// GDB BREAKPOINT
 	struct task* task = get_current_task();
 	log_info("Task '%s' (PID %d) exiting with status %d",
 		 task->name,
@@ -399,11 +402,11 @@ void task_end(int status)
 	}
 
 	task->state = TERMINATED;
-	list_move_tail(&task->list, &squeue.terminated_list);
+	list_move_tail(&task->sched_list, &squeue.terminated_list);
 
 	task->exit_code = status;
 
-	waitqueue_wake_all(&task->parent->parent_wq);
+	waitqueue_wake_one(&task->parent->parent_wq);
 
 	yield();
 
@@ -452,7 +455,8 @@ struct task* __alloc_task()
 	struct task* parent = get_current_task();
 	task->parent = parent;
 
-	list_init(&task->list);
+	list_init(&task->sched_list);
+	list_init(&task->wait_list);
 	list_init(&task->vas->mr_list);
 	list_init(&task->children);
 	list_init(&task->sibling);
@@ -478,7 +482,7 @@ void task_wake(struct task* task)
 	}
 
 	task->state = READY;
-	list_move_tail(&task->list, &squeue.ready_list);
+	list_move_tail(&task->sched_list, &squeue.ready_list);
 
 	enable_preemption();
 }
@@ -501,7 +505,7 @@ void scheduler_tick()
 {
 	struct task* task = squeue.current_task;
 	for (size_t i = 0; i < squeue.task_count; i++) {
-		task = list_next_entry(task, list);
+		task = list_next_entry(task, sched_list);
 		if (task->state == BLOCKED && task->sleep_ticks > 0) {
 			task->sleep_ticks--;
 			if (task->sleep_ticks == 0) task->state = READY;
@@ -514,7 +518,7 @@ void scheduler_dump()
 	log_info("Scheduler Tasks");
 	struct task* pos;
 	log_info("Ready List:");
-	list_for_each_entry (pos, &squeue.ready_list, list) {
+	list_for_each_entry (pos, &squeue.ready_list, sched_list) {
 		log_info(
 			"  %d: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
 			pos->pid,
@@ -525,7 +529,7 @@ void scheduler_dump()
 			pos->vas->pml4_phys);
 	}
 	log_info("Blocked List:");
-	list_for_each_entry (pos, &squeue.blocked_list, list) {
+	list_for_each_entry (pos, &squeue.blocked_list, sched_list) {
 		log_info(
 			"  %d: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
 			pos->pid,
@@ -555,6 +559,15 @@ void yield_blocked()
 	yield();
 }
 
+void __wq_add_to_list(struct waitqueue* wqueue, struct task* task)
+{
+	if (list_empty(&task->wait_list)) {
+		list_add_tail(&task->wait_list, &wqueue->waiters_list);
+	} else {
+		list_move_tail(&task->wait_list, &wqueue->waiters_list);
+	}
+}
+
 void waitqueue_init(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;
@@ -562,41 +575,80 @@ void waitqueue_init(struct waitqueue* wqueue)
 	spin_init(&wqueue->waiters_lock);
 }
 
-void waitqueue_sleep(struct waitqueue* wqueue)
+bool waitqueue_has_waiters(struct waitqueue* wqueue)
+{
+	if (!wqueue) return false;
+	return !list_empty(&wqueue->waiters_list);
+}
+
+/**
+ * Adds current task to waitqueue without blocking it.
+ */
+void waitqueue_prepare_wait(struct waitqueue* wqueue)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
+
+	struct task* task = get_current_task();
+	task->wait_state = WAIT_PREPARING;
+	task->wait = wqueue;
+	// __wq_add_to_list(wqueue, task);
+	list_add_tail(&task->wait_list, &wqueue->waiters_list);
+
+	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
+}
+
+/**
+ * Actually blocks the task
+ */
+void waitqueue_commit_sleep(struct waitqueue* wqueue)
 {
 	disable_preemption();
+
 	struct task* task = get_current_task();
 
 	unsigned long flags;
 	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
 
-	__task_block(task, &wqueue->waiters_list);
+	if (task->wait_state == WAIT_WOKEN) {
+		list_del(&task->wait_list);
+		task->wait_state = WAIT_NONE;
+		task->wait = nullptr;
+		spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
+		enable_preemption();
+		return;
+	}
+
+	__task_block(task, &squeue.blocked_list);
+	task->wait_state = WAIT_SLEEPING;
 	task->wait = wqueue;
 
 	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
-
 	enable_preemption();
-	yield_blocked();
+	yield();
 }
 
-void waitqueue_sleep_unlock(struct waitqueue* wqueue,
-			    spinlock_t* lock,
-			    unsigned long flags)
+/**
+ * Removes from waitqueue without blocking
+ */
+void waitqueue_cancel_wait(struct waitqueue* wqueue)
 {
-	disable_preemption();
+	unsigned long flags;
+	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
 
 	struct task* task = get_current_task();
 
-	__task_block(task, &wqueue->waiters_list);
-	task->wait = wqueue;
+	list_del(&task->wait_list);
+	task->wait_state = WAIT_NONE;
+	task->wait = nullptr;
 
-	need_reschedule = true;
+	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
+}
 
-	spin_unlock_irqrestore(lock, flags);
-
-	enable_preemption();
-
-	yield();
+void waitqueue_sleep(struct waitqueue* wqueue)
+{
+	waitqueue_prepare_wait(wqueue);
+	waitqueue_commit_sleep(wqueue);
 }
 
 void waitqueue_wake_one(struct waitqueue* wqueue)
@@ -606,11 +658,29 @@ void waitqueue_wake_one(struct waitqueue* wqueue)
 	ulong flags;
 	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
 
-	struct task* next =
-		list_first_entry(&wqueue->waiters_list, struct task, list);
-	next->wait = nullptr;
-	task_wake(next);
+	if (list_empty(&wqueue->waiters_list)) {
+		goto cleanup;
+	}
 
+	struct task* next =
+		list_first_entry(&wqueue->waiters_list, struct task, wait_list);
+
+	switch (next->wait_state) {
+	case WAIT_PREPARING:
+		next->wait_state = WAIT_WOKEN;
+		// list_del(&next->wait_list);
+		goto cleanup;
+	case WAIT_SLEEPING:
+		next->wait = nullptr;
+		next->wait_state = WAIT_NONE;
+		list_del(&next->wait_list);
+		task_wake(next);
+		goto cleanup;
+	case WAIT_WOKEN:
+	case WAIT_NONE:
+	}
+
+cleanup:
 	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
 }
 
@@ -618,24 +688,31 @@ void waitqueue_wake_all(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;
 
+	panic("wake all");
+
+	// disable_preemption();
+
 	ulong flags;
 	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
 
 	struct task* pos = nullptr;
 	struct task* temp = nullptr;
-	list_for_each_entry_safe(pos, temp, &wqueue->waiters_list, list)
+	list_for_each_entry_safe(pos, temp, &wqueue->waiters_list, wait_list)
 	{
 		pos->wait = nullptr;
+		pos->wait_state = WAIT_NONE;
+		list_del(&pos->wait_list);
 		task_wake(pos);
 	}
 
 	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
+	// enable_preemption();
 }
 
 void waitqueue_dump_waiters(struct waitqueue* wqueue)
 {
 	struct task* pos = nullptr;
-	list_for_each_entry (pos, &wqueue->waiters_list, list) {
+	list_for_each_entry (pos, &wqueue->waiters_list, wait_list) {
 		log_info(
 			"  %d: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
 			pos->pid,
@@ -675,7 +752,7 @@ int install_fd(struct task* t, struct vfs_file* file)
 void __task_add(struct task* task)
 {
 	log_debug("Appending new task to list");
-	list_add_tail(&squeue.ready_list, &task->list);
+	list_add_tail(&squeue.ready_list, &task->sched_list);
 	squeue.task_count++;
 
 	log_debug("Added task %d", task->pid);
@@ -702,14 +779,17 @@ static struct task* pick_next()
 	struct task* current = get_current_task();
 	struct task* next;
 
+	// TODO: Skip over WAIT_PREPARING tasks
+
 	// Since we have a blocked list now, we can assume that everything in the
 	// ready list is READY. So we don't have to do any looping for a simple
 	// round-robin scheduler. (This still sucks though)
 	if (current->state != READY) {
-		next = list_first_entry(&squeue.ready_list, struct task, list);
+		next = list_first_entry(
+			&squeue.ready_list, struct task, sched_list);
 	} else {
 		next = list_next_entry_circular(
-			current, &squeue.ready_list, list);
+			current, &squeue.ready_list, sched_list);
 	}
 
 	squeue.current_task = next;
@@ -751,7 +831,7 @@ static int create_kernel_stack(struct task* task, entry_func entry)
 
 static void task_remove(struct task* task)
 {
-	list_del(&task->list);
+	list_del(&task->sched_list);
 	squeue.task_count--;
 }
 

@@ -91,5 +91,6 @@ struct elf_program_header {
 	u64 align;
 } __attribute__((packed));
 
+int __load_elf(struct task* task, struct vfs_file* file);
 int load_elf(struct task* task, struct elf_file_header* header);
 int exec(struct task* task, const char* path);

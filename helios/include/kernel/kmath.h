@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define __BIT_WIDTH(x) (sizeof(x) * CHAR_BIT)
+#include "kernel/bitops.h"
 
 /**
  * @brief Computes the integer base-2 logarithm of an unsigned long value.
@@ -14,7 +14,7 @@
  */
 static inline int ilog2(unsigned long v)
 {
-	return (int)__BIT_WIDTH(v) - 1 - __builtin_clzll(v);
+	return (int)BIT_WIDTH(v) - 1 - CLZ(v);
 }
 
 /**
@@ -26,7 +26,7 @@ static inline int ilog2(unsigned long v)
 static inline unsigned long roundup_pow_of_two(unsigned long v)
 {
 	if (v == 0 || v == 1) return 1;
-	return 1ULL << ((int)__BIT_WIDTH(v) - __builtin_clzll(v - 1));
+	return 1ULL << ((int)BIT_WIDTH(v) - CLZ(v - 1));
 }
 
 /**
@@ -36,7 +36,7 @@ static inline unsigned long roundup_pow_of_two(unsigned long v)
 static inline unsigned long rounddown_pow_of_two(unsigned long v)
 {
 	if (v == 0) return 0;
-	return 1UL << ((int)__BIT_WIDTH(v) - 1 - __builtin_clzll(v));
+	return 1UL << ((int)BIT_WIDTH(v) - 1 - CLZ(v));
 }
 
 /**

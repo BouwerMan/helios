@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include <drivers/fs/vfs.h>
+#include "fs/vfs.h"
 #include <kernel/spinlock.h>
 #include <kernel/tasks/scheduler.h>
 

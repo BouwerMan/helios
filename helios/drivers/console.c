@@ -105,6 +105,7 @@ ssize_t console_write(struct vfs_file* file, const char* buffer, size_t count)
  */
 void console_flush()
 {
+	// GDB BREAKPOINT
 	struct console_sink* sink;
 	list_for_each_entry (sink, &g_console_sinks, list) {
 		tty_drain_output_buffer(sink->tty);

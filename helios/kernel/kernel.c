@@ -18,11 +18,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "fs/ramfs/ramfs.h"
+#include "fs/ustar/tar.h"
+#include "fs/vfs.h"
 #include <arch/mmu/vmm.h>
 #include <drivers/ata/controller.h>
 #include <drivers/console.h>
-#include <drivers/fs/tarfs.h>
-#include <drivers/fs/vfs.h>
 #include <drivers/pci/pci.h>
 #include <drivers/serial.h>
 #include <drivers/tty.h>
@@ -44,8 +45,6 @@
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/slab.h>
-
-#include <drivers/fs/ramfs.h>
 
 struct limine_framebuffer* framebuffer;
 
@@ -151,8 +150,10 @@ void kernel_main()
 			dirent->d_type);
 	}
 
-	// vfs_dump_child(f->dentry);
-	// vfs_close(fd);
+	vfs_close(fd);
+	vfs_close(fd2);
+
+	// ramfs_test();
 
 	tty_init();
 

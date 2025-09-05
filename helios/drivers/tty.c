@@ -19,9 +19,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "fs/vfs.h"
 #include <drivers/console.h>
 #include <drivers/device.h>
-#include <drivers/fs/vfs.h>
 #include <drivers/serial.h>
 #include <drivers/tty.h>
 #include <drivers/vconsole.h>

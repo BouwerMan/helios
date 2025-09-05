@@ -262,6 +262,7 @@ void bootmem_init()
 		uintptr_t paddr = pfn_to_phys(pfn);
 		struct page* pg = &mem_map[pfn];
 		pg->flags = 0;
+		waitqueue_init(&pg->wq);
 		if (is_page_used(paddr)) {
 			set_page_reserved(pg);
 			atomic_set(&pg->ref_count, 1);

@@ -19,8 +19,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "fs/vfs.h"
 #include <arch/mmu/vmm.h>
-#include <drivers/fs/vfs.h>
 #include <kernel/tasks/fork.h>
 #include <kernel/tasks/scheduler.h>
 #include <lib/log.h>
@@ -34,7 +34,6 @@
  */
 pid_t do_fork(struct registers* regs)
 {
-	disable_preemption();
 
 	struct task* parent = get_current_task();
 
@@ -58,9 +57,12 @@ pid_t do_fork(struct registers* regs)
 	strncpy(child->name, parent->name, MAX_TASK_NAME_LEN);
 	child->name[MAX_TASK_NAME_LEN - 1] = '\0';
 
+	// GDB BREAKPOINT
 	vas_set_pml4(child->vas, (pgd_t*)vmm_create_address_space());
 	res = address_space_dup(child->vas, parent->vas);
 	if (res < 0) {
+		// GDB BREAKPOINT
+		enable_preemption();
 		log_error("Could not duplicate address space");
 		return -1;
 	}
@@ -72,6 +74,7 @@ pid_t do_fork(struct registers* regs)
 		}
 	}
 
+	disable_preemption();
 	child->state = READY;
 	__task_add(child);
 

@@ -1,5 +1,5 @@
-#include <drivers/fs/tarfs.h>
-#include <drivers/fs/vfs.h>
+#include "fs/ustar/tar.h"
+#include "fs/vfs.h"
 #include <kernel/helios.h>
 #include <lib/log.h>
 
@@ -17,6 +17,8 @@ static size_t oct2bin(unsigned char* str, size_t size)
 
 void unpack_tarfs(void* archive_address)
 {
+	log_info("Unpacking initramfs from tar archive at %p", archive_address);
+
 	unsigned char* ptr = archive_address;
 
 	while (true) {

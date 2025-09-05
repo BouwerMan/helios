@@ -103,7 +103,7 @@ uint64_t* vmm_create_address_space();
 // #include <mm/address_space.h>
 
 /**
- * vmm_map_region - Map a memory region by allocating new pages
+ * vmm_map_anon_region - Map a memory region by allocating new pages
  * @vas: Target address space to map the region into
  * @mr: Memory region descriptor containing virtual address range and permissions
  *
@@ -111,7 +111,7 @@ uint64_t* vmm_create_address_space();
  * Errors: -EINVAL if vas or mr is NULL
  *         Other negative values from vmm_map_page() failures
  */
-int vmm_map_region(struct address_space* vas, struct memory_region* mr);
+int vmm_map_anon_region(struct address_space* vas, struct memory_region* mr);
 
 /**
  * vmm_fork_region - Fork a memory region with copy-on-write semantics

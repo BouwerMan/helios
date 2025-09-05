@@ -53,10 +53,23 @@ static constexpr uptr LIST_POISON2 = 0x122;
 
 #define LIST_HEAD(name) struct list_head name = LIST_HEAD_INIT(name)
 
+/**
+ * INIT_LIST_HEAD - Initialize a list_head structure
+ * @list: list_head structure to be initialized.
+ *
+ * Initializes the list_head to point to itself.  If it is a list header,
+ * the result is an empty list.
+ */
+static inline void INIT_LIST_HEAD(struct list_head* list)
+{
+	__WRITE_ONCE(list->next, list);
+	__WRITE_ONCE(list->prev, list);
+}
+
 static inline void list_init(struct list_head* list)
 {
-	list->next = list;
-	list->prev = list;
+	__WRITE_ONCE(list->next, list);
+	__WRITE_ONCE(list->prev, list);
 }
 
 static inline bool list_empty(struct list_head* list)
@@ -188,14 +201,13 @@ static inline void __list_del(struct list_head* prev, struct list_head* next)
 /**
  * list_del - deletes entry from list.
  * @entry: the element to delete from the list.
- * Note: list_empty() on entry does not return true after this, the entry is
- * in an undefined state.
  */
 static inline void list_del(struct list_head* entry)
 {
 	__list_del(entry->prev, entry->next);
-	entry->next = (void*)LIST_POISON1;
-	entry->prev = (void*)LIST_POISON2;
+	list_init(entry);
+	// entry->next = (void*)LIST_POISON1;
+	// entry->prev = (void*)LIST_POISON2;
 }
 
 static inline void __list_del_entry(struct list_head* entry)
