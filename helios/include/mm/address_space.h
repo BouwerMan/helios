@@ -107,8 +107,10 @@ void vas_set_pml4(struct address_space* vas, pgd_t* pml4);
 
 /**
  * map_region - Creates and maps a new memory region.
- * FIXME:
+ *
  * @vas: The address space to add the new region to.
+ * @inode: The inode backing the region, or NULL for anonymous.
+ * @file_offset: The offset within the file to start mapping from.
  * @start: The starting virtual address of the region.
  * @end: The ending virtual address of the region.
  * @prot: The memory protection flags for the region.
@@ -125,3 +127,4 @@ int map_region(struct address_space* vas,
 	       unsigned long flags);
 
 void address_space_dump(struct address_space* vas);
+struct address_space* alloc_address_space();

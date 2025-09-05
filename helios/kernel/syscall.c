@@ -19,6 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "mm/kmalloc.h"
 #include <arch/idt.h>
 #include <arch/mmu/vmm.h>
 #include <drivers/console.h>
@@ -210,45 +211,29 @@ static struct limine_file* find_module(const char* name)
 	return NULL;
 }
 
+/**
+ * @rdi: file name (const char*)
+ * @rsi: argv (char**)
+ * @rdx: envp (char**)
+ */
 void sys_exec(struct registers* r)
 {
-	// disable_preemption();
 	const char* name = (const char*)r->rdi;
+	const char** argv = (const char**)r->rsi;
+	const char** envp = (const char**)r->rdx;
 
-	// TODO: Don't trust user pointer
-	struct limine_file* module = find_module(name);
-	if (!module) {
-		log_error("exec: module '%s' not found", name);
-		// enable_preemption();
-		SYSRET(r, (u64)-1); // Return an error
-		return;
+	// TODO: Don't trust user pointers
+
+	struct exec_context* ctx = prepare_exec(name, argv, envp);
+	if (!ctx) {
+		SYSRET(r, (u64)-ENOENT);
 	}
 
-	log_info(
-		"exec: Found module '%s' at address %p", name, module->address);
+	struct task* current = get_current_task();
+	int ret = commit_exec(current, ctx);
 
-	struct task* task = get_current_task();
-
-	pgd_t* old_pml4 = task->vas->pml4;
-
-	address_space_destroy(task->vas);
-
-	u64* new_pml4 = vmm_create_address_space();
-	vmm_load_cr3(HHDM_TO_PHYS(new_pml4));
-	vas_set_pml4(task->vas, (pgd_t*)new_pml4);
-
-	// TODO: Make sure there are no page table leaks here
-	free_page(old_pml4);
-
-	int res = load_elf(task, module->address);
-	if (res < 0) {
-		// enable_preemption();
-		panic("exec: load_elf failed");
-	}
-
-	// load_elf sets up the stack and entry point, so we just need to
-	// return normally
-	// enable_preemption();
+	// When we return from syscall, we'll return to the new process
+	SYSRET(r, (u64)ret);
 }
 
 typedef void (*handler)(struct registers* r);
@@ -278,7 +263,7 @@ void syscall_handler(struct registers* r)
 	handler func = syscall_handlers[r->rax];
 	if (func) {
 		struct task* task = get_current_task();
-		task->regs = r; // Update current task's regs
+		task->regs = r;
 		func(r);
 	}
 }

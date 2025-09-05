@@ -4,6 +4,8 @@
 #include <kernel/helios.h>
 #include <kernel/tasks/scheduler.h>
 
+static constexpr uptr DEFAULT_STACK_TOP = 0x7ffffffff000;
+
 #define ELFMAG0 0x7F	   // e_ident[EI_MAG0]
 #define ELFMAG1 'E'	   // e_ident[EI_MAG1]
 #define ELFMAG2 'L'	   // e_ident[EI_MAG2]
@@ -91,6 +93,21 @@ struct elf_program_header {
 	u64 align;
 } __attribute__((packed));
 
-int __load_elf(struct task* task, struct vfs_file* file);
-int load_elf(struct task* task, struct elf_file_header* header);
-int exec(struct task* task, const char* path);
+struct exec_context {
+	struct address_space* new_vas; // New address space
+	void* entry_point;	       // Entry from ELF
+	void* user_stack_top;	       // After argv/envp setup
+	size_t argv_count;
+	// Any other state needed for the new process
+	bool prepared; // Validation flag
+};
+
+struct exec_context* prepare_exec(const char* path,
+				  const char** argv,
+				  const char** envp);
+int commit_exec(struct task* task, struct exec_context* ctx);
+
+int __load_elf(struct exec_context* ctx, struct vfs_file* file);
+// [[deprecated]]
+// int load_elf(struct task* task, struct elf_file_header* header);
+// int exec(struct address_space* vas, const char* path);

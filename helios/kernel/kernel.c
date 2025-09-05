@@ -119,7 +119,7 @@ void kernel_main()
 	test_split_path();
 
 	log_info("Mounting initial root filesystem");
-	unpack_tarfs(mod_request.response->modules[2]->address);
+	unpack_tarfs(mod_request.response->modules[0]->address);
 
 	int fd = vfs_open("/", O_RDONLY);
 	struct vfs_file* f = get_file(fd);
@@ -136,7 +136,7 @@ void kernel_main()
 	}
 
 	log_info("Opening directory for reading");
-	int fd2 = vfs_open("/usr/include/", O_RDONLY);
+	int fd2 = vfs_open("/usr/bin/", O_RDONLY);
 	struct vfs_file* f2 = get_file(fd2);
 	struct dirent* dirent = kzalloc(sizeof(struct dirent));
 	off_t offset = 0;

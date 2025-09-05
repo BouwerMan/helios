@@ -328,17 +328,14 @@ int launch_init()
 	task->type = USER_TASK;
 	vas_set_pml4(task->vas, (pgd_t*)vmm_create_address_space());
 
-	// int fd = vfs_open("/usr/bin/init.elf",O_RDONLY);
-	struct limine_module_response* mod = mod_request.response;
-
-	// exec(task, "/usr/bin/init.elf");
-	// GDB BREAKPOINT
-	// int res = load_elf(task, mod->modules[0]->address);
-	int res = exec(task, "/usr/bin/init.elf");
-	if (res < 0) {
+	struct exec_context* ctx =
+		prepare_exec("/usr/bin/init.elf",
+			     (const char*[]) { "testv", NULL },
+			     (const char*[]) { "teste=1", NULL });
+	if (!ctx) {
 		kthread_destroy(task);
 		enable_preemption();
-		return res;
+		return -ENOENT;
 	}
 
 	// open /dev/console three times and pin them as 0,1,2
@@ -359,6 +356,7 @@ int launch_init()
 		task->resources[fd2] = NULL;
 	}
 
+	commit_exec(task, ctx);
 	kthread_run(task);
 
 	enable_preemption();
@@ -387,7 +385,6 @@ void reap_task(struct task* task)
 [[noreturn]]
 void task_end(int status)
 {
-	// GDB BREAKPOINT
 	struct task* task = get_current_task();
 	log_info("Task '%s' (PID %d) exiting with status %d",
 		 task->name,
@@ -440,9 +437,8 @@ struct task* __alloc_task()
 		log_error("OOM error from slab_alloc");
 		return nullptr;
 	}
-	struct address_space* vas = kzalloc(sizeof(struct address_space));
+	struct address_space* vas = alloc_address_space();
 	if (!vas) {
-		log_error("OOM error from kzmalloc");
 		slab_free(squeue.cache, task);
 		return nullptr;
 	}
@@ -457,7 +453,6 @@ struct task* __alloc_task()
 
 	list_init(&task->sched_list);
 	list_init(&task->wait_list);
-	list_init(&task->vas->mr_list);
 	list_init(&task->children);
 	list_init(&task->sibling);
 	waitqueue_init(&task->parent_wq);

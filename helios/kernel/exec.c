@@ -20,6 +20,9 @@
  */
 
 #include "fs/vfs.h"
+#include "kernel/tasks/scheduler.h"
+#include "mm/address_space.h"
+#include "mm/kmalloc.h"
 #include <arch/gdt/gdt.h>
 #include <arch/mmu/vmm.h>
 #include <arch/regs.h>
@@ -46,13 +49,13 @@ static bool validate(struct elf_file_header* header);
 /**
  * @brief Loads a program header from an ELF file into the task's address space.
  *
- * FIXME:
- * @param task Pointer to the task structure.
- * @param elf Pointer to the ELF file.
+ * @param ctx The exec context containing the new address space.
+ * @param inode Pointer to the inode of the ELF file, or nullptr for anonymous mapping.
+ * @param elf Pointer to the ELF file. If anonymous mapping is used, this is required to copy data from.
  * @param prog Pointer to the ELF program header.
  * @return 0 on success, -1 on failure.
  */
-static int load_program_header(struct task* task,
+static int load_program_header(struct exec_context* ctx,
 			       struct vfs_inode* inode,
 			       void* elf,
 			       struct elf_program_header* prog);
@@ -60,35 +63,100 @@ static int load_program_header(struct task* task,
 /**
  * @brief Sets up the user stack for the task.
  *
- * @param task Pointer to the task structure.
- * @param stack_base The base address of the stack.
+ * @param ctx The exec context containing the new address space.
+ * @param stack_base The top address of the stack.
  * @param stack_pages The number of pages to allocate for the stack.
  * @return 0 on success, -1 on failure.
  */
-static int setup_user_stack(struct task* task,
-			    uptr stack_base,
+static int setup_user_stack(struct exec_context* ctx,
+			    uptr stack_top,
 			    size_t stack_pages);
 
 /*******************************************************************************
 * Public Function Definitions
 *******************************************************************************/
 
-int exec(struct task* task, const char* path)
+struct exec_context* prepare_exec(const char* path,
+				  const char** argv,
+				  const char** envp)
 {
-	int fd = vfs_open(path, O_RDONLY);
-	if (fd < 0) {
-		log_error("execve: Failed to open file %s: %d", path, fd);
-		return -ENOENT;
+	struct exec_context* ctx =
+		(struct exec_context*)kzalloc(sizeof(struct exec_context));
+	if (!ctx) {
+		log_error("OOM when creating ctx");
+		return nullptr;
 	}
 
-	__load_elf(task, get_file(fd));
+	ctx->new_vas = alloc_address_space();
+	if (!ctx->new_vas) {
+		kfree(ctx);
+		return nullptr;
+	}
+	u64* new_pml4 = vmm_create_address_space();
+	vas_set_pml4(ctx->new_vas, (pgd_t*)new_pml4);
+
+	int fd = vfs_open(path, O_RDONLY);
+	if (fd < 0) {
+		log_error("Failed to open file %s: %d", path, fd);
+		return nullptr;
+	}
+
+	__load_elf(ctx, get_file(fd));
 
 	vfs_close(fd);
 
+	int err = setup_user_stack(ctx, DEFAULT_STACK_TOP, STACK_SIZE_PAGES);
+
+	if (err < 0) {
+		log_error("Failed to setup user stack");
+		return nullptr;
+	}
+
+	ctx->prepared = true;
+	return ctx;
+}
+
+int commit_exec(struct task* task, struct exec_context* ctx)
+{
+
+	if (!ctx || !ctx->prepared) {
+		return -EINVAL;
+	}
+	disable_preemption();
+
+	struct task* current = get_current_task();
+	pgd_t* old_pml4 = task->vas->pml4;
+	struct address_space* old_vas = task->vas;
+
+	if (task == current) {
+		// Switch to new address space first
+		vmm_load_cr3(HHDM_TO_PHYS(ctx->new_vas->pml4));
+	}
+
+	// Now safe to update task structure
+	task->vas = ctx->new_vas;
+
+	address_space_destroy(old_vas);
+	// TODO: Make sure there are no page table leaks here
+	free_page(old_pml4);
+	kfree(old_vas);
+
+	memset(task->regs, 0, sizeof(struct registers));
+
+	// TODO: argc, argv, envp
+
+	task->regs->rip = (u64)ctx->entry_point;
+	task->regs->rsp = (u64)ctx->user_stack_top;
+	task->regs->cs = USER_CS;
+	task->regs->ds = USER_DS;
+	task->regs->ss = USER_DS;
+	task->regs->rflags = DEFAULT_RFLAGS; // Interrupts enabled
+
+	enable_preemption();
 	return 0;
 }
 
-int __load_elf(struct task* task, struct vfs_file* file)
+int __load_elf(struct exec_context* ctx, struct vfs_file* file)
 {
 	void* temp_buf = get_free_page(AF_KERNEL);
 	if (!temp_buf) {
@@ -116,7 +184,6 @@ int __load_elf(struct task* task, struct vfs_file* file)
 
 	// TODO: Proper section header handling for .bss and such
 
-	uptr highest = 0;
 	struct elf_program_header* prog =
 		(struct elf_program_header*)((uintptr_t)header +
 					     header->header_size);
@@ -136,15 +203,12 @@ int __load_elf(struct task* task, struct vfs_file* file)
 		switch (prog->type) {
 		case PT_LOAD:
 			if (load_program_header(
-				    task, file->dentry->inode, header, prog) <
+				    ctx, file->dentry->inode, header, prog) <
 			    0) {
 				// TODO: Free previous program sections
 				log_error("Failed to load program header");
 				return -1;
 			}
-			uptr end = align_up_page(prog->virtual_address +
-						 prog->size_in_memory);
-			if (end > highest) highest = end;
 			break;
 		default:
 			log_error("Unknown program type %d", prog->type);
@@ -153,93 +217,9 @@ int __load_elf(struct task* task, struct vfs_file* file)
 		prog++;
 	}
 
-	uptr stack_base = align_up_page(highest);
-	int err = setup_user_stack(task, stack_base, STACK_SIZE_PAGES);
-
-	if (err < 0) {
-		log_error("Failed to setup user stack");
-		return -1;
-	}
-
-	task->regs->rip = header->entry; // Set the entry point
-
-	task->regs->cs = USER_CS;
-	task->regs->ds = USER_DS;
-	task->regs->ss = USER_DS;
-	return 0;
+	ctx->entry_point = (void*)header->entry;
 
 	free_page(temp_buf);
-	return 0;
-}
-
-int load_elf(struct task* task, struct elf_file_header* header)
-{
-	kassert(header != NULL && "execve: header is NULL");
-
-	if (!validate(header)) {
-		panic("execve: Invalid ELF header");
-	}
-
-	log_info("Loading ELF binary with entry point at 0x%lx", header->entry);
-
-	if (header->type != ET_EXE) {
-		log_error("Invalid elf type: %d", header->type);
-		return -1;
-	}
-
-	log_debug("Valid type, reading program headers");
-
-	// TODO: Proper section header handling for .bss and such
-
-	uptr highest = 0;
-	struct elf_program_header* prog =
-		(struct elf_program_header*)((uintptr_t)header +
-					     header->header_size);
-	for (size_t i = 0; i < header->program_header_entry_count; i++) {
-
-		log_debug(
-			"ELF Program Header: type=0x%x, flags=0x%x, offset=0x%lx,"
-			" virtual_address=0x%lx, size_in_file=0x%lx, size_in_memory=0x%lx, align=0x%lx",
-			prog->type,
-			prog->flags,
-			prog->offset,
-			prog->virtual_address,
-			prog->size_in_file,
-			prog->size_in_memory,
-			prog->align);
-
-		switch (prog->type) {
-		case PT_LOAD:
-			if (load_program_header(task, nullptr, header, prog) <
-			    0) {
-				// TODO: Free previous program sections
-				log_error("Failed to load program header");
-				return -1;
-			}
-			uptr end = align_up_page(prog->virtual_address +
-						 prog->size_in_memory);
-			if (end > highest) highest = end;
-			break;
-		default:
-			log_error("Unknown program type %d", prog->type);
-			return -1;
-		}
-		prog++;
-	}
-
-	uptr stack_base = align_up_page(highest);
-	int err = setup_user_stack(task, stack_base, STACK_SIZE_PAGES);
-
-	if (err < 0) {
-		log_error("Failed to setup user stack");
-		return -1;
-	}
-
-	task->regs->rip = header->entry; // Set the entry point
-
-	task->regs->cs = USER_CS;
-	task->regs->ds = USER_DS;
-	task->regs->ss = USER_DS;
 	return 0;
 }
 
@@ -275,7 +255,7 @@ static bool validate(struct elf_file_header* header)
 	return true;
 }
 
-static int load_program_header(struct task* task,
+static int load_program_header(struct exec_context* ctx,
 			       struct vfs_inode* inode,
 			       void* elf,
 			       struct elf_program_header* prog)
@@ -291,7 +271,7 @@ static int load_program_header(struct task* task,
 
 	if (inode) {
 		// Map as file backed
-		map_region(task->vas,
+		map_region(ctx->new_vas,
 			   inode,
 			   (off_t)prog->offset,
 			   vaddr_start,
@@ -300,7 +280,7 @@ static int load_program_header(struct task* task,
 			   MAP_PRIVATE);
 	} else {
 		// For now we will keep supporting non anonymous mapping
-		map_region(task->vas,
+		map_region(ctx->new_vas,
 			   nullptr,
 			   0,
 			   vaddr_start,
@@ -311,22 +291,23 @@ static int load_program_header(struct task* task,
 		void* data = (void*)((uptr)elf + prog->offset);
 
 		vmm_write_region(
-			task->vas, vaddr_start, data, prog->size_in_file);
+			ctx->new_vas, vaddr_start, data, prog->size_in_file);
 	}
 
 	return 0;
 }
 
-static int setup_user_stack(struct task* task,
-			    uptr stack_base,
+static int setup_user_stack(struct exec_context* ctx,
+			    uptr stack_top,
 			    size_t stack_pages)
 {
-	uptr stack_top = stack_base + stack_pages * PAGE_SIZE;
+	uptr stack_base = stack_top - stack_pages * PAGE_SIZE;
+	// uptr stack_top = stack_base + stack_pages * PAGE_SIZE;
 	log_debug("Setting up user stack at base: 0x%lx, top: 0x%lx",
 		  stack_base,
 		  stack_top);
 
-	map_region(task->vas,
+	map_region(ctx->new_vas,
 		   nullptr,
 		   -1,
 		   stack_base,
@@ -334,7 +315,7 @@ static int setup_user_stack(struct task* task,
 		   PROT_READ | PROT_WRITE,
 		   MAP_ANONYMOUS | MAP_PRIVATE | MAP_GROWSDOWN);
 
-	task->regs->rsp =
-		stack_top; // Set the stack pointer to the top of the stack
+	ctx->user_stack_top = (void*)stack_top;
+
 	return 0;
 }

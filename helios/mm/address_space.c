@@ -1,3 +1,4 @@
+#include "mm/kmalloc.h"
 #include "uapi/helios/mman.h"
 #include <arch/mmu/vmm.h>
 #include <kernel/panic.h>
@@ -36,6 +37,17 @@ void address_space_init()
 	log_debug("Initialized address space cache");
 }
 
+struct address_space* alloc_address_space()
+{
+	struct address_space* vas = kzalloc(sizeof(struct address_space));
+	if (!vas) {
+		log_error("OOM error from kzmalloc");
+		return nullptr;
+	}
+	list_init(&vas->mr_list);
+	return vas;
+}
+
 struct memory_region*
 alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags)
 {
@@ -46,6 +58,8 @@ alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags)
 	mr->end = end;
 	mr->prot = prot;
 	mr->flags = flags;
+
+	list_init(&mr->list);
 
 	return mr;
 }

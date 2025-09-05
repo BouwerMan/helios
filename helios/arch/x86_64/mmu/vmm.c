@@ -990,7 +990,6 @@ static void page_fault_fail(struct registers* r)
 	int reserved = r->err_code & 0x8;
 	int id = r->err_code & 0x10;
 
-	// GDB BREAKPOINT
 	set_log_mode(LOG_DIRECT);
 	irq_log_flush();
 	console_flush();

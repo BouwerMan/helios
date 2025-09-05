@@ -39,13 +39,11 @@ pid_t do_fork(struct registers* regs)
 
 	struct task* child = __alloc_task();
 	if (!child) {
-		enable_preemption();
 		return -1;
 	}
 
 	int res = copy_thread_state(child, regs);
 	if (res < 0) {
-		enable_preemption();
 		log_error("Could not copy thread state to child");
 		return res;
 	}
@@ -57,12 +55,9 @@ pid_t do_fork(struct registers* regs)
 	strncpy(child->name, parent->name, MAX_TASK_NAME_LEN);
 	child->name[MAX_TASK_NAME_LEN - 1] = '\0';
 
-	// GDB BREAKPOINT
 	vas_set_pml4(child->vas, (pgd_t*)vmm_create_address_space());
 	res = address_space_dup(child->vas, parent->vas);
 	if (res < 0) {
-		// GDB BREAKPOINT
-		enable_preemption();
 		log_error("Could not duplicate address space");
 		return -1;
 	}
