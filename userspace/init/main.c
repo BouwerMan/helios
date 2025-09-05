@@ -4,8 +4,19 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <unistd.h>
-int main(void)
+
+int main(int argc, char** argv, char** envp)
 {
+	printf("argc: %zu, argv: %p, envp: %p\n", (size_t)argc, argv, envp);
+	for (size_t i = 0; i < (size_t)argc; i++) {
+		printf("argv[%zu]: %s\n", i, argv[i]);
+	}
+
+	while (envp && *envp) {
+		printf("envp: %s\n", *envp);
+		envp++;
+	}
+
 	pid_t pid;
 
 	// Call fork() to create a new process
@@ -24,7 +35,7 @@ int main(void)
 		printf("Hello from the child process! My PID is %d, my parent's PID is %d.\n",
 		       getpid(),
 		       getppid());
-		exec_module("/usr/bin/hello_world.elf");
+		execve("/usr/bin/hello_world.elf", nullptr, nullptr);
 		exit(1); // Child process exits
 	} else {
 		// This code block is executed by the parent process

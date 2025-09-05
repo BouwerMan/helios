@@ -1,14 +1,7 @@
 #include <arch/syscall.h>
 #include <unistd.h>
 
-// Replaces the current process with an image from a loaded Limine module.
-// This function does not return on success.
-int exec_module(const char* module_name)
+int execve(const char* path, char* const argv[], char* const envp[])
 {
-	// Returns -1 on failure
-	return (int)__syscall1(SYS_EXEC, (long)module_name);
-}
-
-int execv(const char* path, char* const argv[])
-{
+	return (int)__syscall3(SYS_EXEC, (long)path, (long)argv, (long)envp);
 }

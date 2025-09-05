@@ -354,6 +354,8 @@ retry:
 
 	cache->used_objects++;
 
+	memset(obj_start, 0, cache->object_size);
+
 	spin_unlock_irqrestore(&cache->lock, flags);
 	return obj_start;
 }

@@ -70,7 +70,9 @@ static int load_program_header(struct exec_context* ctx,
  */
 static int setup_user_stack(struct exec_context* ctx,
 			    uptr stack_top,
-			    size_t stack_pages);
+			    size_t stack_pages,
+			    const char** argv,
+			    const char** envp);
 
 /*******************************************************************************
 * Public Function Definitions
@@ -105,7 +107,8 @@ struct exec_context* prepare_exec(const char* path,
 
 	vfs_close(fd);
 
-	int err = setup_user_stack(ctx, DEFAULT_STACK_TOP, STACK_SIZE_PAGES);
+	int err = setup_user_stack(
+		ctx, DEFAULT_STACK_TOP, STACK_SIZE_PAGES, argv, envp);
 
 	if (err < 0) {
 		log_error("Failed to setup user stack");
@@ -143,14 +146,16 @@ int commit_exec(struct task* task, struct exec_context* ctx)
 
 	memset(task->regs, 0, sizeof(struct registers));
 
-	// TODO: argc, argv, envp
-
 	task->regs->rip = (u64)ctx->entry_point;
 	task->regs->rsp = (u64)ctx->user_stack_top;
 	task->regs->cs = USER_CS;
 	task->regs->ds = USER_DS;
 	task->regs->ss = USER_DS;
-	task->regs->rflags = DEFAULT_RFLAGS; // Interrupts enabled
+	task->regs->rflags = DEFAULT_RFLAGS;
+
+	strncpy(task->name, ctx->name, MAX_TASK_NAME_LEN - 1);
+
+	kfree(ctx);
 
 	enable_preemption();
 	return 0;
@@ -218,6 +223,8 @@ int __load_elf(struct exec_context* ctx, struct vfs_file* file)
 	}
 
 	ctx->entry_point = (void*)header->entry;
+	strncpy(ctx->name, file->dentry->name, MAX_TASK_NAME_LEN - 1);
+	ctx->name[MAX_TASK_NAME_LEN - 1] = '\0';
 
 	free_page(temp_buf);
 	return 0;
@@ -297,9 +304,20 @@ static int load_program_header(struct exec_context* ctx,
 	return 0;
 }
 
+static size_t arg_len(const char** args)
+{
+	size_t len = 0;
+	if (!args) return 0;
+	while (args[len])
+		len++;
+	return len;
+}
+
 static int setup_user_stack(struct exec_context* ctx,
 			    uptr stack_top,
-			    size_t stack_pages)
+			    size_t stack_pages,
+			    const char** argv,
+			    const char** envp)
 {
 	uptr stack_base = stack_top - stack_pages * PAGE_SIZE;
 	// uptr stack_top = stack_base + stack_pages * PAGE_SIZE;
@@ -315,7 +333,66 @@ static int setup_user_stack(struct exec_context* ctx,
 		   PROT_READ | PROT_WRITE,
 		   MAP_ANONYMOUS | MAP_PRIVATE | MAP_GROWSDOWN);
 
-	ctx->user_stack_top = (void*)stack_top;
+	// Just some defaults just in case
+	// TODO: Split this into new function
+	if (argv == nullptr) {
+		argv = (const char*[]) { "helios", NULL };
+	}
+	if (envp == nullptr) {
+		envp = (const char*[]) { "PATH=/bin", NULL };
+	}
+
+	struct address_space* vas = ctx->new_vas;
+	uptr current_sp = stack_top;
+	const char* string;
+
+	size_t envc = arg_len(envp);
+	size_t argc = arg_len(argv);
+	uptr env_addrs[envc];
+	uptr arg_addrs[argc];
+
+	for (ssize_t i = (ssize_t)envc - 1; i >= 0; i--) {
+		string = envp[i];
+		size_t len = strlen(string) + 1;
+		current_sp -= len;
+		vmm_write_region(vas, current_sp, string, len);
+		env_addrs[i] = current_sp;
+	}
+
+	for (ssize_t i = (ssize_t)argc - 1; i >= 0; i--) {
+		string = argv[i];
+		size_t len = strlen(string) + 1;
+		current_sp -= len;
+		vmm_write_region(vas, current_sp, string, len);
+		arg_addrs[i] = current_sp;
+	}
+
+	current_sp &= (uptr)~0xF; // Align to 16 bytes
+
+	uptr envp_arr[envc + 1];
+	for (size_t i = 0; i < envc; i++) {
+		envp_arr[i] = env_addrs[i];
+	}
+	envp_arr[envc] = 0;
+
+	current_sp -= (envc + 1) * sizeof(uptr);
+	vmm_write_region(vas, current_sp, envp_arr, (envc + 1) * sizeof(uptr));
+
+	uptr argv_arr[argc + 1];
+	for (size_t i = 0; i < argc; i++) {
+		argv_arr[i] = arg_addrs[i];
+	}
+	argv_arr[argc] = 0;
+
+	current_sp -= (argc + 1) * sizeof(uptr);
+	vmm_write_region(vas, current_sp, argv_arr, (argc + 1) * sizeof(uptr));
+
+	current_sp -= sizeof(size_t);
+	vmm_write_region(vas, current_sp, &argc, sizeof(size_t));
+
+	ctx->user_stack_top = (void*)current_sp;
+
+	log_debug("User stack setup complete. Final SP: 0x%lx", current_sp);
 
 	return 0;
 }

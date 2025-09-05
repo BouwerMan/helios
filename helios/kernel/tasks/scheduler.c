@@ -328,10 +328,26 @@ int launch_init()
 	task->type = USER_TASK;
 	vas_set_pml4(task->vas, (pgd_t*)vmm_create_address_space());
 
-	struct exec_context* ctx =
-		prepare_exec("/usr/bin/init.elf",
-			     (const char*[]) { "testv", NULL },
-			     (const char*[]) { "teste=1", NULL });
+	static constexpr char init_path[] = "/usr/bin/init.elf";
+
+	const char* argv[] = {
+		init_path,
+		"YOU_ARE_INIT",
+		NULL,
+	};
+
+	const char* envp[] = {
+		"PATH=/bin:/usr/bin:/usr/local/bin",
+		"HOME=/home/user",
+		"USER=user",
+		"SHELL=/bin/bash",
+		"TERM=xterm",
+		"LANG=en_US.UTF-8",
+		"PWD=/home/user/project",
+		NULL,
+	};
+
+	struct exec_context* ctx = prepare_exec(init_path, argv, envp);
 	if (!ctx) {
 		kthread_destroy(task);
 		enable_preemption();

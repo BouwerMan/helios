@@ -359,11 +359,12 @@ void vmm_test_prune_single_mapping(void)
 
 paddr_t get_phys_addr(pgd_t* pml4, vaddr_t vaddr)
 {
+	u64 low = vaddr & FLAGS_MASK;
 	pte_t* pte = walk_page_table(pml4, vaddr & PAGE_FRAME_MASK, false, 0);
 
 	paddr_t paddr = pte->pte & PAGE_FRAME_MASK;
 
-	return paddr;
+	return paddr + low;
 }
 
 /**
@@ -601,11 +602,12 @@ int vmm_protect_page(struct address_space* vas, vaddr_t vaddr, flags_t new_prot)
  */
 void vmm_write_region(struct address_space* vas,
 		      vaddr_t vaddr,
-		      const char* data,
+		      const void* data,
 		      size_t len)
 {
 	// NOTE: Maybe we should use a memory_region like the name suggests :)
 	// Doesn't really change anything though.
+	const u8* data_bytes = data;
 	while (len > 0) {
 		// Calculate offset within the current page
 		size_t page_offset = vaddr & (PAGE_SIZE - 1);
@@ -618,13 +620,24 @@ void vmm_write_region(struct address_space* vas,
 		// Translate virtual to physical address
 		// TODO: Make sure this returns correct address
 		paddr_t paddr = get_phys_addr(vas->pml4, vaddr);
+
+		if (paddr == 0) {
+			log_error("get_phys_addr failed for vaddr 0x%lx",
+				  vaddr);
+			return;
+		}
+
 		vaddr_t kernel_vaddr = PHYS_TO_HHDM(paddr);
 
-		memcpy((char*)kernel_vaddr, data, bytes_to_copy);
+		if (!data_bytes) {
+			memset((char*)kernel_vaddr, 0, bytes_to_copy);
+		} else {
+			memcpy((char*)kernel_vaddr, data_bytes, bytes_to_copy);
+			data_bytes += bytes_to_copy;
+		}
 
 		len -= bytes_to_copy;
 		vaddr += bytes_to_copy;
-		data += bytes_to_copy;
 	}
 }
 
@@ -843,13 +856,15 @@ static int do_demand_paging(struct registers* r)
 
 	uint64_t fault_addr;
 	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
+	log_info("Demand paging in address_space %lx (pid: %d) at %lx",
+		 vas->pml4_phys,
+		 task->pid,
+		 fault_addr);
 	fault_addr &= PAGE_FRAME_MASK;
 
 	if (!is_within_vas(vas, fault_addr)) {
 		return -ENOENT;
 	}
-
-	log_info("Demand paging in address_space %lx", vas->pml4_phys);
 
 	struct memory_region* mr = get_region(vas, fault_addr);
 	struct vfs_inode* inode = mr->file_inode;

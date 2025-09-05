@@ -12,7 +12,7 @@ extern "C" {
 int exec_module(const char* module_name);
 
 int execv(const char*, char* const[]);
-int execve(const char*, char* const[], char* const[]);
+int execve(const char* path, char* const argv[], char* const envp[]);
 int execvp(const char*, char* const[]);
 pid_t fork(void);
 

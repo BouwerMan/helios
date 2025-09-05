@@ -135,6 +135,7 @@ int map_region(struct address_space* vas,
 	if (flags & MAP_ANONYMOUS) {
 		// Anonymous mapping, not backed by a file
 		int err = vmm_map_anon_region(vas, mr);
+		vmm_write_region(vas, mr->start, nullptr, mr->end - mr->start);
 		if (err < 0) {
 			return err;
 		}

@@ -188,7 +188,7 @@ int vmm_protect_page(struct address_space* vas,
  */
 void vmm_write_region(struct address_space* vas,
 		      vaddr_t vaddr,
-		      const char* data,
+		      const void* data,
 		      size_t len);
 
 /**
