@@ -17,7 +17,7 @@ typedef enum {
 	STREAM_FULLYBUFFERED,
 } buffer_mode_t;
 
-typedef struct {
+typedef struct __file_stream {
 	// Buffer management
 	char* buffer;	    // The actual buffer memory
 	size_t buffer_size; // Total buffer capacity

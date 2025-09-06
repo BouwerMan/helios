@@ -290,6 +290,33 @@ void sys_chdir(struct registers* r)
 	SYSRET(r, (u64)-ENOENT);
 }
 
+void sys_getdents(struct registers* r)
+{
+	int fd = (int)r->rdi;
+	struct dirent* dirp = (struct dirent*)r->rsi;
+	size_t count = (size_t)r->rdx;
+
+	ssize_t res = vfs_getdents(fd, dirp, count);
+	SYSRET(r, (u64)res);
+}
+
+void sys_open(struct registers* r)
+{
+	const char* path = (const char*)r->rdi;
+	int flags = (int)r->rsi;
+
+	int fd = vfs_open(path, flags);
+	SYSRET(r, (u64)fd);
+}
+
+void sys_close(struct registers* r)
+{
+	int fd = (int)r->rdi;
+
+	int res = vfs_close(fd);
+	SYSRET(r, (u64)res);
+}
+
 typedef void (*handler)(struct registers* r);
 static const handler syscall_handlers[] = {
 	[SYS_READ] = sys_read,	     [SYS_WRITE] = sys_write,
@@ -297,7 +324,8 @@ static const handler syscall_handlers[] = {
 	[SYS_WAITPID] = sys_waitpid, [SYS_FORK] = sys_fork,
 	[SYS_GETPID] = sys_getpid,   [SYS_GETPPID] = sys_getppid,
 	[SYS_EXEC] = sys_exec,	     [SYS_GETCWD] = sys_getcwd,
-	[SYS_CHDIR] = sys_chdir,
+	[SYS_CHDIR] = sys_chdir,     [SYS_GETDENTS] = sys_getdents,
+	[SYS_OPEN] = sys_open,	     [SYS_CLOSE] = sys_close,
 };
 
 static constexpr int SYSCALL_COUNT =

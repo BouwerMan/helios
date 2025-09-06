@@ -1,12 +1,34 @@
+#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
+int hsh_cd(char** args);
+int hsh_pwd(char** args);
+int hsh_ls(char** args);
+int hsh_help(char** args);
+int hsh_exit(char** args);
+
+/*
+  List of builtin commands, followed by their corresponding functions.
+ */
+const char* builtin_str[] = {
+	"cd", "pwd", "ls", "help", "exit",
+};
+
+int (*builtin_func[])(
+	char**) = { &hsh_cd, &hsh_pwd, &hsh_ls, &hsh_help, &hsh_exit };
+
+int lsh_num_builtins()
+{
+	return sizeof(builtin_str) / sizeof(char*);
+}
+
 int launch(char** args)
 {
 	pid_t pid, wpid;
-	int status;
+	int status = 1;
 
 	pid = fork();
 	if (pid == 0) {
@@ -37,37 +59,96 @@ int hsh_cd(char** args)
 		if (chdir(args[1]) != 0) {
 			// perror
 		}
-		char buf[256];
-		printf("CWD: %s\n", getcwd(buf, 256));
 	}
+	return 0;
+}
+
+int hsh_pwd(char** args)
+{
+	char buf[256];
+	printf("%s\n", getcwd(buf, 256));
+	return 0;
+}
+
+char get_type_indicator(unsigned char d_type)
+{
+	switch (d_type) {
+	case DT_DIR:
+		return '/';
+	case DT_LNK:
+		return '@';
+	case DT_FIFO:
+		return '|';
+	case DT_SOCK:
+		return '=';
+	case DT_CHR:
+	case DT_BLK:
+		return '#';  // Or separate chars
+	default:
+		return '\0'; // Regular files get no indicator
+	}
+}
+
+int hsh_ls(char** args)
+{
+	bool show_hidden = false;
+	bool show_indicators = false;
+	const char* path = ".";
+
+	char* arg = *(++args); // skip "ls"
+	while (arg) {
+		if (strcmp(arg, "-a") == 0) {
+			show_hidden = true;
+		} else if (strcmp(arg, "-F") == 0) {
+			show_indicators = true;
+		} else if (arg[0] != '-') {
+			path = arg;
+		}
+		arg = *(++args);
+	}
+
+	DIR* dir = opendir(path);
+	if (!dir) {
+		// perror("hsh: ls");
+		fprintf(stderr, "hsh: ls: cannot access '%s'\n", path);
+		return 1;
+	}
+	struct dirent* entry;
+
+	while ((entry = readdir(dir)) != NULL) {
+		if (entry->d_name[0] == '.' && !show_hidden) {
+			continue;
+		}
+
+		if (show_indicators) {
+			char indicator = get_type_indicator(entry->d_type);
+			if (indicator) {
+				printf("%s%c\n", entry->d_name, indicator);
+			} else {
+				printf("%s\n", entry->d_name);
+			}
+		} else {
+			printf("%s\n", entry->d_name);
+		}
+	}
+
+	closedir(dir);
 	return 0;
 }
 
 int hsh_help(char** args)
 {
 	printf("Help yourself fucker\n");
+	printf("Here are the builtin commands:\n");
+	for (int i = 0; i < lsh_num_builtins(); i++) {
+		printf("  %s\n", builtin_str[i]);
+	}
 	return 0;
 }
 
 int hsh_exit(char** args)
 {
 	return -1;
-}
-
-/*
-  List of builtin commands, followed by their corresponding functions.
- */
-const char* builtin_str[] = {
-	"cd",
-	"help",
-	"exit",
-};
-
-int (*builtin_func[])(char**) = { &hsh_cd, &hsh_help, &hsh_exit };
-
-int lsh_num_builtins()
-{
-	return sizeof(builtin_str) / sizeof(char*);
 }
 
 int execute(char** args)
@@ -170,7 +251,7 @@ void hsh_loop()
 	int status = 0;
 
 	do {
-		printf("%3d > ", status);
+		printf("%03d > ", status);
 		fflush(stdout);
 		line = read_line();
 		args = split_line(line);
@@ -185,11 +266,23 @@ int main(int argc, char** argv, char** envp)
 {
 	printf("Hello from hsh!\n");
 	char buf[256];
+	chdir("/usr/bin");
 	printf("CWD: %s\n", getcwd(buf, 256));
 
-	chdir("/usr/bin");
-	memset(buf, 0, 256);
-	printf("CWD: %s\n", getcwd(buf, 256));
+	DIR* dir = opendir(".");
+	printf("Opened dir: %p\n", dir);
+	printf("Reading entries:\n");
+	printf("ino       off       reclen    type      name\n");
+	while (true) {
+		struct dirent* entry = readdir(dir);
+		if (!entry) break;
+		printf("%-10lu %-10lu %-10u %-10u %s\n",
+		       entry->d_ino,
+		       entry->d_off,
+		       entry->d_reclen,
+		       entry->d_type,
+		       entry->d_name);
+	}
 
 	hsh_loop();
 

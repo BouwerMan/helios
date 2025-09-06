@@ -342,6 +342,7 @@ void inode_add(struct vfs_inode* inode);
 int vfs_open(const char* path, int flags);
 int __vfs_open_for_task(struct task* t, const char* path, int flags);
 int vfs_close(int fd);
+ssize_t vfs_getdents(int fd, struct dirent* dirp, size_t count);
 int vfs_readdir(struct vfs_file* dir, struct dirent* out, long pos);
 ssize_t vfs_file_write(struct vfs_file* file, const char* buffer, size_t count);
 ssize_t vfs_write(int fd, const char* buffer, size_t count);

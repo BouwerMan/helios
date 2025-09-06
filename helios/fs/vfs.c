@@ -757,6 +757,27 @@ ret:
 	return ret_val;
 }
 
+ssize_t vfs_getdents(int fd, struct dirent* dirp, size_t count)
+{
+	size_t num_dirp = count / sizeof(struct dirent);
+	log_info("vfs_getdents: fd=%d, dirp=%p, count=%zu (num_dirp=%zu)",
+		 fd,
+		 (void*)dirp,
+		 count,
+		 num_dirp);
+	for (size_t i = 0; i < num_dirp; i++) {
+		int res = vfs_readdir(get_file(fd), &dirp[i], DIRENT_GET_NEXT);
+		if (res < 0) {
+			return (ssize_t)res;
+		} else if (res == 0) {
+			// End of directory
+			return (ssize_t)(i * sizeof(struct dirent));
+		}
+	}
+
+	return (ssize_t)(num_dirp * sizeof(struct dirent));
+}
+
 int __vfs_open_for_task(struct task* t, const char* path, int flags)
 {
 	char* norm_path = vfs_normalize_path(path, t->cwd);

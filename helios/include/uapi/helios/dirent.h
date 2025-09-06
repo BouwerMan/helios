@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include <uapi/helios/types.h>
+#include "types.h"
 
 #define DIRENT_GET_NEXT ((off_t)(-1))
 
