@@ -51,7 +51,6 @@ extern FILE* stderr;
 int fclose(FILE*);
 int fflush(FILE* stream);
 FILE* fopen(const char*, const char*);
-int fprintf(FILE*, const char*, ...);
 size_t fread(void*, size_t, size_t, FILE*);
 int fseek(FILE*, long, int);
 long ftell(FILE*);
@@ -60,7 +59,10 @@ void setbuf(FILE*, char*);
 
 // Pull in vfprintf
 #include <printf.h>
-//int vfprintf(FILE*, const char*, va_list);
+int fprintf(FILE* stream, const char* format, ...)
+	__attribute__((format(printf, 2, 3)));
+int vfprintf(FILE* stream, const char* format, va_list arg)
+	__attribute__((format(printf, 2, 0)));
 
 int putchar(int c);
 int fputc(int c, FILE* stream);

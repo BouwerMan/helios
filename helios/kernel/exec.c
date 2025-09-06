@@ -82,6 +82,8 @@ struct exec_context* prepare_exec(const char* path,
 				  const char** argv,
 				  const char** envp)
 {
+	log_debug("Preparing exec for %s", path);
+
 	struct exec_context* ctx =
 		(struct exec_context*)kzalloc(sizeof(struct exec_context));
 	if (!ctx) {

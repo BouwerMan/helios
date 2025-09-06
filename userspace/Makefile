@@ -1,6 +1,7 @@
 # Discover app dirs (immediate subdirs that have a Makefile)
 APP_DIRS := $(sort $(patsubst %/,%,$(dir $(wildcard */Makefile))))
 APPS     := $(notdir $(APP_DIRS))
+$(info "Found apps: $(APPS)")
 
 # Derived targets
 APP_INSTALLS := $(addsuffix .install,$(APPS))

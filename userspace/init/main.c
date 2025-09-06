@@ -20,6 +20,7 @@ int main(int argc, char** argv, char** envp)
 	pid_t pid;
 
 	// Call fork() to create a new process
+	printf("Launching shell hsh...\n");
 	pid = fork();
 
 	// Check the return value of fork()
@@ -35,7 +36,7 @@ int main(int argc, char** argv, char** envp)
 		printf("Hello from the child process! My PID is %d, my parent's PID is %d.\n",
 		       getpid(),
 		       getppid());
-		execve("/usr/bin/hello_world.elf", nullptr, nullptr);
+		execve("/usr/bin/hsh.elf", argv, envp);
 		exit(1); // Child process exits
 	} else {
 		// This code block is executed by the parent process

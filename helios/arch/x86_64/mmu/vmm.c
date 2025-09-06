@@ -30,6 +30,12 @@
 * We will have a mapping of the entire physical memory space at hhdm_offset.
 */
 
+#undef LOG_LEVEL
+#define LOG_LEVEL 1
+#define FORCE_LOG_REDEF
+#include <lib/log.h>
+#undef FORCE_LOG_REDEF
+
 #include <arch/idt.h>
 #include <arch/mmu/vmm.h>
 #include <arch/regs.h>
@@ -39,7 +45,6 @@
 #include <kernel/irq_log.h>
 #include <kernel/panic.h>
 #include <kernel/tasks/scheduler.h>
-#include <lib/log.h>
 #include <lib/string.h>
 #include <mm/address_space.h>
 #include <mm/page.h>
@@ -945,8 +950,8 @@ static void page_fault(struct registers* r)
 		goto fail;
 	}
 
-	log_info("Faulted in address_space %lx", cr3);
-	address_space_dump(vas);
+	log_debug("Faulted in address_space %lx", cr3);
+	// address_space_dump(vas);
 
 	pte_t* pte = walk_page_table(vas->pml4, page_aligned_addr, false, 0);
 	if (!pte) {

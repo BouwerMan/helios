@@ -68,10 +68,6 @@ void sys_write(struct registers* r)
 	const char* buf = (const char*)r->rsi;
 	size_t size = r->rdx;
 
-	if (fd != 1) { // Only handle stdout for now
-		return;
-	}
-
 	// TODO: Actually use task resources :)
 	// extern struct vfs_file* g_kernel_console;
 	// vfs_file_write(g_kernel_console, buf, size);
