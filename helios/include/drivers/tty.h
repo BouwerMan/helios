@@ -66,6 +66,7 @@ ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count);
 
 void tty_add_input_char(struct tty* tty, char c);
 ssize_t tty_read(struct vfs_file* file, char* buffer, size_t count);
+ssize_t __read_from_tty(struct tty* tty, char* buffer, size_t count);
 
 /**
  * tty_open - Open a TTY device through the VFS interface

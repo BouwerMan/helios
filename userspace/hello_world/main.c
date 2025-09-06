@@ -7,5 +7,10 @@ int main(void)
 {
 	printf("Hello, World!\n");
 
+	int c;
+	c = getchar();
+
+	printf("You entered: %c\n", c);
+
 	return 0;
 }

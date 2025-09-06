@@ -46,6 +46,21 @@ static inline void SYSRET(struct registers* r, u64 val)
 	r->rax = val; // Set the return value
 }
 
+void sys_read(struct registers* r)
+{
+	// rdi: file descriptor, rsi: buffer, rdx: size
+	int fd = (int)r->rdi;
+	void* buf = (void*)r->rsi;
+	size_t size = r->rdx;
+
+	if (fd != 0) { // Only handle stdin for now
+		return;
+	}
+
+	ssize_t read = vfs_read(fd, buf, size);
+	SYSRET(r, (u64)read); // Return the number of bytes read
+}
+
 void sys_write(struct registers* r)
 {
 	// rdi: file descriptor, rsi: buffer, rdx: size
@@ -242,10 +257,11 @@ void sys_exec(struct registers* r)
 
 typedef void (*handler)(struct registers* r);
 static const handler syscall_handlers[] = {
-	[SYS_WRITE] = sys_write,     [SYS_MMAP] = sys_mmap,
-	[SYS_EXIT] = sys_exit,	     [SYS_WAITPID] = sys_waitpid,
-	[SYS_FORK] = sys_fork,	     [SYS_GETPID] = sys_getpid,
-	[SYS_GETPPID] = sys_getppid, [SYS_EXEC] = sys_exec,
+	[SYS_READ] = sys_read,	     [SYS_WRITE] = sys_write,
+	[SYS_MMAP] = sys_mmap,	     [SYS_EXIT] = sys_exit,
+	[SYS_WAITPID] = sys_waitpid, [SYS_FORK] = sys_fork,
+	[SYS_GETPID] = sys_getpid,   [SYS_GETPPID] = sys_getppid,
+	[SYS_EXEC] = sys_exec,
 };
 
 static constexpr int SYSCALL_COUNT =

@@ -167,9 +167,8 @@ void tty_add_input_char(struct tty* tty, char c)
 	waitqueue_wake_all(&rb->readers);
 }
 
-ssize_t tty_read(struct vfs_file* file, char* buffer, size_t count)
+ssize_t __read_from_tty(struct tty* tty, char* buffer, size_t count)
 {
-	struct tty* tty = file->private_data;
 	struct ring_buffer* rb = &tty->input_buffer;
 
 	// wait for data to be available
@@ -195,6 +194,12 @@ ssize_t tty_read(struct vfs_file* file, char* buffer, size_t count)
 
 	spin_unlock_irqrestore(&rb->lock, flags);
 	return (ssize_t)bytes_read;
+}
+
+ssize_t tty_read(struct vfs_file* file, char* buffer, size_t count)
+{
+	struct tty* tty = file->private_data;
+	return __read_from_tty(tty, buffer, count);
 }
 
 /**

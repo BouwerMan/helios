@@ -22,7 +22,6 @@ int fputc(int c, FILE* stream)
 		return -EPERM;
 	}
 
-	// GDB BREAKPOINT
 	stream->buffer[stream->buffer_pos++] = (char)c;
 	bool should_flush = false;
 
@@ -40,7 +39,6 @@ int fputc(int c, FILE* stream)
 	}
 
 	if (should_flush) {
-		// GDB BREAKPOINT
 		return fflush(stream);
 	}
 

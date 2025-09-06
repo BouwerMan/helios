@@ -68,6 +68,9 @@ int fputc(int c, FILE* stream);
 int fputs(const char* s, FILE* stream);
 int puts(const char*);
 
+int getchar(void);
+int fgetc(FILE* stream);
+
 void __cleanup_streams(void);
 FILE* __create_stream(int fd, buffer_mode_t mode, bool readable, bool writable);
 void __init_streams(void);

@@ -37,6 +37,7 @@
 
 struct file_ops console_device_fops = {
 	.write = console_write,
+	.read = console_read,
 };
 
 static LIST_HEAD(g_console_sinks);
@@ -98,6 +99,13 @@ ssize_t console_write(struct vfs_file* file, const char* buffer, size_t count)
 	sem_signal(&file->dentry->inode->lock);
 
 	return (ssize_t)count;
+}
+
+ssize_t console_read(struct vfs_file* file, char* buffer, size_t count)
+{
+	// TODO: Don't hardcode this
+	struct tty* tty = find_tty_by_name("tty0");
+	__read_from_tty(tty, buffer, count);
 }
 
 /**

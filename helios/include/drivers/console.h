@@ -16,6 +16,8 @@ void console_init();
  */
 ssize_t console_write(struct vfs_file* file, const char* buffer, size_t count);
 
+ssize_t console_read(struct vfs_file* file, char* buffer, size_t count);
+
 /**
  * attach_tty_to_console - Attach a TTY device to the console output
  * @name: Name of the TTY device to attach
