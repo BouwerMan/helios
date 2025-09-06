@@ -340,6 +340,11 @@ int ramfs_readpage(struct vfs_inode* inode, struct page* page)
 
 	size_t source_offset = (size_t)page->index * PAGE_SIZE;
 
+	log_info("Reading page index %lu (offset %zu) from inode %zu",
+		 page->index,
+		 source_offset,
+		 inode->id);
+
 	if (source_offset >= rf->size) {
 		// Reading past end of file, so we just write a "hole"
 		memset(page_vaddr, 0, PAGE_SIZE);

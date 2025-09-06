@@ -275,6 +275,9 @@ int vmm_unmap_page(pgd_t* pml4, uintptr_t vaddr)
 
 	struct page* page = phys_to_page(pte->pte & PAGE_FRAME_MASK);
 	put_page(page);
+	log_debug("Unmapping page at vaddr: %lx, ref count: %d",
+		  vaddr,
+		  atomic_read(&page->ref_count));
 
 	pte->pte = 0;
 
@@ -874,7 +877,7 @@ static int do_demand_paging(struct registers* r)
 
 	uint64_t fault_addr;
 	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
-	log_info(
+	log_debug(
 		"Demand paging in address_space %lx (pid: %d) at %lx caused by %lx",
 		vas->pml4_phys,
 		task->pid,
@@ -886,13 +889,14 @@ static int do_demand_paging(struct registers* r)
 		return -ENOENT;
 	}
 
-	log_info("Fault address %lx is within a valid region", fault_addr);
+	log_debug("Fault address %lx is within a valid region", fault_addr);
 	struct memory_region* mr = get_region(vas, fault_addr);
 	struct vfs_inode* inode = mr->file_inode;
 	struct inode_mapping* map = inode->mapping;
 	if (!inode || !map) {
 		// TODO: Zero fill the page instead of failing
 		// since it is in a valid region
+		log_error("Implement zero fill");
 		return -ENOENT;
 	}
 
@@ -905,6 +909,11 @@ static int do_demand_paging(struct registers* r)
 		return -ENOMEM;
 	}
 
+	if (!(page->flags & PG_MAPPED)) {
+		log_error("Page not mapped in inode mapping");
+		return -EIO;
+	}
+
 	if (!(page->flags & PG_UPTODATE)) {
 		if (map->imops->readpage) {
 			int res = map->imops->readpage(inode, page);
@@ -915,6 +924,7 @@ static int do_demand_paging(struct registers* r)
 			}
 		} else {
 			// No readpage operation, just zero the page
+			log_warn("No readpage operation, zeroing page");
 			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
 			memset(kvaddr, 0, PAGE_SIZE);
 		}
@@ -928,9 +938,21 @@ static int do_demand_paging(struct registers* r)
 	prot_flags |= (mr->prot & PROT_EXEC) ? 0 : PAGE_NO_EXECUTE;
 
 	// Map page into cr3
+	log_debug(
+		"Mapping page at vaddr %lx (paddr %lx) with flags 0x%lx (prot 0x%lx)",
+		fault_addr,
+		page_to_phys(page),
+		prot_flags,
+		mr->prot);
+
+	// We give our reference to map_page, so we don't put_page
 	vmm_map_page(vas->pml4, fault_addr, page_to_phys(page), prot_flags);
 
 	unlock_page(page);
+
+	log_debug("vaddr %lx, ref count: %d",
+		  fault_addr,
+		  atomic_read(&page->ref_count));
 
 	return 0;
 }

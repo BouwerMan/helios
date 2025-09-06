@@ -9,6 +9,8 @@
 extern "C" {
 #endif
 
+extern char** environ;
+
 __attribute__((__noreturn__)) void abort(void);
 int atexit(void (*func)(void));
 int atoi(const char* nptr);

@@ -1,3 +1,4 @@
+#include "fs/vfs.h"
 #include "mm/kmalloc.h"
 #include "uapi/helios/mman.h"
 #include <arch/mmu/vmm.h>
@@ -72,7 +73,6 @@ void destroy_mem_region(struct memory_region* mr)
 int address_space_dup(struct address_space* dest, struct address_space* src)
 {
 	log_debug("Duplicating address space");
-	address_space_dump(src);
 	struct memory_region* pos = nullptr;
 	list_for_each_entry (pos, &src->mr_list, list) {
 		struct memory_region* new_mr = alloc_mem_region(
@@ -92,7 +92,6 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
 		vmm_fork_region(dest, pos);
 	}
 
-	address_space_dump(dest);
 	return 0;
 }
 
@@ -126,12 +125,14 @@ int map_region(struct address_space* vas,
 {
 	// TODO: Accept inode input as well for file-backed mappings.
 	// And maybe file offset
-	log_debug(
-		"Mapping region: start=0x%lx, end=0x%lx, prot=0x%lx, flags=0x%lx",
-		start,
-		end,
-		prot,
-		flags);
+	log_debug("Mapping region: %lx - %lx, prot: %lx, flags: %lx",
+		  start,
+		  end,
+		  prot,
+		  flags);
+	log_debug("Inode: %ld, file_offset: %ld",
+		  inode ? inode->id : 0,
+		  file_offset);
 	struct memory_region* mr = alloc_mem_region(start, end, prot, flags);
 	if (!mr) {
 		return -ENOMEM;

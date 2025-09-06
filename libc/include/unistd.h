@@ -24,6 +24,10 @@ pid_t getppid(void);
 char* getcwd(char* buf, size_t size);
 int chdir(const char* path);
 
+#include <helios/fs.h>
+
+int access(const char* path, int amode);
+
 #ifdef __cplusplus
 }
 #endif

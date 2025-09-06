@@ -873,6 +873,23 @@ int vfs_close(int fd)
 	return VFS_OK;
 }
 
+int vfs_access(const char* path, int amode)
+{
+	// Just going to skip amode for now :)
+	(void)amode;
+
+	log_info("path=%s, amode=%d", path, amode);
+	struct vfs_dentry* dentry = vfs_lookup(path);
+	if (!dentry || !dentry->inode) {
+		return -VFS_ERR_NOENT;
+	}
+
+	// TODO: Check permissions
+
+	dput(dentry);
+	return 0;
+}
+
 void register_child(struct vfs_dentry* parent, struct vfs_dentry* child)
 {
 	if (!parent || !child) {
@@ -1223,8 +1240,11 @@ struct vfs_dentry* vfs_lookup(const char* path)
 		panic("VFS lookup called before rootfs was mounted!");
 	}
 
-	char* norm_path =
-		vfs_normalize_path(path, g_vfs_root_mount->sb->root_dentry);
+	// This can be called with no cwd early in boot
+	struct task* t = get_current_task();
+	struct vfs_dentry* base = t ? t->cwd :
+				      g_vfs_root_mount->sb->root_dentry;
+	char* norm_path = vfs_normalize_path(path, base);
 
 	struct vfs_dentry* current_dentry =
 		__vfs_walk_path(g_vfs_root_mount->sb->root_dentry, norm_path);

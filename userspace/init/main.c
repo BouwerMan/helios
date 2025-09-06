@@ -36,7 +36,7 @@ int main(int argc, char** argv, char** envp)
 		printf("Hello from the child process! My PID is %d, my parent's PID is %d.\n",
 		       getpid(),
 		       getppid());
-		execve("/usr/bin/hsh.elf", argv, envp);
+		execve("/usr/bin/hsh.elf", argv, environ);
 		exit(1); // Child process exits
 	} else {
 		// This code block is executed by the parent process

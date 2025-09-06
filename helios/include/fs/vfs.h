@@ -319,6 +319,7 @@ struct vfs_superblock* vfs_get_sb(int idx);
  *    we iput() the inode. Callers must not touch the dentry after dput().
  */
 struct vfs_dentry* vfs_lookup(const char* path);
+int vfs_access(const char* path, int amode);
 struct vfs_dentry* vfs_resolve_path(const char* path);
 struct vfs_dentry* __vfs_walk_path(struct vfs_dentry* root, const char* path);
 struct vfs_dentry* __dentry_lookup(struct vfs_dentry* parent, const char* name);

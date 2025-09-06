@@ -28,6 +28,7 @@ static constexpr flags_t PG_BUDDY = BIT(1);
 static constexpr flags_t PG_UPTODATE = BIT(2);
 static constexpr flags_t PG_DIRTY = BIT(3);
 static constexpr flags_t PG_LOCKED = BIT(4);
+static constexpr flags_t PG_MAPPED = BIT(5);
 
 typedef size_t pfn_t;
 typedef long pgoff_t;

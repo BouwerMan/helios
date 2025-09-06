@@ -36,6 +36,7 @@
 #include <lib/log.h>
 #undef FORCE_LOG_REDEF
 
+#include "fs/imapping.h"
 #include <kernel/helios.h>
 #include <kernel/kmath.h>
 #include <kernel/panic.h>
@@ -345,12 +346,23 @@ void __free_pages(struct page* page, size_t order)
 {
 	if (!page) return;
 
-	kassert(atomic_read(&page->ref_count) == 0);
-
 	enum MEM_ZONE zone = page_zone(page);
 	if (zone == MEM_ZONE_INVALID) {
 		log_error("Invalid page zone for page at %p", (void*)page);
 		return;
+	}
+
+	for (size_t i = 0; i < (1UL << order); i++) {
+		struct page* cur_page = &page[i];
+		if (atomic_read(&cur_page->ref_count) != 0) {
+			log_error("Page at %p has non-zero ref count: %d",
+				  (void*)cur_page,
+				  atomic_read(&cur_page->ref_count));
+			return;
+		}
+		if (cur_page->flags & PG_MAPPED) {
+			imap_remove(cur_page->mapping, cur_page);
+		}
 	}
 
 	free_pages_core(regions[zone], page, order);

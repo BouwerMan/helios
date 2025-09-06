@@ -317,6 +317,15 @@ void sys_close(struct registers* r)
 	SYSRET(r, (u64)res);
 }
 
+void sys_access(struct registers* r)
+{
+	const char* path = (const char*)r->rdi;
+	int amode = (int)r->rsi;
+
+	int res = vfs_access(path, amode);
+	SYSRET(r, (u64)res);
+}
+
 typedef void (*handler)(struct registers* r);
 static const handler syscall_handlers[] = {
 	[SYS_READ] = sys_read,	     [SYS_WRITE] = sys_write,
@@ -326,6 +335,7 @@ static const handler syscall_handlers[] = {
 	[SYS_EXEC] = sys_exec,	     [SYS_GETCWD] = sys_getcwd,
 	[SYS_CHDIR] = sys_chdir,     [SYS_GETDENTS] = sys_getdents,
 	[SYS_OPEN] = sys_open,	     [SYS_CLOSE] = sys_close,
+	[SYS_ACCESS] = sys_access,
 };
 
 static constexpr int SYSCALL_COUNT =
@@ -346,7 +356,6 @@ void syscall_handler(struct registers* r)
 	if (r->rax > SYSCALL_COUNT) return;
 	handler func = syscall_handlers[r->rax];
 	if (func) {
-		// GDB BREAKPOINT
 		struct task* task = get_current_task();
 		task->regs = r;
 		// TODO: Return int

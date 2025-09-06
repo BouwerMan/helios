@@ -25,7 +25,7 @@ int lsh_num_builtins()
 	return sizeof(builtin_str) / sizeof(char*);
 }
 
-int launch(char** args)
+int launch(const char* path, char** args)
 {
 	pid_t pid, wpid;
 	int status = 1;
@@ -33,7 +33,7 @@ int launch(char** args)
 	pid = fork();
 	if (pid == 0) {
 		//Child process
-		execve(args[0], args, nullptr);
+		execve(path, args, environ);
 		exit(1);
 	} else if (pid < 0) {
 		// Error
@@ -151,6 +151,46 @@ int hsh_exit(char** args)
 	return -1;
 }
 
+// NOTE: Caller must free
+char* find_in_path(const char* cmd)
+{
+	if (strchr(cmd, '/')) {
+		// Command contains a slash, treat as a path
+		if (access(cmd, X_OK) == 0) {
+			return strdup(cmd);
+		} else {
+			return nullptr;
+		}
+	}
+
+	char* path_env = getenv("PATH");
+	if (!path_env) {
+		return NULL; // No PATH set
+	}
+
+	char* path_copy = strdup(path_env);
+	char* dir = strtok(path_copy, ":");
+	char* result = NULL;
+
+	while (dir) {
+		// +2 for '/' and null terminator
+		size_t len = strlen(dir) + strlen(cmd) + 2;
+		char* full_path = malloc(len);
+		snprintf(full_path, len, "%s/%s", dir, cmd);
+
+		if (access(full_path, X_OK) == 0) {
+			result = full_path;
+			break;
+		}
+
+		free(full_path);
+		dir = strtok(NULL, ":");
+	}
+
+	free(path_copy);
+	return result;
+}
+
 int execute(char** args)
 {
 	if (args[0] == nullptr) {
@@ -163,7 +203,16 @@ int execute(char** args)
 		}
 	}
 
-	return launch(args);
+	char* cmd_path = find_in_path(args[0]);
+	if (cmd_path) {
+		int ret = launch(cmd_path, args);
+		free(cmd_path);
+		return ret;
+	}
+
+	fprintf(stderr, "hsh: command not found: %s\n", args[0]);
+	return 1;
+	// return launch(args);
 }
 
 #define HSH_TOK_BUFSIZE 64
@@ -216,19 +265,20 @@ char* read_line()
 
 	while (1) {
 		c = getchar();
-		putchar(c); // Echo the character
 
 		// If we hit EOF, replace it with a null character and return.
 		if (c == EOF || c == '\n') {
+			putchar(c); // Echo the character
 			buffer[position] = '\0';
 			return buffer;
 		} else if (c == '\b') {
 			// If we backspace we go back one position
 			if (position > 0) {
-				position--;
+				putchar(c); // Echo the character
+				buffer[--position] = '\0';
 			}
-			buffer[position] = '\0';
 		} else {
+			putchar(c); // Echo the character
 			buffer[position] = (char)c;
 			position++;
 		}
@@ -265,24 +315,6 @@ void hsh_loop()
 int main(int argc, char** argv, char** envp)
 {
 	printf("Hello from hsh!\n");
-	char buf[256];
-	chdir("/usr/bin");
-	printf("CWD: %s\n", getcwd(buf, 256));
-
-	DIR* dir = opendir(".");
-	printf("Opened dir: %p\n", dir);
-	printf("Reading entries:\n");
-	printf("ino       off       reclen    type      name\n");
-	while (true) {
-		struct dirent* entry = readdir(dir);
-		if (!entry) break;
-		printf("%-10lu %-10lu %-10u %-10u %s\n",
-		       entry->d_ino,
-		       entry->d_off,
-		       entry->d_reclen,
-		       entry->d_type,
-		       entry->d_name);
-	}
 
 	hsh_loop();
 

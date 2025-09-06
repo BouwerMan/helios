@@ -1,6 +1,7 @@
 #include <uapi/helios/errno.h>
 
 #include "fs/imapping.h"
+#include "fs/vfs.h"
 #include "kernel/spinlock.h"
 #include "mm/page.h"
 
@@ -34,7 +35,7 @@ struct page* imap_lookup(struct inode_mapping* mapping, pgoff_t index)
 	struct page* page = __imap_lookup(mapping, index);
 
 	spin_unlock_irqrestore(&mapping->lock, flags);
-	return page;
+	return get_page(page);
 }
 
 struct page* imap_lookup_or_create(struct inode_mapping* mapping, pgoff_t index)
@@ -48,6 +49,7 @@ struct page* imap_lookup_or_create(struct inode_mapping* mapping, pgoff_t index)
 
 	struct page* page = __imap_lookup(mapping, index);
 	if (page) {
+		get_page(page);
 		goto ret_page;
 	}
 
@@ -65,6 +67,7 @@ struct page* imap_lookup_or_create(struct inode_mapping* mapping, pgoff_t index)
 		// TODO: Fix this shitty page_alloc API
 		free_page((void*)PHYS_TO_HHDM(page_to_phys(page)));
 		page = temp;
+		get_page(page);
 		goto ret_page;
 	}
 
@@ -81,6 +84,8 @@ struct page* imap_lookup_or_create(struct inode_mapping* mapping, pgoff_t index)
 	page->flags &= ~PG_UPTODATE;
 	page->flags &= ~PG_DIRTY;
 
+	get_page(page);
+	page->flags |= PG_MAPPED;
 	hash_add(mapping->page_cache, &page->map_node, page->index);
 
 ret_page:
@@ -100,6 +105,8 @@ int imap_insert(struct inode_mapping* mapping, struct page* page)
 	unsigned long flags;
 	spin_lock_irqsave(&mapping->lock, &flags);
 
+	get_page(page);
+	page->flags |= PG_MAPPED;
 	hash_add(mapping->page_cache, &page->map_node, page->index);
 
 	spin_unlock_irqrestore(&mapping->lock, flags);
@@ -108,9 +115,13 @@ int imap_insert(struct inode_mapping* mapping, struct page* page)
 
 void imap_remove(struct inode_mapping* mapping, struct page* page)
 {
-	if (!mapping) {
+	if (!mapping || !page || !(page->flags & PG_MAPPED)) {
 		return;
 	}
+
+	log_debug("Removing page index %lu from mapping (ino: %zu)",
+		  page->index,
+		  mapping->owner->id);
 
 	unsigned long flags;
 	spin_lock_irqsave(&mapping->lock, &flags);
