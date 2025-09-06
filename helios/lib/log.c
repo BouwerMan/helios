@@ -19,13 +19,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <arch/idt.h>
-#include <drivers/serial.h>
-#include <kernel/helios.h>
-#include <kernel/irq_log.h>
-#include <kernel/screen.h>
-#include <kernel/work_queue.h>
-#include <lib/log.h>
+#include "lib/log.h"
+#include "arch/idt.h"
+#include "drivers/serial.h"
+#include "drivers/term.h"
+#include "kernel/helios.h"
+#include "kernel/irq_log.h"
 
 static constexpr char interrupt_context_str[] = LOG_COLOR_MAGENTA
 	"[INT] " LOG_COLOR_RESET;
@@ -44,7 +43,8 @@ void log_output(const char* msg, int len)
 	switch (current_mode) {
 	case LOG_DIRECT:
 		write_serial_string(msg);
-		screen_putstring(msg);
+		term_write(msg, (size_t)len);
+		// screen_putstring(msg);
 		break;
 	case LOG_BUFFERED:
 		if (unlikely(is_in_interrupt_context())) {

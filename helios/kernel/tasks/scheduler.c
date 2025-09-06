@@ -19,30 +19,29 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "kernel/screen.h"
 #undef LOG_LEVEL
 #define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
-#include <lib/log.h>
+#include "lib/log.h"
 #undef FORCE_LOG_REDEF
 
+#include "arch/gdt/gdt.h"
+#include "arch/mmu/vmm.h"
+#include "arch/regs.h"
+#include "drivers/term.h"
 #include "fs/vfs.h"
-#include <arch/gdt/gdt.h>
-#include <arch/idt.h>
-#include <arch/mmu/vmm.h>
-#include <arch/regs.h>
-#include <kernel/exec.h>
-#include <kernel/limine_requests.h>
-#include <kernel/panic.h>
-#include <kernel/spinlock.h>
-#include <kernel/tasks/scheduler.h>
-#include <lib/list.h>
-#include <lib/string.h>
-#include <mm/address_space.h>
-#include <mm/kmalloc.h>
-#include <mm/page.h>
-#include <mm/page_alloc.h>
-#include <mm/slab.h>
+#include "kernel/exec.h"
+#include "kernel/panic.h"
+#include "kernel/spinlock.h"
+#include "kernel/tasks/scheduler.h"
+#include "lib/list.h"
+#include "lib/string.h"
+#include "mm/address_space.h"
+#include "mm/kmalloc.h"
+#include "mm/page.h"
+#include "mm/page_alloc.h"
+#include "mm/slab.h"
+
 #include <uapi/helios/errno.h>
 
 /*******************************************************************************
@@ -387,7 +386,7 @@ int launch_init()
 
 	// Going to clear the screen when init starts
 	// That way userspace has total control over it
-	screen_clear();
+	term_clear();
 	enable_preemption();
 	return 0;
 }

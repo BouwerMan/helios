@@ -19,17 +19,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <drivers/console.h>
-#include <drivers/device.h>
-#include <drivers/serial.h>
-#include <drivers/tty.h>
-#include <kernel/panic.h>
-#include <kernel/screen.h>
-#include <kernel/semaphores.h>
-#include <kernel/spinlock.h>
-#include <lib/string.h>
-#include <mm/kmalloc.h>
-#include <mm/page_alloc.h>
+#include "drivers/console.h"
+#include "drivers/device.h"
+#include "drivers/tty.h"
+#include "kernel/semaphores.h"
+#include "mm/kmalloc.h"
 
 /*******************************************************************************
  * Global Variable Definitions

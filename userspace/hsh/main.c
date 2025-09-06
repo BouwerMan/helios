@@ -314,7 +314,8 @@ void hsh_loop()
 
 int main(int argc, char** argv, char** envp)
 {
-	printf("Hello from hsh!\n");
+	// printf("\x1b[1;36;45m"
+	//        "Hello from hsh!\n");
 
 	hsh_loop();
 

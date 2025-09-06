@@ -19,12 +19,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <kernel/helios.h>
-#include <kernel/limine_requests.h>
-#include <kernel/screen.h>
-#include <kernel/spinlock.h>
-#include <lib/log.h>
-#include <lib/string.h>
+#include "drivers/screen.h"
+#include "drivers/term.h"
+#include "kernel/helios.h"
+#include "kernel/limine_requests.h"
+#include "kernel/spinlock.h"
+#include "lib/log.h"
+#include "lib/string.h"
 
 /*******************************************************************************
 * Global Variable Definitions
@@ -39,7 +40,7 @@ extern char _binary_font_start[];
 
 static uint16_t* unicode = NULL;
 
-static struct screen_info sc = {
+struct screen_info sc = {
 	.cx = 0,
 	.cy = 0,
 	.fgc = 0xFFFFFF,
@@ -49,23 +50,6 @@ static struct screen_info sc = {
 /*******************************************************************************
 * Private Function Prototypes
 *******************************************************************************/
-
-/**
- * @brief Scrolls the framebuffer content upward by one row.
- */
-static void scroll();
-
-/**
- * @brief Draws a character at a specific position on the screen with specified colors.
- *
- * @param c  The Unicode character to display.
- * @param cx The x-coordinate of the cursor position (in characters, not pixels).
- * @param cy The y-coordinate of the cursor position (in characters, not pixels).
- * @param fg The foreground color (e.g., 0xFFFFFF for white).
- * @param bg The background color (e.g., 0x000000 for black).
- */
-static void
-screen_putchar_at(uint16_t c, size_t cx, size_t cy, uint32_t fg, uint32_t bg);
 
 /**
  * @brief Draws a single scanline of a glyph onto a framebuffer row.
@@ -124,20 +108,17 @@ void screen_init(uint32_t fg_color, uint32_t bg_color)
 	sc.char_width = sc.font->width + CHAR_SPACING; // +1 for spacing
 	sc.char_height = sc.font->height;
 	sc.bytesperline = (sc.font->width + 7) / 8;
-	spinlock_init(&sc.lock);
+	spin_init(&sc.lock);
 
-	log_debug("Framebuffer at %p, scanline: %lx", fb->address, sc.scanline);
-	log_debug(
-		"Framebuffer stats: height = %lx, width = %lx, size in bytes = %lx",
-		fb->height,
-		fb->width,
-		fb->height * fb->width);
-	log_debug("Font height: %x, font width: %x",
-		  sc.font->height,
-		  sc.font->width);
+	term_init();
 }
 
-void screen_clear()
+struct screen_info* get_screen_info()
+{
+	return &sc;
+}
+
+void __screen_clear()
 {
 	// spinlock_acquire(&sc.lock);
 
@@ -235,11 +216,7 @@ void screen_putchar(char c)
 	spin_unlock_irqrestore(&sc.lock, flags);
 }
 
-/*******************************************************************************
-* Private Function Definitions
-*******************************************************************************/
-
-static void scroll()
+void scroll()
 {
 	uintptr_t addr = (uintptr_t)sc.fb->address;
 	uint64_t char_height = sc.char_height;
@@ -266,8 +243,11 @@ static void scroll()
 	}
 }
 
-static void
-screen_putchar_at(uint16_t c, size_t cx, size_t cy, uint32_t fg, uint32_t bg)
+void screen_putchar_at(uint16_t c,
+		       size_t cx,
+		       size_t cy,
+		       uint32_t fg,
+		       uint32_t bg)
 {
 	/* unicode translation */
 	if (unicode != NULL) {
@@ -284,6 +264,10 @@ screen_putchar_at(uint16_t c, size_t cx, size_t cy, uint32_t fg, uint32_t bg)
 	size_t fb_offset = (pixel_y * sc.scanline) + (pixel_x * sizeof(PIXEL));
 	draw_glyph(glyph, fb_offset, fg, bg);
 }
+
+/*******************************************************************************
+* Private Function Definitions
+*******************************************************************************/
 
 static inline void draw_glyph_scanline(const uint8_t* glyph_row,
 				       PIXEL* dst,

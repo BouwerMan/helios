@@ -19,12 +19,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <arch/ports.h>
-#include <drivers/console.h>
-#include <kernel/helios.h>
-#include <kernel/panic.h>
-#include <kernel/screen.h>
-#include <lib/log.h>
+#include "kernel/panic.h"
+#include "drivers/console.h"
+#include "drivers/screen.h"
+#include "kernel/helios.h"
+#include "lib/log.h"
 
 // Very rudimentary panic, still relies on libc and stuff.
 void panic(const char* message)

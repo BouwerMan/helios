@@ -1,11 +1,11 @@
-#include <drivers/serial.h>
-#include <kernel/screen.h>
-#include <lib/printf.h>
+#include "drivers/serial.h"
+#include "drivers/term.h"
+#include "lib/printf.h"
 
 int putchar(int ic)
 {
 	char c = (char)ic;
-	screen_putchar(c);
+	term_putchar(c);
 	write_serial(c);
 	return ic;
 }

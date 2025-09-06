@@ -19,18 +19,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <arch/gdt/gdt.h>
-#include <arch/idt.h>
-#include <arch/mmu/vmm.h>
-#include <drivers/serial.h>
-#include <kernel/bootinfo.h>
-#include <kernel/helios.h>
-#include <kernel/limine_requests.h>
-#include <kernel/screen.h>
-#include <lib/log.h>
-#include <limine.h>
-#include <mm/bootmem.h>
-#include <mm/page_alloc.h>
+#include "arch/gdt/gdt.h"
+#include "arch/idt.h"
+#include "arch/mmu/vmm.h"
+#include "drivers/screen.h"
+#include "drivers/serial.h"
+#include "kernel/bootinfo.h"
+#include "kernel/helios.h"
+#include "kernel/limine_requests.h"
+#include "lib/log.h"
+#include "limine.h"
+#include "mm/bootmem.h"
+#include "mm/page_alloc.h"
 
 [[noreturn]]
 extern void __switch_to_new_stack(void* new_stack_top,

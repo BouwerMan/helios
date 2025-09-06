@@ -19,18 +19,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "drivers/tty.h"
+#include "drivers/device.h"
+#include "drivers/serial.h"
+#include "drivers/vconsole.h"
 #include "fs/vfs.h"
-#include <drivers/console.h>
-#include <drivers/device.h>
-#include <drivers/serial.h>
-#include <drivers/tty.h>
-#include <drivers/vconsole.h>
-#include <kernel/screen.h>
-#include <kernel/spinlock.h>
-#include <kernel/types.h>
-#include <kernel/work_queue.h>
-#include <lib/log.h>
-#include <lib/string.h>
+#include "kernel/spinlock.h"
+#include "kernel/types.h"
+#include "kernel/work_queue.h"
+#include "lib/log.h"
+#include "lib/string.h"
 
 /*******************************************************************************
  * Global Variable Definitions

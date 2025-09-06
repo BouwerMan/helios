@@ -19,13 +19,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <drivers/vconsole.h>
-#include <kernel/panic.h>
-#include <kernel/screen.h>
-#include <kernel/types.h>
-#include <mm/kmalloc.h>
-#include <mm/page.h>
-#include <mm/page_alloc.h>
+#include "drivers/vconsole.h"
+#include "drivers/screen.h"
+#include "drivers/term.h"
+#include "kernel/panic.h"
+#include "kernel/types.h"
+#include "mm/kmalloc.h"
+#include "mm/page.h"
+#include "mm/page_alloc.h"
 
 /*******************************************************************************
  * Global Variable Definitions
@@ -99,7 +100,8 @@ ssize_t vconsole_tty_write(struct tty* tty)
 	sem_wait(&tty->write_lock);
 
 	while (rb->head != rb->tail) {
-		screen_putchar(rb->buffer[rb->tail]);
+		// screen_putchar(rb->buffer[rb->tail]);
+		term_putchar(rb->buffer[rb->tail]);
 		rb->tail = (rb->tail + 1) % rb->size;
 		bytes_written++;
 	}

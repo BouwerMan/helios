@@ -19,16 +19,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <arch/gdt/gdt.h>
-#include <arch/idt.h>
-#include <arch/ports.h>
-#include <drivers/console.h>
-#include <kernel/container_of.h>
-#include <kernel/irq_log.h>
-#include <kernel/screen.h>
-#include <kernel/tasks/scheduler.h>
-#include <lib/log.h>
-#include <lib/string.h>
+#include "arch/idt.h"
+#include "arch/gdt/gdt.h"
+#include "arch/ports.h"
+#include "drivers/console.h"
+#include "kernel/irq_log.h"
+#include "kernel/tasks/scheduler.h"
+#include "lib/log.h"
+#include "lib/string.h"
 
 /*******************************************************************************
 * Global Variable Definitions

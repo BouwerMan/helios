@@ -18,34 +18,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "drivers/console.h"
 #include "drivers/kbd.h"
-#include "fs/ramfs/ramfs.h"
+#include "drivers/tty.h"
 #include "fs/ustar/tar.h"
 #include "fs/vfs.h"
-#include <arch/mmu/vmm.h>
-#include <drivers/ata/controller.h>
-#include <drivers/console.h>
-#include <drivers/pci/pci.h>
-#include <drivers/serial.h>
-#include <drivers/tty.h>
-#include <kernel/exec.h>
-#include <kernel/helios.h>
-#include <kernel/irq_log.h>
-#include <kernel/limine_requests.h>
-#include <kernel/panic.h>
-#include <kernel/screen.h>
-#include <kernel/semaphores.h>
-#include <kernel/syscall.h>
-#include <kernel/tasks/scheduler.h>
-#include <kernel/timer.h>
-#include <kernel/work_queue.h>
-#include <lib/log.h>
-#include <limine.h>
-#include <mm/bootmem.h>
-#include <mm/kmalloc.h>
-#include <mm/page.h>
-#include <mm/page_alloc.h>
-#include <mm/slab.h>
+#include "kernel/helios.h"
+#include "kernel/irq_log.h"
+#include "kernel/limine_requests.h"
+#include "kernel/panic.h"
+#include "kernel/syscall.h"
+#include "kernel/tasks/scheduler.h"
+#include "kernel/timer.h"
+#include "kernel/work_queue.h"
+#include "lib/log.h"
+#include "limine.h"
+#include "mm/kmalloc.h"
 
 struct limine_framebuffer* framebuffer;
 
