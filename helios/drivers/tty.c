@@ -40,7 +40,7 @@ static LIST_HEAD(g_ttys);
 
 struct file_ops tty_device_fops = {
 	.write = tty_write,
-	.read = nullptr,
+	.read = tty_read,
 	.open = tty_open,
 	.close = nullptr,
 };
@@ -144,6 +144,57 @@ ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count)
 	struct tty* tty = file->private_data;
 
 	return __write_to_tty(tty, buffer, count);
+}
+
+// Simple, fast input function
+void tty_add_input_char(struct tty* tty, char c)
+{
+	struct ring_buffer* rb = &tty->input_buffer;
+
+	unsigned long flags;
+	spin_lock_irqsave(&rb->lock, &flags);
+
+	// Quick ring buffer insertion
+	rb->buffer[rb->head] = c;
+	rb->head = (rb->head + 1) % rb->size;
+	if (rb->head == rb->tail) {
+		rb->tail = (rb->tail + 1) % rb->size; // Overwrite old data
+	}
+
+	spin_unlock_irqrestore(&rb->lock, flags);
+
+	// Wake any waiting readers
+	waitqueue_wake_all(&rb->readers);
+}
+
+ssize_t tty_read(struct vfs_file* file, char* buffer, size_t count)
+{
+	struct tty* tty = file->private_data;
+	struct ring_buffer* rb = &tty->input_buffer;
+
+	// wait for data to be available
+	while (rb->head == rb->tail) {
+		waitqueue_prepare_wait(&rb->readers);
+		if (rb->head != rb->tail) {
+			waitqueue_cancel_wait(&rb->readers);
+			break;
+		}
+		waitqueue_commit_sleep(&rb->readers);
+	}
+
+	// Read available data from the ring buffer
+	unsigned long flags;
+	spin_lock_irqsave(&rb->lock, &flags);
+
+	size_t bytes_read = 0;
+	while (rb->head != rb->tail && bytes_read < count) {
+		buffer[bytes_read] = rb->buffer[rb->tail];
+		rb->tail = (rb->tail + 1) % rb->size;
+		bytes_read++;
+	}
+
+	spin_unlock_irqrestore(&rb->lock, flags);
+	return (ssize_t)bytes_read;
 }
 
 /**

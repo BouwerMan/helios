@@ -709,25 +709,9 @@ void waitqueue_wake_all(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;
 
-	panic("wake all");
-
-	// disable_preemption();
-
-	ulong flags;
-	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
-
-	struct task* pos = nullptr;
-	struct task* temp = nullptr;
-	list_for_each_entry_safe(pos, temp, &wqueue->waiters_list, wait_list)
-	{
-		pos->wait = nullptr;
-		pos->wait_state = WAIT_NONE;
-		list_del(&pos->wait_list);
-		task_wake(pos);
+	while (waitqueue_has_waiters(wqueue)) {
+		waitqueue_wake_one(wqueue);
 	}
-
-	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
-	// enable_preemption();
 }
 
 void waitqueue_dump_waiters(struct waitqueue* wqueue)

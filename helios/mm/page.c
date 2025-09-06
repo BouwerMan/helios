@@ -13,9 +13,9 @@ void lock_page(struct page* page)
 		waitqueue_prepare_wait(&page->wq);
 		if (trylock_page(page)) {
 			waitqueue_cancel_wait(&page->wq);
+			break;
 		}
 		waitqueue_commit_sleep(&page->wq);
-		// waitqueue_sleep(&page->wq);
 	}
 
 	kassert(flags_test_acquire(&page->flags, PG_LOCKED) &&

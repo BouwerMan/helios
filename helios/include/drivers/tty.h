@@ -29,6 +29,7 @@ struct tty {
 	struct tty_driver* driver;
 	struct list_head list;
 	struct ring_buffer output_buffer;
+	struct ring_buffer input_buffer;
 	semaphore_t write_lock;
 	char name[32];
 };
@@ -38,6 +39,8 @@ struct tty {
  */
 struct tty_driver {
 	ssize_t (*write)(struct tty* tty);
+	ssize_t (*read)(struct tty* tty);
+	void (*input_handler)(struct tty* tty, char c); // for keyboard events
 };
 
 /**
@@ -60,6 +63,9 @@ void register_tty(struct tty* tty);
  * Return: Number of bytes successfully written to the TTY
  */
 ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count);
+
+void tty_add_input_char(struct tty* tty, char c);
+ssize_t tty_read(struct vfs_file* file, char* buffer, size_t count);
 
 /**
  * tty_open - Open a TTY device through the VFS interface

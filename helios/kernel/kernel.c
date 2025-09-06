@@ -18,6 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "drivers/kbd.h"
 #include "fs/ramfs/ramfs.h"
 #include "fs/ustar/tar.h"
 #include "fs/vfs.h"
@@ -161,6 +162,7 @@ void kernel_main()
 	console_init();
 	attach_tty_to_console("ttyS0");
 	attach_tty_to_console("tty0");
+	keyboard_init();
 	kernel_console_init();
 
 	log_info("Successfully got out of bootstrapping hell");

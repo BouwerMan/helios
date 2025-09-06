@@ -5,11 +5,11 @@
 #include <helios/errno.h>
 #include <helios/mman.h>
 
+#define BUFFER_SIZE 8192
+
 FILE* stdin;
 FILE* stdout;
 FILE* stderr;
-
-#define BUFFER_SIZE 8192
 
 FILE* __create_stream(int fd, buffer_mode_t mode, bool readable, bool writable)
 {

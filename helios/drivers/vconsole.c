@@ -59,13 +59,22 @@ void vconsole_tty_init()
 	tty->driver = &vconsole_driver;
 	strncpy(tty->name, "tty0", 32);
 
-	struct ring_buffer* rb = &tty->output_buffer;
-	rb->buffer = get_free_pages(AF_KERNEL, RING_BUFFER_SIZE_PAGES);
-	if (!rb->buffer) {
+	struct ring_buffer* rbo = &tty->output_buffer;
+	rbo->buffer = get_free_pages(AF_KERNEL, RING_BUFFER_SIZE_PAGES);
+	if (!rbo->buffer) {
 		panic("Didn't get free pages");
 	}
-	rb->size = RING_BUFFER_SIZE;
-	spinlock_init(&rb->lock);
+	rbo->size = RING_BUFFER_SIZE;
+	spin_init(&rbo->lock);
+
+	struct ring_buffer* rbi = &tty->input_buffer;
+	rbi->buffer = get_free_pages(AF_KERNEL, RING_BUFFER_SIZE_PAGES);
+	if (!rbi->buffer) {
+		panic("Didn't get free pages");
+	}
+	rbi->size = RING_BUFFER_SIZE;
+	spin_init(&rbi->lock);
+	waitqueue_init(&rbi->readers);
 
 	sem_init(&tty->write_lock, 1);
 	register_tty(tty);
