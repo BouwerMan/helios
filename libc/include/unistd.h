@@ -21,6 +21,9 @@ pid_t fork(void);
 pid_t getpid(void);
 pid_t getppid(void);
 
+char* getcwd(char* buf, size_t size);
+int chdir(const char* path);
+
 #ifdef __cplusplus
 }
 #endif

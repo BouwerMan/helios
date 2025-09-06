@@ -270,6 +270,7 @@ struct task* kthread_create(const char* name, entry_func entry)
 	task->type = KERNEL_TASK;
 	task->parent = kernel_task;
 	task->pid = squeue.kernel_pid_counter++;
+	task->cwd = dget(kernel_task->cwd);
 
 	// Kernel threads don't get their own address space
 	// Nor do they get any regions (for now)
@@ -360,6 +361,9 @@ int launch_init()
 		return -ENOENT;
 	}
 
+	struct vfs_dentry* cwd = vfs_lookup("/");
+	task->cwd = cwd;
+
 	// open /dev/console three times and pin them as 0,1,2
 	int fd0 = __vfs_open_for_task(task, "/dev/console", O_RDONLY);
 	int fd1 = __vfs_open_for_task(task, "/dev/console", O_WRONLY);
@@ -397,6 +401,7 @@ void reap_task(struct task* task)
 	{
 		log_info("Cleaning up task '%s' (PID %d)", pos->name, pos->pid);
 		task_remove(pos);
+		dput(pos->cwd);
 		void* stack_base = (void*)(task->kernel_stack -
 					   (STACK_SIZE_PAGES * PAGE_SIZE));
 		free_pages(stack_base, STACK_SIZE_PAGES);
@@ -867,6 +872,7 @@ static void setup_first_kernel_task()
 	kernel_task->type = KERNEL_TASK;
 	kernel_task->parent = kernel_task;
 	kernel_task->pid = squeue.kernel_pid_counter++;
+	kernel_task->cwd = dget(vfs_lookup("/"));
 
 	// Set kernel_stack to stack we set from __arch_entry
 	extern void* g_entry_new_stack;

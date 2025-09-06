@@ -20,7 +20,7 @@
  */
 
 #undef LOG_LEVEL
-#define LOG_LEVEL 1
+#define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
 #include <lib/log.h>
 #undef FORCE_LOG_REDEF
@@ -400,6 +400,9 @@ ssize_t ramfs_write(struct vfs_file* file, const char* buffer, size_t count)
 struct vfs_dentry* ramfs_lookup(struct vfs_inode* dir_inode,
 				struct vfs_dentry* child)
 {
+	log_debug("Looking up '%s' in dir inode %zu",
+		  child->name,
+		  dir_inode ? dir_inode->id : 0);
 	if (!dir_inode || dir_inode->filetype != FILETYPE_DIR) {
 		return nullptr;
 	}
@@ -418,6 +421,7 @@ struct vfs_dentry* ramfs_lookup(struct vfs_inode* dir_inode,
 		child->inode->fs_data = found->inode_info;
 		sync_to_inode(child->inode);
 		dentry_add(child);
+		log_debug("Found existing child '%s'", child->name);
 		return child;
 	}
 

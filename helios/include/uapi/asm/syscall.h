@@ -3,7 +3,7 @@
 
 #define SYSCALL_INT 0x80
 
-enum SyscallNumbers {
+enum SYSCALL_NUMBERS {
 	SYS_READ,
 	SYS_WRITE,
 	SYS_OPEN,
@@ -23,4 +23,7 @@ enum SyscallNumbers {
 	SYS_KILL,
 	SYS_SIGNAL,
 	SYS_SIGRETURN,
+	SYS_GETCWD,
+	SYS_CHDIR,
+	SYS_GET_ERRNO_PTR,
 };

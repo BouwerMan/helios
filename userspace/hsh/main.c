@@ -13,6 +13,9 @@ int launch(char** args)
 		//Child process
 		execve(args[0], args, nullptr);
 		exit(1);
+	} else if (pid < 0) {
+		// Error
+		fprintf(stderr, "hsh: fork failed\n");
 	} else {
 		// Parent process
 		do {
@@ -23,11 +26,60 @@ int launch(char** args)
 	return 1;
 }
 
+/*
+  Builtin function implementations.
+*/
+int hsh_cd(char** args)
+{
+	if (args[1] == NULL) {
+		fprintf(stderr, "lsh: expected argument to \"cd\"\n");
+	} else {
+		if (chdir(args[1]) != 0) {
+			// perror
+		}
+	}
+	return 1;
+}
+
+int hsh_help(char** args)
+{
+	printf("Help yourself fucker\n");
+	return 1;
+}
+
+int hsh_exit(char** args)
+{
+	return 0;
+}
+
+/*
+  List of builtin commands, followed by their corresponding functions.
+ */
+const char* builtin_str[] = {
+	"cd",
+	"help",
+	"exit",
+};
+
+int (*builtin_func[])(char**) = { &hsh_cd, &hsh_help, &hsh_exit };
+
+int lsh_num_builtins()
+{
+	return sizeof(builtin_str) / sizeof(char*);
+}
+
 int execute(char** args)
 {
-	// TODO: Built-in commands (kernel doesn't support anything lol)
+	printf("DEBUG: builtin_str[0] = %p\n", builtin_str[0]);
+	printf("DEBUG: lsh_num_builtins() = %d\n", lsh_num_builtins());
 	if (args[0] == nullptr) {
 		return 1; // Empty command
+	}
+
+	for (int i = 0; i < lsh_num_builtins(); i++) {
+		if (strcmp(args[0], builtin_str[i]) == 0) {
+			return (*builtin_func[i])(args);
+		}
 	}
 
 	return launch(args);
@@ -127,6 +179,12 @@ void hsh_loop()
 int main(int argc, char** argv, char** envp)
 {
 	printf("Hello from hsh!\n");
+	char buf[256];
+	printf("CWD: %s\n", getcwd(buf, 256));
+
+	chdir("/usr/bin");
+	memset(buf, 0, 256);
+	printf("CWD: %s\n", getcwd(buf, 256));
 
 	hsh_loop();
 

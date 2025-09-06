@@ -53,6 +53,7 @@ pid_t do_fork(struct registers* regs)
 
 	child->type = USER_TASK;
 	child->parent = parent;
+	child->cwd = dget(parent->cwd);
 	child->pid = squeue.user_pid_counter++;
 
 	strncpy(child->name, parent->name, MAX_TASK_NAME_LEN);
@@ -62,6 +63,7 @@ pid_t do_fork(struct registers* regs)
 	res = address_space_dup(child->vas, parent->vas);
 	if (res < 0) {
 		log_error("Could not duplicate address space");
+		address_space_dump(parent->vas);
 		return -1;
 	}
 

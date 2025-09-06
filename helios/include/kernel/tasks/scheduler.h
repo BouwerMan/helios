@@ -73,6 +73,8 @@ struct task {
 	int preempt_count;
 	pid_t pid;
 	volatile uint64_t sleep_ticks;
+	int errno_value;
+	struct vfs_dentry* cwd;
 	struct vfs_file* resources[MAX_RESOURCES];
 	struct task* parent;	     // Should this just be parent PID?
 

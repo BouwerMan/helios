@@ -192,6 +192,7 @@ retry:
 wait:
 	// No zombies found yet, so we block and wait for a child to exit.
 	waitqueue_sleep(&task->parent_wq);
+	// GDB BREAKPOINT
 	goto retry;
 }
 
@@ -251,13 +252,50 @@ void sys_exec(struct registers* r)
 	SYSRET(r, (u64)ret);
 }
 
+// rdi=buf, rsi=size
+void sys_getcwd(struct registers* r)
+{
+	void* buf = (void*)r->rdi;
+	size_t size = (size_t)r->rsi;
+
+	struct task* task = get_current_task();
+	size_t cwd_len = strlen(task->cwd->name);
+	if (cwd_len + 1 > size) {
+		SYSRET(r, (u64)NULL);
+		return;
+	}
+
+	for (size_t i = 0; i < size; i++) {
+		((char*)buf)[i] = task->cwd->name[i];
+	}
+	((char*)buf)[cwd_len] = '\0';
+
+	SYSRET(r, (u64)buf);
+}
+
+// rdi=path
+void sys_chdir(struct registers* r)
+{
+	struct task* task = get_current_task();
+	struct vfs_dentry* dentry = vfs_lookup((const char*)r->rdi);
+	if (dentry && dentry->inode &&
+	    dentry->inode->filetype == FILETYPE_DIR) {
+		dput(task->cwd);
+		task->cwd = dentry;
+		SYSRET(r, 0);
+		return;
+	}
+	SYSRET(r, (u64)-ENOENT);
+}
+
 typedef void (*handler)(struct registers* r);
 static const handler syscall_handlers[] = {
 	[SYS_READ] = sys_read,	     [SYS_WRITE] = sys_write,
 	[SYS_MMAP] = sys_mmap,	     [SYS_EXIT] = sys_exit,
 	[SYS_WAITPID] = sys_waitpid, [SYS_FORK] = sys_fork,
 	[SYS_GETPID] = sys_getpid,   [SYS_GETPPID] = sys_getppid,
-	[SYS_EXEC] = sys_exec,
+	[SYS_EXEC] = sys_exec,	     [SYS_GETCWD] = sys_getcwd,
+	[SYS_CHDIR] = sys_chdir,
 };
 
 static constexpr int SYSCALL_COUNT =
@@ -278,8 +316,10 @@ void syscall_handler(struct registers* r)
 	if (r->rax > SYSCALL_COUNT) return;
 	handler func = syscall_handlers[r->rax];
 	if (func) {
+		// GDB BREAKPOINT
 		struct task* task = get_current_task();
 		task->regs = r;
+		// TODO: Return int
 		func(r);
 	}
 }

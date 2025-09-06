@@ -478,8 +478,16 @@ int vmm_fork_region(struct address_space* dest_vas,
 	for (v = src_mr->start; v < src_mr->end; v += PAGE_SIZE) {
 		pte_t* src_pte = walk_page_table(src_vas->pml4, v, false, 0);
 		if (!src_pte || !(src_pte->pte & PAGE_PRESENT)) {
-			err = -EFAULT;
-			goto clean;
+			// Because of demand paging, this may not be an error
+			if (src_mr->flags & MAP_ANONYMOUS) {
+				err = -EFAULT;
+				log_error(
+					"Source page not present at vaddr 0x%lx",
+					v);
+				goto clean;
+			} else {
+				continue;
+			}
 		}
 
 		paddr_t p = src_pte->pte & PAGE_FRAME_MASK;
@@ -506,7 +514,7 @@ int vmm_fork_region(struct address_space* dest_vas,
 	return 0;
 
 clean:
-	log_error("Failed to fork region");
+	log_error("Failed to fork region: %d", err);
 
 	vaddr_t cleanup_end = v; // Don't include the failed page
 	for (v = src_mr->start; v < cleanup_end; v += PAGE_SIZE) {
@@ -612,6 +620,7 @@ void vmm_write_region(struct address_space* vas,
 {
 	// NOTE: Maybe we should use a memory_region like the name suggests :)
 	// Doesn't really change anything though.
+
 	const u8* data_bytes = data;
 	while (len > 0) {
 		// Calculate offset within the current page
@@ -634,6 +643,10 @@ void vmm_write_region(struct address_space* vas,
 
 		vaddr_t kernel_vaddr = PHYS_TO_HHDM(paddr);
 
+		log_info("Writing %zu bytes to vaddr 0x%lx (phys 0x%lx)",
+			 bytes_to_copy,
+			 vaddr,
+			 paddr);
 		if (!data_bytes) {
 			memset((char*)kernel_vaddr, 0, bytes_to_copy);
 		} else {
@@ -861,16 +874,19 @@ static int do_demand_paging(struct registers* r)
 
 	uint64_t fault_addr;
 	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
-	log_info("Demand paging in address_space %lx (pid: %d) at %lx",
-		 vas->pml4_phys,
-		 task->pid,
-		 fault_addr);
+	log_info(
+		"Demand paging in address_space %lx (pid: %d) at %lx caused by %lx",
+		vas->pml4_phys,
+		task->pid,
+		fault_addr,
+		r->rip);
 	fault_addr &= PAGE_FRAME_MASK;
 
 	if (!is_within_vas(vas, fault_addr)) {
 		return -ENOENT;
 	}
 
+	log_info("Fault address %lx is within a valid region", fault_addr);
 	struct memory_region* mr = get_region(vas, fault_addr);
 	struct vfs_inode* inode = mr->file_inode;
 	struct inode_mapping* map = inode->mapping;

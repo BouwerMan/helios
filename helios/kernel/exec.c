@@ -57,7 +57,7 @@ static bool validate(struct elf_file_header* header);
  */
 static int load_program_header(struct exec_context* ctx,
 			       struct vfs_inode* inode,
-			       void* elf,
+			       struct vfs_file* file,
 			       struct elf_program_header* prog);
 
 /**
@@ -210,8 +210,7 @@ int __load_elf(struct exec_context* ctx, struct vfs_file* file)
 		switch (prog->type) {
 		case PT_LOAD:
 			if (load_program_header(
-				    ctx, file->dentry->inode, header, prog) <
-			    0) {
+				    ctx, file->dentry->inode, file, prog) < 0) {
 				// TODO: Free previous program sections
 				log_error("Failed to load program header");
 				return -1;
@@ -266,7 +265,7 @@ static bool validate(struct elf_file_header* header)
 
 static int load_program_header(struct exec_context* ctx,
 			       struct vfs_inode* inode,
-			       void* elf,
+			       struct vfs_file* file,
 			       struct elf_program_header* prog)
 {
 	size_t pages = CEIL_DIV(prog->size_in_memory, PAGE_SIZE);
@@ -315,43 +314,38 @@ static int load_program_header(struct exec_context* ctx,
 			   prot,
 			   MAP_PRIVATE);
 	} else {
-		// Mixed data + BSS segment - needs special handling
-		// (We'll address this case if you encounter it)
-		log_error("Mixed data+BSS segment not yet supported");
-		return -1;
-	}
+		// Mixed data + BSS segment
+		log_debug(
+			"Mapping mixed data+BSS region: vaddr 0x%lx-0x%lx, data_size 0x%lx, total_size 0x%lx",
+			vaddr_start,
+			vaddr_end,
+			prog->size_in_file,
+			prog->size_in_memory);
 
-	// log_debug("Mapping program header:");
-	// if (inode) {
-	// 	// Map as file backed
-	// 	log_debug(
-	// 		"Mapping file-backed region: vaddr 0x%lx-0x%lx, file offset 0x%lx, prot 0x%lx",
-	// 		vaddr_start,
-	// 		vaddr_end,
-	// 		aligned_file_offset,
-	// 		prot);
-	// 	map_region(ctx->new_vas,
-	// 		   inode,
-	// 		   aligned_file_offset,
-	// 		   vaddr_start,
-	// 		   vaddr_end,
-	// 		   prot,
-	// 		   MAP_PRIVATE);
-	// } else {
-	// 	// For now we will keep supporting non anonymous mapping
-	// 	map_region(ctx->new_vas,
-	// 		   nullptr,
-	// 		   0,
-	// 		   vaddr_start,
-	// 		   vaddr_end,
-	// 		   prot,
-	// 		   MAP_PRIVATE | MAP_ANONYMOUS);
-	//
-	// 	void* data = (void*)((uptr)elf + prog->offset);
-	//
-	// 	vmm_write_region(
-	// 		ctx->new_vas, vaddr_start, data, prog->size_in_file);
-	// }
+		// Map entire region as anonymous (zero-filled)
+		map_region(ctx->new_vas,
+			   nullptr,
+			   0,
+			   vaddr_start,
+			   vaddr_end,
+			   prot,
+			   MAP_PRIVATE | MAP_ANONYMOUS);
+
+		if (prog->size_in_file > 0) {
+			// Copy data portion from ELF
+			void* segment_data = get_free_page(AF_KERNEL);
+			// TODO: Make vfs_file_seek
+			file->f_pos = (off_t)prog->offset;
+			// vfs_lseek(file->fd, prog->offset);
+			vfs_file_read(file, segment_data, prog->size_in_file);
+			vmm_write_region(ctx->new_vas,
+					 prog->virtual_address,
+					 segment_data,
+					 prog->size_in_file);
+			free_page(segment_data);
+		}
+		// BSS portion is already zero-filled by anonymous mapping
+	}
 
 	return 0;
 }

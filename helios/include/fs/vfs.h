@@ -325,6 +325,8 @@ struct vfs_dentry* dentry_alloc(struct vfs_dentry* parent, const char* name);
 void dentry_dealloc(struct vfs_dentry* d);
 void register_child(struct vfs_dentry* parent, struct vfs_dentry* child);
 int __fill_dirent(struct vfs_dentry* dentry, struct dirent* dirent);
+struct vfs_dentry* vfs_resolve_path_from_cwd(const char* path,
+					     struct vfs_dentry* cwd);
 
 // --- Inode Management ---
 struct vfs_inode* new_inode(struct vfs_superblock* sb, size_t id);
@@ -349,6 +351,7 @@ int vfs_create(const char* path,
 	       struct vfs_dentry** out_dentry);
 
 // --- Utility Functions ---
+char* vfs_normalize_path(const char* path, struct vfs_dentry* base_dir);
 struct vfs_file* get_file(int fd);
 bool vfs_does_name_exist(struct vfs_dentry* parent, const char* name);
 void vfs_dump_child(struct vfs_dentry* parent);

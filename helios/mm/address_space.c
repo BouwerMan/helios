@@ -72,6 +72,7 @@ void destroy_mem_region(struct memory_region* mr)
 int address_space_dup(struct address_space* dest, struct address_space* src)
 {
 	log_debug("Duplicating address space");
+	address_space_dump(src);
 	struct memory_region* pos = nullptr;
 	list_for_each_entry (pos, &src->mr_list, list) {
 		struct memory_region* new_mr = alloc_mem_region(
@@ -83,11 +84,15 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
 			return -1;
 		}
 
+		new_mr->file_inode = pos->file_inode;
+		new_mr->file_offset = pos->file_offset;
+
 		add_region(dest, new_mr);
 
 		vmm_fork_region(dest, pos);
 	}
 
+	address_space_dump(dest);
 	return 0;
 }
 
@@ -191,15 +196,18 @@ void address_space_dump(struct address_space* vas)
 	log_info("Start              | "
 		 "End                | "
 		 "Prot               | "
-		 "Flags");
+		 "Flags              | "
+		 "Has_inode? (offset)");
 	log_info(
 		"---------------------------------------------------------------------------------");
 	list_for_each_entry (pos, &vas->mr_list, list) {
-		log_info("0x%016lx | 0x%016lx | 0x%016lx | 0x%016lx",
+		log_info("0x%016lx | 0x%016lx | 0x%016lx | 0x%016lx | %d(%ld)",
 			 pos->start,
 			 pos->end,
 			 pos->prot,
-			 pos->flags);
+			 pos->flags,
+			 pos->file_inode != nullptr,
+			 pos->file_offset);
 	}
 }
 

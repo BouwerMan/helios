@@ -11,7 +11,6 @@ int fprintf(FILE* stream, const char* format, ...)
 
 void __fputc_wrapper(char c, void* stream)
 {
-	// GDB BREAKPOINT
 	fputc(c, (FILE*)stream);
 }
 

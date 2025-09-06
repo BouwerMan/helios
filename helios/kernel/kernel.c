@@ -103,6 +103,10 @@ void kernel_main()
 	// bootmem_reclaim_bootloader();
 
 	liballoc_init(); // Just initializes the liballoc spinlock
+
+	log_info("Initializing VFS and mounting root ramfs");
+	vfs_init();
+
 	scheduler_init();
 	syscall_init();
 	work_queue_init();
@@ -113,9 +117,6 @@ void kernel_main()
 	//
 	// sATADevice* fat_device = ctrl_get_device(3);
 	// mount("/", fat_device, &fat_device->part_table[0], FAT16);
-
-	log_info("Initializing VFS and mounting root ramfs");
-	vfs_init();
 
 	test_split_path();
 
@@ -150,6 +151,8 @@ void kernel_main()
 			dirent->d_reclen,
 			dirent->d_type);
 	}
+
+	vfs_normalize_path("./usr/testdir/../dir2", get_file(fd2)->dentry);
 
 	vfs_close(fd);
 	vfs_close(fd2);

@@ -34,6 +34,7 @@
 #include <lib/string.h>
 #include <mm/kmalloc.h>
 #include <mm/slab.h>
+#include <uapi/helios/errno.h>
 
 // TODO: Find a better way to handle some of these icky globals, also def need
 // some locks
@@ -66,6 +67,11 @@ struct path_tokenizer {
 			  ///< (not owned or modified).
 	size_t offset;	  ///< Current byte offset into path for the next
 			  ///< component.
+};
+
+struct path_component {
+	const char* start; // Points into original string
+	size_t len;
 };
 
 /*******************************************************************************
@@ -504,7 +510,7 @@ struct vfs_dentry* dentry_ht_check(struct vfs_dentry* d)
  */
 struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
 {
-	log_debug("dentry_lookup: parent=%p, name=%s", (void*)parent, name);
+	log_debug("dentry_lookup: parent=%s, name=%s", parent->name, name);
 
 	struct vfs_dentry* found;
 	struct vfs_dentry* child = dentry_alloc(parent, name);
@@ -755,16 +761,24 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags)
 {
 	// TODO: Rework lookup to check for mount points.
 
-	struct vfs_dentry* dentry = vfs_lookup(path);
+	char* norm_path = vfs_normalize_path(path, t->cwd);
+	struct vfs_dentry* dentry = vfs_lookup(norm_path);
+	// if (t->cwd) {
+	// 	dentry = vfs_resolve_path_from_cwd(path, t->cwd);
+	// } else {
+	// 	dentry = vfs_lookup(path);
+	// }
 	if (!dentry || !dentry->inode) {
 		log_debug("Dentry not found for path: %s", path);
 		if (flags & O_CREAT) {
-			int res =
-				vfs_create(path, VFS_PERM_ALL, flags, &dentry);
+			int res = vfs_create(
+				norm_path, VFS_PERM_ALL, flags, &dentry);
 			if (res < 0) {
+				kfree(norm_path);
 				return res;
 			}
 		} else {
+			kfree(norm_path);
 			return -VFS_ERR_NOENT;
 		}
 	}
@@ -775,6 +789,7 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags)
 	if (!file) {
 		log_error("Could not allocate vfs_file");
 		dput(dentry);
+		kfree(norm_path);
 		return -VFS_ERR_NOMEM;
 	}
 
@@ -789,6 +804,7 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags)
 		if (res < 0) {
 			dput(dentry);
 			slab_free(&file_cache, file);
+			kfree(norm_path);
 			return res;
 		}
 	}
@@ -797,6 +813,7 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags)
 	if (fd < 0) {
 		dput(dentry);
 		slab_free(&file_cache, file);
+		kfree(norm_path);
 		return -VFS_ERR_NOSPC; // Is this the right code?
 	}
 	log_debug("Opened file %s with fd %d and dref_count %d",
@@ -804,6 +821,7 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags)
 		  fd,
 		  dentry->ref_count);
 
+	kfree(norm_path);
 	return fd;
 }
 
@@ -1182,21 +1200,13 @@ struct vfs_dentry* vfs_lookup(const char* path)
 		panic("VFS lookup called before rootfs was mounted!");
 	}
 
-	// Is the path just "/"? Easy! Return the root dentry.
-	if (path[0] == '/' && path[1] == '\0') {
-		return dget(g_vfs_root_mount->sb->root_dentry);
-	}
+	char* norm_path =
+		vfs_normalize_path(path, g_vfs_root_mount->sb->root_dentry);
 
-	char* buf = strdup(path);
-	trim_trailing(buf, '/');
+	struct vfs_dentry* current_dentry =
+		vfs_walk_path(g_vfs_root_mount->sb->root_dentry, norm_path);
 
-	// For any other path like "/foo/bar", start the search
-	// from the root dentry.
-	struct vfs_dentry* current_dentry = g_vfs_root_mount->sb->root_dentry;
-
-	current_dentry = vfs_walk_path(current_dentry, buf);
-
-	kfree(buf);
+	kfree(norm_path);
 	return current_dentry;
 }
 
@@ -1298,6 +1308,32 @@ struct vfs_dentry* vfs_resolve_path(const char* path)
 	return vfs_walk_path(match->sb->root_dentry, rel_path);
 }
 
+struct vfs_dentry* vfs_resolve_path_from_cwd(const char* path,
+					     struct vfs_dentry* cwd)
+{
+	if (!path || !cwd) {
+		return nullptr;
+	}
+
+	if (path[0] == '/') {
+		return vfs_lookup(path);
+	} else if (path[0] == '.' && (path[1] == '/' || path[1] == '\0')) {
+		// Handle ./foo/bar case
+		const char* rel_path = path + 1;
+		if (*rel_path == '/') rel_path++; // Skip leading '/'
+		return vfs_walk_path(cwd, rel_path);
+	} else if (path[0] == '.' && path[1] == '.' &&
+		   (path[2] == '/' || path[2] == '\0')) {
+		// Handle ../foo/bar case
+		struct vfs_dentry* parent = cwd->parent ? cwd->parent : cwd;
+		const char* rel_path = path + 2;
+		if (*rel_path == '/') rel_path++; // Skip leading '/'
+		return vfs_walk_path(parent, rel_path);
+	} else {
+		return vfs_walk_path(cwd, path);
+	}
+}
+
 /**
  * @brief Resolves a relative path starting from a given root dentry.
  *
@@ -1314,12 +1350,14 @@ struct vfs_dentry* vfs_resolve_path(const char* path)
  */
 struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path)
 {
+	log_debug("Walking path '%s' from root '%s'", path, root->name);
 	const char* token;
 	size_t len = 0;
 	struct path_tokenizer tok = { .path = path };
 	struct vfs_dentry* parent = dget(root);
 
 	while ((token = path_next_token(&tok, &len))) {
+		log_debug("Walking token: '%.*s'", (int)len, token);
 		char token_buf[len + 1];
 		memcpy(token_buf, token, len);
 		token_buf[len] = '\0';
@@ -1380,6 +1418,183 @@ void dentry_dealloc(struct vfs_dentry* d)
 	}
 
 	slab_free(&dentry_cache, d);
+}
+
+char* dentry_to_absolute_path(struct vfs_dentry* dentry)
+{
+	// Handle root case early
+	if (!dentry || !dentry->parent) {
+		return strdup("/");
+	}
+
+	// Walk up to root
+	struct path_component stack[256];
+	int stack_depth = 0;
+
+	// Stop before root
+	while (dentry && dentry->parent) {
+		if (stack_depth >= 256) {
+			return nullptr; // Path too deep
+		}
+		stack[stack_depth].start = dentry->name;
+		stack[stack_depth].len = strlen(dentry->name);
+		stack_depth++;
+		dentry = dentry->parent;
+	}
+
+	if (stack_depth == 0) {
+		return strdup("/"); // Root case
+	}
+
+	size_t result_len = 1;
+
+	for (int i = 0; i < stack_depth; i++) {
+		log_debug("Component %d: '%.*s'",
+			  i,
+			  (int)stack[i].len,
+			  stack[i].start);
+		result_len += stack[i].len;
+		if (i < stack_depth - 1) {
+			result_len += 1; // Separator '/'
+		}
+	}
+
+	char* result = kmalloc(result_len + 1);
+	if (!result) {
+		return nullptr;
+	}
+
+	size_t pos = 0;
+	result[pos++] = '/'; // Start with '/'
+	for (int i = stack_depth - 1; i >= 0; i--) {
+		memcpy(result + pos, stack[i].start, stack[i].len);
+		pos += stack[i].len;
+
+		// Add separator except after last component
+		if (i > 0) {
+			result[pos++] = '/';
+		}
+	}
+
+	result[pos] = '\0';
+
+	return result;
+}
+
+char* vfs_normalize_path(const char* path, struct vfs_dentry* base_dir)
+{
+	if (!base_dir || !base_dir->inode ||
+	    base_dir->inode->filetype != FILETYPE_DIR) {
+		panic("TATDEHJS");
+		log_error("Inavlid base dir");
+		return nullptr;
+	}
+
+	size_t path_len = strlen(path);
+	if (path_len == 0 || path_len >= VFS_MAX_PATH) {
+		return nullptr;
+	}
+
+	bool is_absolute = (path[0] == '/');
+	char* abs_path;
+	if (is_absolute) {
+		abs_path = strdup("/"); // Start from root
+	} else {
+		abs_path = dentry_to_absolute_path(base_dir);
+	}
+	if (!abs_path) {
+		return nullptr;
+	}
+
+	struct path_component stack[256];
+	int stack_depth = 0;
+
+	const char* token;
+	size_t len = 0;
+	struct path_tokenizer tok = { .path = abs_path };
+
+	while ((token = path_next_token(&tok, &len))) {
+		// Not going to handle "." or ".." since that should never be in the abs_path
+		// If it is in there I will thrash whoever made dentry_to_absolute_path
+		if (stack_depth >= 256) {
+			kfree(abs_path);
+			return nullptr; // Path too deep
+		}
+		stack[stack_depth].start = token;
+		stack[stack_depth].len = len;
+		stack_depth++;
+	}
+
+	tok = (struct path_tokenizer) { .path = path };
+
+	while ((token = path_next_token(&tok, &len))) {
+		if (len == 1 && strncmp(token, ".", 1) == 0) {
+			// Current directory - skip
+			continue;
+		} else if (len == 2 && strncmp(token, "..", 2) == 0) {
+			// Parent directory - pop from stack
+			if (stack_depth > 0) {
+				stack_depth--;
+			}
+		} else {
+			// Regular component - push to stack
+			if (stack_depth >= 256) {
+				kfree(abs_path);
+				return nullptr; // Path too deep
+			}
+			stack[stack_depth].start = token;
+			stack[stack_depth].len = len;
+			stack_depth++;
+		}
+	}
+
+	if (stack_depth == 0) {
+		char* result = kmalloc(2);
+		if (result) {
+			strcpy(result, "/");
+		}
+		kfree(abs_path);
+		return result;
+	}
+
+	size_t result_len = 1; // Leading '/'
+	for (int i = 0; i < stack_depth; i++) {
+		log_debug("Component %d: '%.*s'",
+			  i,
+			  (int)stack[i].len,
+			  stack[i].start);
+		result_len += stack[i].len;
+		if (i < stack_depth - 1) {
+			result_len += 1; // '/' separator
+		}
+	}
+
+	char* result = (char*)kmalloc(result_len + 1); // +1 for null terminator
+	if (!result) {
+		kfree(abs_path);
+		return nullptr;
+	}
+
+	size_t pos = 0;
+	result[pos++] = '/';
+
+	for (int i = 0; i < stack_depth; i++) {
+		memcpy(result + pos, stack[i].start, stack[i].len);
+		pos += stack[i].len;
+
+		// Avoid trailing '/'
+		if (i < stack_depth - 1) {
+			result[pos++] = '/';
+		}
+	}
+
+	result[pos] = '\0';
+
+	kfree(abs_path);
+
+	log_debug("Normalized path: %s", result);
+
+	return result;
 }
 
 void test_tokenizer()
@@ -1809,6 +2024,7 @@ static void trim_trailing(char* s, char c)
 	s[i] = '\0';
 }
 
+// TODO: Make this use path_component struct
 static const char* path_next_token(struct path_tokenizer* tok, size_t* out_len)
 {
 	if (!tok || !tok->path) {
