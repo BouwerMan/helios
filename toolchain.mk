@@ -53,6 +53,9 @@ PIC ?=
 CFLAGS   := $(OPT) $(COMMON_CFLAGS) $(COMMON_WARN)
 CPPFLAGS := -MMD -MP
 
+# Installed libc components that userspace depends on
+LIBC_DEPS := $(SYSROOT)/$(LIBDIR)/libc.a $(CRT0) $(CRTI) $(CRTN)
+
 # Userspace
 US_CPPFLAGS := $(CPPFLAGS) --sysroot=$(SYSROOT) -isystem$(SYSROOT)/$(INCLUDEDIR)
 US_CFLAGS   := $(CFLAGS) $(PIC)

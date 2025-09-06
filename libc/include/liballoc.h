@@ -78,7 +78,7 @@ extern void* PREFIX(calloc)(size_t, size_t); ///< The standard function.
 extern void PREFIX(free)(void*);	     ///< The standard function.
 
 [[gnu::malloc, gnu::alloc_size(1), gnu::nothrow]]
-static inline void* PREFIX(zmalloc)(size_t size)
+static inline void* PREFIX(zalloc)(size_t size)
 {
 	void* m = PREFIX(malloc)(size);
 

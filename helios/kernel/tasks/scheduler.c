@@ -19,6 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "kernel/screen.h"
 #undef LOG_LEVEL
 #define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
@@ -380,6 +381,9 @@ int launch_init()
 	commit_exec(task, ctx);
 	kthread_run(task);
 
+	// Going to clear the screen when init starts
+	// That way userspace has total control over it
+	screen_clear();
 	enable_preemption();
 	return 0;
 }

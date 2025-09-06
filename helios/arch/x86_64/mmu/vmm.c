@@ -862,6 +862,7 @@ static int do_demand_paging(struct registers* r)
 		 fault_addr);
 	fault_addr &= PAGE_FRAME_MASK;
 
+	// GDB BREAKPOINT
 	if (!is_within_vas(vas, fault_addr)) {
 		return -ENOENT;
 	}
@@ -893,7 +894,7 @@ static int do_demand_paging(struct registers* r)
 				return -EIO;
 			}
 		} else {
-			// No read_page operation, just zero the page
+			// No readpage operation, just zero the page
 			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
 			memset(kvaddr, 0, PAGE_SIZE);
 		}

@@ -31,7 +31,7 @@ $(BUILDDIR)/%.o: %.asm
 	$(NASM) $(NASMFLAGS) $< -o $@
 
 # Link order: CRT prologue, objects, libs, CRT epilogue
-$(APP_ELF): $(OBJS)
+$(APP_ELF): $(OBJS) $(LIBC_DEPS)
 	$(CC) $(US_LDFLAGS) $(CRT0) $(CRTI) $(OBJS) -o $@ $(US_LDLIBS) $(APP_LDLIBS) $(CRTN)
 
 install: $(APP_ELF)

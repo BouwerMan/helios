@@ -1,3 +1,4 @@
+#include "stdio.h"
 #include <arch/syscall.h>
 #include <stdlib.h>
 
@@ -12,5 +13,6 @@ void _exit(int status)
 
 void exit(int status)
 {
+	__cleanup_streams();
 	_exit(status);
 }

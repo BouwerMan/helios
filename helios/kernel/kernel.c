@@ -75,13 +75,13 @@ void init_kernel_structure()
  */
 void kernel_console_init()
 {
-	struct vfs_dentry* dentry = vfs_lookup("/dev/console");
+	struct vfs_dentry* dentry = vfs_lookup("/dev/ttyS0");
 	if (dentry && dentry->inode) {
 		log_debug("Found /dev/console, setting up kernel console");
 		g_kernel_console = kzalloc(sizeof(struct vfs_file));
 		g_kernel_console->dentry = dget(dentry);
 		g_kernel_console->fops = dentry->inode->fops;
-		g_kernel_console->ref_count = 1;
+		g_kernel_console->ref_count++;
 
 		// Call the TTY's open function
 		if (g_kernel_console->fops->open) {
@@ -90,7 +90,7 @@ void kernel_console_init()
 		}
 		set_log_mode(LOG_BUFFERED);
 	} else {
-		log_error("Could not find /dev/console for kernel console!");
+		log_error("Could not find /dev/ttyS0 for kernel console!");
 	}
 }
 

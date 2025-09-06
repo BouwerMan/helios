@@ -1,6 +1,7 @@
 [BITS 64]
 extern main
 extern exit
+extern init_libc
 
 section .text
 global _start
@@ -12,7 +13,7 @@ _start:
 	mov rbp, rsp
 
 	; Prepare signals, memory allocation, stdio and such.
-	; call initialize_standard_library
+	 call init_libc
 	
 	; Get argc from stack (it's now 16 bytes down due to pushes)
 	mov rdi, [rsp + 16]  ; argc from stack

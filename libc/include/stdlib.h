@@ -16,13 +16,6 @@ char* getenv(const char* name);
 [[noreturn]] void exit(int status);
 
 #include <liballoc.h>
-#if defined(__is_libk)
-#define LIBC_MALLOC(size) kmalloc(size)
-#define LIBC_FREE(ptr)	  kfree(ptr)
-#else
-#define LIBC_MALLOC(size) malloc(size)
-#define LIBC_FREE(ptr)	  free(ptr)
-#endif
 // void free(void* ptr);
 // void* malloc(size_t size);
 

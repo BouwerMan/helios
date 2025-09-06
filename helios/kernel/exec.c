@@ -272,21 +272,20 @@ static int load_program_header(struct exec_context* ctx,
 	vaddr_t vaddr_start = align_down_page((vaddr_t)prog->virtual_address);
 	vaddr_t vaddr_end = vaddr_start + (pages * PAGE_SIZE);
 
+	// uptr align_offset = prog->virtual_address - vaddr_start;
+	// off_t aligned_file_offset = (off_t)(prog->offset - align_offset);
+
 	unsigned long prot = (prog->flags & PF_EXEC) ? PROT_EXEC : 0;
 	prot |= prog->flags & PF_WRITE ? PROT_WRITE : 0;
 	prot |= prog->flags & PF_READ ? PROT_READ : 0;
 
-	if (inode) {
-		// Map as file backed
-		map_region(ctx->new_vas,
-			   inode,
-			   (off_t)prog->offset,
-			   vaddr_start,
-			   vaddr_end,
-			   prot,
-			   MAP_PRIVATE);
-	} else {
-		// For now we will keep supporting non anonymous mapping
+	if (prog->size_in_file == 0) {
+		// Pure BSS segment - map as anonymous
+		log_debug(
+			"Mapping pure BSS region: vaddr 0x%lx-0x%lx, prot 0x%lx",
+			vaddr_start,
+			vaddr_end,
+			prot);
 		map_region(ctx->new_vas,
 			   nullptr,
 			   0,
@@ -294,12 +293,63 @@ static int load_program_header(struct exec_context* ctx,
 			   vaddr_end,
 			   prot,
 			   MAP_PRIVATE | MAP_ANONYMOUS);
+	} else if (prog->size_in_file == prog->size_in_memory) {
+		// Pure data segment - map as file-backed
+		uptr align_offset = prog->virtual_address - vaddr_start;
+		off_t aligned_file_offset =
+			(off_t)(prog->offset - align_offset);
 
-		void* data = (void*)((uptr)elf + prog->offset);
-
-		vmm_write_region(
-			ctx->new_vas, vaddr_start, data, prog->size_in_file);
+		log_debug(
+			"Mapping data region: vaddr 0x%lx-0x%lx, file offset 0x%lx, prot 0x%lx",
+			vaddr_start,
+			vaddr_end,
+			aligned_file_offset,
+			prot);
+		map_region(ctx->new_vas,
+			   inode,
+			   aligned_file_offset,
+			   vaddr_start,
+			   vaddr_end,
+			   prot,
+			   MAP_PRIVATE);
+	} else {
+		// Mixed data + BSS segment - needs special handling
+		// (We'll address this case if you encounter it)
+		log_error("Mixed data+BSS segment not yet supported");
+		return -1;
 	}
+
+	// log_debug("Mapping program header:");
+	// if (inode) {
+	// 	// Map as file backed
+	// 	log_debug(
+	// 		"Mapping file-backed region: vaddr 0x%lx-0x%lx, file offset 0x%lx, prot 0x%lx",
+	// 		vaddr_start,
+	// 		vaddr_end,
+	// 		aligned_file_offset,
+	// 		prot);
+	// 	map_region(ctx->new_vas,
+	// 		   inode,
+	// 		   aligned_file_offset,
+	// 		   vaddr_start,
+	// 		   vaddr_end,
+	// 		   prot,
+	// 		   MAP_PRIVATE);
+	// } else {
+	// 	// For now we will keep supporting non anonymous mapping
+	// 	map_region(ctx->new_vas,
+	// 		   nullptr,
+	// 		   0,
+	// 		   vaddr_start,
+	// 		   vaddr_end,
+	// 		   prot,
+	// 		   MAP_PRIVATE | MAP_ANONYMOUS);
+	//
+	// 	void* data = (void*)((uptr)elf + prog->offset);
+	//
+	// 	vmm_write_region(
+	// 		ctx->new_vas, vaddr_start, data, prog->size_in_file);
+	// }
 
 	return 0;
 }

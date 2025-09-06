@@ -1,7 +1,9 @@
-#include <arch/syscall.h>
-#include <printf.h>
-#include <stdint.h>
-#include <stdio.h>
+#include <helios/errno.h>
+
+#include "arch/syscall.h"
+#include "printf.h"
+#include "stdint.h"
+#include "stdio.h"
 
 int putchar(int ic)
 {
@@ -11,8 +13,42 @@ int putchar(int ic)
 	return ic;
 }
 
+int fputc(int c, FILE* stream)
+{
+	if (!stream) {
+		return -EINVAL;
+	}
+	if (!stream->writable) {
+		return -EPERM;
+	}
+
+	// GDB BREAKPOINT
+	stream->buffer[stream->buffer_pos++] = (char)c;
+	bool should_flush = false;
+
+	switch (stream->mode) {
+	case STREAM_UNBUFFERED:
+		should_flush = true;
+		break;
+	case STREAM_LINEBUFFERED:
+		should_flush = (c == '\n') ||
+			       (stream->buffer_pos >= stream->buffer_size);
+		break;
+	case STREAM_FULLYBUFFERED:
+		should_flush = (stream->buffer_pos >= stream->buffer_size);
+		break;
+	}
+
+	if (should_flush) {
+		// GDB BREAKPOINT
+		return fflush(stream);
+	}
+
+	return c;
+}
+
 // Needed for printf lib
 void putchar_(char c)
 {
-	putchar((int)c);
+	fputc(c, stdout);
 }

@@ -1,3 +1,4 @@
+HELIOS_ROOT ?= $(shell git rev-parse --show-toplevel 2>/dev/null || echo $(CURDIR))
 include $(HELIOS_ROOT)/toolchain.mk
 
 BUILDDIR ?= build
@@ -64,13 +65,14 @@ install: install-libs
 
 install-headers:
 	@echo "Installing Libc headers..."
-	@mkdir -p $(DESTDIR)$(INCLUDEDIR)
-	@cp -R --preserve=timestamps include/. $(DESTDIR)$(INCLUDEDIR)/.
+	@mkdir -p $(DESTDIR)/$(INCLUDEDIR)
+	# @cp -R --preserve=timestamps include/. $(DESTDIR)/$(INCLUDEDIR)/.
+	@rsync -a --exclude='internal/' include/. $(DESTDIR)/$(INCLUDEDIR)/.
 
 install-libs: $(BINARIES)
-	@mkdir -p $(DESTDIR)$(LIBDIR)
-	@cp $(BINARIES) $(DESTDIR)$(LIBDIR)
-	@cp $(CRT_OBJS) $(DESTDIR)$(LIBDIR)
+	@mkdir -p $(DESTDIR)/$(LIBDIR)
+	@cp $(BINARIES) $(DESTDIR)/$(LIBDIR)
+	@cp $(CRT_OBJS) $(DESTDIR)/$(LIBDIR)
 
 clean:
 	@echo "Cleaning build directory..."

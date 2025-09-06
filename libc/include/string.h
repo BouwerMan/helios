@@ -4,13 +4,18 @@
 #pragma once
 
 #include <features.h>
+#include <stdint.h>
 
 #define __need_NULL
 #define __need_size_t
 #include <stddef.h>
 
 #if defined(__x86_64__) || defined(_M_X64)
-#include <private/string_64.h>
+// These will be aliased in memset.c
+extern void* memset64(uint64_t* s, uint64_t v, size_t n);
+extern void* memset32(uint32_t* s, uint32_t v, size_t n);
+extern void* memset16(uint16_t* s, uint16_t v, size_t n);
+extern void* memset8(uint8_t* s, uint8_t v, size_t n);
 #endif
 
 /// Checks the alignment of dest and src while making sure num can be evenly
