@@ -192,7 +192,6 @@ retry:
 wait:
 	// No zombies found yet, so we block and wait for a child to exit.
 	waitqueue_sleep(&task->parent_wq);
-	// GDB BREAKPOINT
 	goto retry;
 }
 
@@ -259,17 +258,20 @@ void sys_getcwd(struct registers* r)
 	size_t size = (size_t)r->rsi;
 
 	struct task* task = get_current_task();
-	size_t cwd_len = strlen(task->cwd->name);
+	char* path = dentry_to_abspath(task->cwd);
+	size_t cwd_len = strlen(path);
 	if (cwd_len + 1 > size) {
+		kfree(path);
 		SYSRET(r, (u64)NULL);
 		return;
 	}
 
 	for (size_t i = 0; i < size; i++) {
-		((char*)buf)[i] = task->cwd->name[i];
+		((char*)buf)[i] = path[i];
 	}
 	((char*)buf)[cwd_len] = '\0';
 
+	kfree(path);
 	SYSRET(r, (u64)buf);
 }
 

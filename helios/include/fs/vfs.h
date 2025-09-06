@@ -281,6 +281,10 @@ int vfs_mount(const char* source,
 void register_filesystem(struct vfs_fs_type* fs);
 struct vfs_superblock* vfs_get_sb(int idx);
 
+// NOTE: Functions marked with __ are internal-only and should not be called
+// without things like path normalization.
+// This also includes functions that have norm_path as an argument.
+
 // --- Path and Dentry Management ---
 
 /**
@@ -316,8 +320,8 @@ struct vfs_superblock* vfs_get_sb(int idx);
  */
 struct vfs_dentry* vfs_lookup(const char* path);
 struct vfs_dentry* vfs_resolve_path(const char* path);
-struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path);
-struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name);
+struct vfs_dentry* __vfs_walk_path(struct vfs_dentry* root, const char* path);
+struct vfs_dentry* __dentry_lookup(struct vfs_dentry* parent, const char* name);
 struct vfs_dentry* dget(struct vfs_dentry* dentry);
 void dput(struct vfs_dentry* dentry);
 void dentry_add(struct vfs_dentry* dentry);
@@ -351,6 +355,7 @@ int vfs_create(const char* path,
 	       struct vfs_dentry** out_dentry);
 
 // --- Utility Functions ---
+char* dentry_to_abspath(struct vfs_dentry* dentry);
 char* vfs_normalize_path(const char* path, struct vfs_dentry* base_dir);
 struct vfs_file* get_file(int fd);
 bool vfs_does_name_exist(struct vfs_dentry* parent, const char* name);

@@ -117,7 +117,7 @@ static inline u32 inode_key(const struct vfs_superblock* sb, const size_t id)
  *
  * @note Both @p parent_out and @p name_out must be freed with kfree() by the caller.
  */
-static int split_path(const char* path, char** parent_out, char** name_out);
+static int __split_path(const char* path, char** parent_out, char** name_out);
 
 /*******************************************************************************
  * Public Function Definitions
@@ -508,7 +508,7 @@ struct vfs_dentry* dentry_ht_check(struct vfs_dentry* d)
  *
  * Return: Referenced dentry on success (caller must dput()), or NULL on error.
  */
-struct vfs_dentry* dentry_lookup(struct vfs_dentry* parent, const char* name)
+struct vfs_dentry* __dentry_lookup(struct vfs_dentry* parent, const char* name)
 {
 	log_debug("dentry_lookup: parent=%s, name=%s", parent->name, name);
 
@@ -759,15 +759,8 @@ ret:
 
 int __vfs_open_for_task(struct task* t, const char* path, int flags)
 {
-	// TODO: Rework lookup to check for mount points.
-
 	char* norm_path = vfs_normalize_path(path, t->cwd);
 	struct vfs_dentry* dentry = vfs_lookup(norm_path);
-	// if (t->cwd) {
-	// 	dentry = vfs_resolve_path_from_cwd(path, t->cwd);
-	// } else {
-	// 	dentry = vfs_lookup(path);
-	// }
 	if (!dentry || !dentry->inode) {
 		log_debug("Dentry not found for path: %s", path);
 		if (flags & O_CREAT) {
@@ -887,6 +880,15 @@ int vfs_create(const char* path,
 	       int flags,
 	       struct vfs_dentry** out_dentry)
 {
+	if (!path) {
+		return -VFS_ERR_INVAL;
+	}
+
+	char* norm_path = vfs_normalize_path(path, get_current_task()->cwd);
+	if (!norm_path) {
+		return -VFS_ERR_NOMEM;
+	}
+
 	int arg_check = vfs_create_args_valid(path, mode, flags, out_dentry);
 	if (arg_check < 0) {
 		return arg_check;
@@ -894,9 +896,10 @@ int vfs_create(const char* path,
 
 	char* parent;
 	char* name;
-	int res = split_path(path, &parent, &name);
+	int res = __split_path(norm_path, &parent, &name);
 
 	if (res < 0 || !parent || !name) {
+		kfree(norm_path);
 		if (parent) kfree(parent);
 		if (name) kfree(name);
 		return res;
@@ -906,18 +909,20 @@ int vfs_create(const char* path,
 	if (!pdentry || !pdentry->inode ||
 	    !(pdentry->inode->filetype == FILETYPE_DIR)) {
 		dput(pdentry);
+		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
 		return -VFS_ERR_NOTDIR;
 	}
 
 	// Try to lookup the file by name
-	struct vfs_dentry* child = dentry_lookup(pdentry, name);
+	struct vfs_dentry* child = __dentry_lookup(pdentry, name);
 
 	if (child && child->inode) {
 		log_debug("child: %p, name: %p", child->name, name);
 		if (flags & O_EXCL) {
 			dput(child);
+			kfree(norm_path);
 			kfree(parent);
 			kfree(name);
 			return -VFS_ERR_EXIST;
@@ -925,6 +930,7 @@ int vfs_create(const char* path,
 		// File exists but not O_EXCL — treat as success?
 		*out_dentry = child;
 		dput(pdentry);
+		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
 		return VFS_OK;
@@ -934,6 +940,7 @@ int vfs_create(const char* path,
 	log_debug("child: %p, name: %p", child->name, name);
 	if (!child) {
 		dput(pdentry);
+		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
 		return -VFS_ERR_NOMEM;
@@ -942,17 +949,17 @@ int vfs_create(const char* path,
 	if (!pdentry->inode->ops || !pdentry->inode->ops->create) {
 		dentry_dealloc(child);
 		dput(pdentry);
+		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
 		return -VFS_ERR_NODEV;
 	}
 
-	res = pdentry->inode->ops->create(pdentry->inode,
-					  child,
-					  mode); // or default mode
+	res = pdentry->inode->ops->create(pdentry->inode, child, mode);
 	if (res < 0) {
 		dentry_dealloc(child);
 		dput(pdentry);
+		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
 		return res;
@@ -962,6 +969,7 @@ int vfs_create(const char* path,
 
 	*out_dentry = child;
 
+	kfree(norm_path);
 	kfree(parent);
 	kfree(name);
 	return VFS_OK;
@@ -977,36 +985,25 @@ int vfs_mkdir(const char* path, uint16_t mode)
 		return -VFS_ERR_EXIST;
 	}
 
+	char* norm_path = vfs_normalize_path(path, get_current_task()->cwd);
+	if (!norm_path) {
+		return -VFS_ERR_NOMEM;
+	}
+
 	char* parent;
 	char* name;
-	int res = split_path(path, &parent, &name);
+	int res = __split_path(norm_path, &parent, &name);
 
 	if (res < 0 || !parent || !name) {
+		kfree(norm_path);
 		if (parent) kfree(parent);
 		if (name) kfree(name);
 		return res;
 	}
 
-	// char* buf = strdup(path);
-	// trim_trailing(buf, '/');
-	// char* name = strrchr(buf, '/');
-	//
-	// if (!name || !*(name + 1)) {
-	// 	kfree(buf);
-	// 	return -VFS_ERR_INVAL;
-	// }
-	//
-	// // Split into parent and name
-	// *name = '\0';
-	// name++; // Now, name points to the last component
-	//
-	// // Determine parent string
-	// const char* parent = (buf[0] == '\0') ? "/" : buf;
-	//
-	// log_debug("Path: %s, p: %s, name: %s", path, parent, name);
-
 	struct vfs_dentry* pdentry = vfs_lookup(parent);
 	if (!pdentry) {
+		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
 		return -VFS_ERR_NOENT;
@@ -1017,6 +1014,7 @@ int vfs_mkdir(const char* path, uint16_t mode)
 	// Optionally, check for existing child with the same name
 	if (vfs_does_name_exist(pdentry, name)) {
 		dput(pdentry);
+		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
 		return -VFS_ERR_EXIST;
@@ -1025,6 +1023,7 @@ int vfs_mkdir(const char* path, uint16_t mode)
 	struct vfs_dentry* child = dentry_alloc(pdentry, name);
 	if (!child) {
 		dput(pdentry);
+		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
 		return -VFS_ERR_NOMEM;
@@ -1032,6 +1031,7 @@ int vfs_mkdir(const char* path, uint16_t mode)
 
 	if (!pinode->ops || !pinode->ops->mkdir) {
 		dput(pdentry);
+		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
 		return -VFS_ERR_NODEV;
@@ -1041,6 +1041,7 @@ int vfs_mkdir(const char* path, uint16_t mode)
 	if (res < 0) {
 		dput(pdentry);
 		dentry_dealloc(child);
+		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
 		return res;
@@ -1049,6 +1050,7 @@ int vfs_mkdir(const char* path, uint16_t mode)
 	dentry_add(child);
 	dput(pdentry);
 
+	kfree(norm_path);
 	kfree(parent);
 	kfree(name);
 	return VFS_OK;
@@ -1204,7 +1206,7 @@ struct vfs_dentry* vfs_lookup(const char* path)
 		vfs_normalize_path(path, g_vfs_root_mount->sb->root_dentry);
 
 	struct vfs_dentry* current_dentry =
-		vfs_walk_path(g_vfs_root_mount->sb->root_dentry, norm_path);
+		__vfs_walk_path(g_vfs_root_mount->sb->root_dentry, norm_path);
 
 	kfree(norm_path);
 	return current_dentry;
@@ -1265,76 +1267,6 @@ int vfs_get_id()
 }
 
 /**
- * @brief Resolves an absolute path to a VFS dentry, starting from the correct
- * mount point.
- *
- * This function searches the mount table to find the best matching mount point
- * for the given path, then walks the remaining path from the mount's root
- * dentry.
- *
- * @param path   Absolute path to resolve (e.g., "/mnt/usb/file.txt").
- * @return       Pointer to the final vfs_dentry if successful, or NULL on
- * failure.
- */
-struct vfs_dentry* vfs_resolve_path(const char* path)
-{
-	// TODO: Should check/normalize path
-
-	struct vfs_mount* match = NULL;
-	size_t match_len = 0;
-
-	// Traverse mount_list
-	for (struct vfs_mount* m = mount_list; m; m = m->next) {
-		size_t len = strlen(m->mount_point);
-		if (strncmp(path, m->mount_point, len) == 0 &&
-		    (path[len] == '/' || path[len] == '\0')) {
-			if (len > match_len) {
-				match = m;
-				match_len = len;
-			}
-		}
-	}
-
-	if (!match) {
-		// FIXME: Doesn't varify rootfs->root_dentry exists
-		return vfs_walk_path(g_vfs_root_mount->sb->root_dentry,
-				     path + 1);
-	}
-
-	// Now create relative path for further fs dentry walking
-	const char* rel_path = path + match_len;
-	if (*rel_path == '/') rel_path++; // Skip leading '/' (NEEDED?)
-
-	return vfs_walk_path(match->sb->root_dentry, rel_path);
-}
-
-struct vfs_dentry* vfs_resolve_path_from_cwd(const char* path,
-					     struct vfs_dentry* cwd)
-{
-	if (!path || !cwd) {
-		return nullptr;
-	}
-
-	if (path[0] == '/') {
-		return vfs_lookup(path);
-	} else if (path[0] == '.' && (path[1] == '/' || path[1] == '\0')) {
-		// Handle ./foo/bar case
-		const char* rel_path = path + 1;
-		if (*rel_path == '/') rel_path++; // Skip leading '/'
-		return vfs_walk_path(cwd, rel_path);
-	} else if (path[0] == '.' && path[1] == '.' &&
-		   (path[2] == '/' || path[2] == '\0')) {
-		// Handle ../foo/bar case
-		struct vfs_dentry* parent = cwd->parent ? cwd->parent : cwd;
-		const char* rel_path = path + 2;
-		if (*rel_path == '/') rel_path++; // Skip leading '/'
-		return vfs_walk_path(parent, rel_path);
-	} else {
-		return vfs_walk_path(cwd, path);
-	}
-}
-
-/**
  * @brief Resolves a relative path starting from a given root dentry.
  *
  * This function walks the path one component at a time, using the VFS's
@@ -1348,7 +1280,7 @@ struct vfs_dentry* vfs_resolve_path_from_cwd(const char* path,
  * @return         A pointer to the final vfs_dentry on success, or NULL on
  *                 failure.
  */
-struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path)
+struct vfs_dentry* __vfs_walk_path(struct vfs_dentry* root, const char* path)
 {
 	log_debug("Walking path '%s' from root '%s'", path, root->name);
 	const char* token;
@@ -1362,7 +1294,7 @@ struct vfs_dentry* vfs_walk_path(struct vfs_dentry* root, const char* path)
 		memcpy(token_buf, token, len);
 		token_buf[len] = '\0';
 
-		struct vfs_dentry* child = dentry_lookup(parent, token_buf);
+		struct vfs_dentry* child = __dentry_lookup(parent, token_buf);
 		dput(parent);
 		if (!child) {
 			return nullptr;
@@ -1420,7 +1352,7 @@ void dentry_dealloc(struct vfs_dentry* d)
 	slab_free(&dentry_cache, d);
 }
 
-char* dentry_to_absolute_path(struct vfs_dentry* dentry)
+char* dentry_to_abspath(struct vfs_dentry* dentry)
 {
 	// Handle root case early
 	if (!dentry || !dentry->parent) {
@@ -1500,7 +1432,7 @@ char* vfs_normalize_path(const char* path, struct vfs_dentry* base_dir)
 	if (is_absolute) {
 		abs_path = strdup("/"); // Start from root
 	} else {
-		abs_path = dentry_to_absolute_path(base_dir);
+		abs_path = dentry_to_abspath(base_dir);
 	}
 	if (!abs_path) {
 		return nullptr;
@@ -1680,7 +1612,7 @@ int test_split_path()
 			(char*)0x1; /* sentinel non-nullptr so we can verify error paths null them */
 		char* name = (char*)0x1;
 
-		int rc = split_path(tc->path, &parent, &name);
+		int rc = __split_path(tc->path, &parent, &name);
 		++tests;
 
 		if (tc->exp_rc == VFS_OK) {
@@ -1780,7 +1712,7 @@ int test_split_path()
 
 		char* parent = (char*)0x1;
 		char* name = (char*)0x1;
-		int rc = split_path(buf, &parent, &name);
+		int rc = __split_path(buf, &parent, &name);
 		++tests;
 		if (rc != -VFS_ERR_NAMETOOLONG) {
 			log_error(
@@ -1814,7 +1746,7 @@ int test_split_path()
 
 		char* parent = nullptr;
 		char* name = nullptr;
-		int rc = split_path(buf, &parent, &name);
+		int rc = __split_path(buf, &parent, &name);
 		++tests;
 
 		if (rc != VFS_OK) {
@@ -1898,8 +1830,9 @@ int test_split_path()
  *
  * @return VFS_OK on success, or a negative VFS_ERR_* code on error.
  */
-static int split_path(const char* path, char** parent_out, char** name_out)
+static int __split_path(const char* path, char** parent_out, char** name_out)
 {
+	// TODO: Expect a normalized path, so we can just tokenize on '/'
 	if (!path || !parent_out || !name_out) {
 		return -VFS_ERR_INVAL;
 	}

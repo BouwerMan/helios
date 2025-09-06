@@ -643,10 +643,10 @@ void vmm_write_region(struct address_space* vas,
 
 		vaddr_t kernel_vaddr = PHYS_TO_HHDM(paddr);
 
-		log_info("Writing %zu bytes to vaddr 0x%lx (phys 0x%lx)",
-			 bytes_to_copy,
-			 vaddr,
-			 paddr);
+		log_debug("Writing %zu bytes to vaddr 0x%lx (phys 0x%lx)",
+			  bytes_to_copy,
+			  vaddr,
+			  paddr);
 		if (!data_bytes) {
 			memset((char*)kernel_vaddr, 0, bytes_to_copy);
 		} else {

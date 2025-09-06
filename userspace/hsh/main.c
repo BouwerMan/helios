@@ -23,7 +23,7 @@ int launch(char** args)
 		} while (false); // TODO: IMPLMENT WIFEXITED AND WIFSIGNALED
 	}
 
-	return 1;
+	return status;
 }
 
 /*
@@ -37,19 +37,21 @@ int hsh_cd(char** args)
 		if (chdir(args[1]) != 0) {
 			// perror
 		}
+		char buf[256];
+		printf("CWD: %s\n", getcwd(buf, 256));
 	}
-	return 1;
+	return 0;
 }
 
 int hsh_help(char** args)
 {
 	printf("Help yourself fucker\n");
-	return 1;
+	return 0;
 }
 
 int hsh_exit(char** args)
 {
-	return 0;
+	return -1;
 }
 
 /*
@@ -70,8 +72,6 @@ int lsh_num_builtins()
 
 int execute(char** args)
 {
-	printf("DEBUG: builtin_str[0] = %p\n", builtin_str[0]);
-	printf("DEBUG: lsh_num_builtins() = %d\n", lsh_num_builtins());
 	if (args[0] == nullptr) {
 		return 1; // Empty command
 	}
@@ -141,11 +141,16 @@ char* read_line()
 		if (c == EOF || c == '\n') {
 			buffer[position] = '\0';
 			return buffer;
+		} else if (c == '\b') {
+			// If we backspace we go back one position
+			if (position > 0) {
+				position--;
+			}
+			buffer[position] = '\0';
 		} else {
 			buffer[position] = (char)c;
+			position++;
 		}
-
-		position++;
 
 		if (position >= bufsize) {
 			bufsize += LSH_RL_BUFSIZE;
@@ -162,10 +167,10 @@ void hsh_loop()
 {
 	char* line;
 	char** args;
-	int status;
+	int status = 0;
 
 	do {
-		printf("> ");
+		printf("%3d > ", status);
 		fflush(stdout);
 		line = read_line();
 		args = split_line(line);
@@ -173,7 +178,7 @@ void hsh_loop()
 
 		free(line);
 		free(args);
-	} while (status);
+	} while (status >= 0);
 }
 
 int main(int argc, char** argv, char** envp)
