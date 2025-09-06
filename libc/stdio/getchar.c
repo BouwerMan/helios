@@ -8,7 +8,7 @@ int getchar(void)
 
 int fgetc(FILE* stream)
 {
-	int c;
+	char c;
 	ssize_t r = read(stream->fd, &c, 1);
 	return c;
 }

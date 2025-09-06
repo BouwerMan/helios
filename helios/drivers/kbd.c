@@ -40,24 +40,63 @@ unsigned char kbdus[128] = {
 	0, /* All other keys are undefined */
 };
 
+unsigned char kbdus_shifted[128] = {
+	0,    27,  '!', '@', '#',  '$', '%', '^', '&',	'*', /* 9 */
+	'(',  ')', '_', '+', '\b',			     /* Backspace */
+	'\t',						     /* Tab */
+	'Q',  'W', 'E', 'R',				     /* 19 */
+	'T',  'Y', 'U', 'I', 'O',  'P', '{', '}', '\n',	     /* Enter key */
+	0, /* 29   - Control */
+	'A',  'S', 'D', 'F', 'G',  'H', 'J', 'K', 'L',	':', /* 39 */
+	'"',  '~', 0,					     /* Left shift */
+	'|',  'Z', 'X', 'C', 'V',  'B', 'N',		     /* 49 */
+	'M',  '<', '>', '?', 0,				     /* Right shift */
+	'*',  0,					     /* Alt */
+	' ',						     /* Space bar */
+	0,						     /* Caps lock */
+	// ... rest same as kbdus (function keys, etc.)
+};
+
+static bool is_shifted = false;
+static bool is_ctrl_pressed = false;
+static bool is_alt_pressed = false;
+static bool caps_lock_on = false;
+
 char process_scancode()
 {
 	unsigned char scancode = inb(0x60);
 	if (scancode & 0x80) {
-		// Key released, ignore for now
+		// Key is released
+
+		scancode &= 0x7F; // Remove release bit
+
+		if (scancode == 42 || scancode == 54) {
+			is_shifted = false;
+		}
 		return 0;
 	} else {
 		// Key pressed
-		return (char)kbdus[scancode];
+
+		if (scancode == 42 || scancode == 54) { // Left or right shift
+			is_shifted = true;
+			return 0; // Don't output shift key itself
+		}
+		if (is_shifted) {
+			return (char)kbdus_shifted[scancode];
+		} else {
+			return (char)kbdus[scancode];
+		}
 	}
 }
 
 void keyboard_interrupt_handler(struct registers* r)
 {
 	(void)r;
-	char c = process_scancode();	    // convert scancode to ASCII
-	struct tty* console_tty = find_tty_by_name("tty0");
-	tty_add_input_char(console_tty, c); // add to tty0's input buffer
+	char c = process_scancode();
+	if (c != 0) {
+		struct tty* console_tty = find_tty_by_name("tty0");
+		tty_add_input_char(console_tty, c);
+	}
 }
 
 void keyboard_init()

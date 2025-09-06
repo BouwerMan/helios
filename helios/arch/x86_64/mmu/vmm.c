@@ -862,7 +862,6 @@ static int do_demand_paging(struct registers* r)
 		 fault_addr);
 	fault_addr &= PAGE_FRAME_MASK;
 
-	// GDB BREAKPOINT
 	if (!is_within_vas(vas, fault_addr)) {
 		return -ENOENT;
 	}

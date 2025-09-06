@@ -8,7 +8,6 @@
 int putchar(int ic)
 {
 	char c = (char)ic;
-	// TODO: Implement stdio and the write system call.
 	__syscall3(SYS_WRITE, 1, (long)&c, 1);
 	return ic;
 }
