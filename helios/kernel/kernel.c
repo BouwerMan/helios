@@ -159,6 +159,8 @@ void kernel_main()
 	log_info("Successfully got out of bootstrapping hell");
 	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
 
+	log_info("Sleeping for %d", 1000);
+	sleep(1000);
 	int init_res = launch_init();
 	if (init_res < 0) {
 		log_error("Init error code: %d", init_res);

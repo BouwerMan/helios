@@ -69,6 +69,13 @@ void timer_phase(uint32_t hz)
 void timer_handler(struct registers* r)
 {
 	(void)r;
+	static int timer_depth = 0;
+	timer_depth++;
+
+	if (timer_depth > 1) {
+		log_error("Nested timer interrupt! Depth: %d", timer_depth);
+	}
+
 	/* Increment our 'tick count' */
 	ticks++;
 	if (ticks % phase == 0) seconds_since_start++;
@@ -78,6 +85,8 @@ void timer_handler(struct registers* r)
 	scheduler_tick();
 
 	if (ticks % SCHEDULER_TIME == 0) need_reschedule = true;
+
+	timer_depth--;
 }
 
 /* Waits until the timer at least one time.
@@ -104,8 +113,7 @@ void sleep(uint64_t millis)
 		  millis_to_ticks(millis));
 	// Don't need to convert to ticks since we have 1ms ticks but just incase
 	t->sleep_ticks = millis_to_ticks(millis);
-	t->state = BLOCKED;
-	yield();
+	yield_blocked();
 }
 
 /**

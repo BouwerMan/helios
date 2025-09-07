@@ -178,7 +178,6 @@ void term_putchar(char c)
 	switch (g_terminal.state) {
 	case PARSER_NORMAL: {
 		if (c == ESC) {
-			// GDB BREAKPOINT
 			g_terminal.state = PARSER_ESCAPE;
 
 			// reset parser state

@@ -180,10 +180,11 @@ void schedule(struct registers* regs)
 	struct task* prev = squeue.current_task;
 	previous_task = prev;
 	prev->regs = regs;
-	if (prev->state != BLOCKED && prev->state != TERMINATED) {
+	if (prev->state == RUNNING) {
 		prev->state = READY;
 	}
 
+	// scheduler_dump();
 	struct task* new = pick_next();
 
 	new->state = RUNNING;
@@ -501,10 +502,10 @@ void task_wake(struct task* task)
 {
 	disable_preemption();
 
-	if (task->state != BLOCKED) {
-		enable_preemption();
-		return;
-	}
+	// if (task->state != BLOCKED) {
+	// 	enable_preemption();
+	// 	return;
+	// }
 
 	task->state = READY;
 	list_move_tail(&task->sched_list, &squeue.ready_list);
@@ -528,12 +529,16 @@ void task_block(struct task* task)
  */
 void scheduler_tick()
 {
-	struct task* task = squeue.current_task;
-	for (size_t i = 0; i < squeue.task_count; i++) {
-		task = list_next_entry(task, sched_list);
-		if (task->state == BLOCKED && task->sleep_ticks > 0) {
-			task->sleep_ticks--;
-			if (task->sleep_ticks == 0) task->state = READY;
+	struct task* pos = nullptr;
+	struct task* temp = nullptr;
+
+	list_for_each_entry_safe(pos, temp, &squeue.blocked_list, sched_list)
+	{
+		if (pos->sleep_ticks > 0) {
+			pos->sleep_ticks--;
+			if (pos->sleep_ticks == 0) {
+				task_wake(pos); // Moves to run queue
+			}
 		}
 	}
 }
@@ -778,6 +783,12 @@ static struct task* pick_next()
 		// No ready task available
 		squeue.current_task = idle_task;
 		return squeue.current_task;
+	} else if (squeue.current_task == idle_task) {
+		// If we were the idle task and there is a ready task, pick it
+		struct task* next = list_first_entry(
+			&squeue.ready_list, struct task, sched_list);
+		squeue.current_task = next;
+		return next;
 	}
 
 	// If we only have 1 task then might as well make sure we continue it

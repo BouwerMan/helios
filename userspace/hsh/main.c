@@ -301,7 +301,11 @@ void hsh_loop()
 	int status = 0;
 
 	do {
-		printf("%03d > ", status);
+		printf("\x1b[1;%dm"
+		       "%03d > "
+		       "\x1b[0m",
+		       status > 0 ? 31 : 32,
+		       status);
 		fflush(stdout);
 		line = read_line();
 		args = split_line(line);

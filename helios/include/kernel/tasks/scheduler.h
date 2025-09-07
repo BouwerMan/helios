@@ -72,7 +72,7 @@ struct task {
 	uint8_t priority;
 	int preempt_count;
 	pid_t pid;
-	volatile uint64_t sleep_ticks;
+	uint64_t sleep_ticks;
 	int errno_value;
 	struct vfs_dentry* cwd;
 	struct vfs_file* resources[MAX_RESOURCES];
