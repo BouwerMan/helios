@@ -8,6 +8,7 @@
 int hsh_cd(char** args);
 int hsh_pwd(char** args);
 int hsh_ls(char** args);
+int hsh_clear(char** args);
 int hsh_help(char** args);
 int hsh_exit(char** args);
 int hsh_shutdown(char** args);
@@ -16,11 +17,12 @@ int hsh_shutdown(char** args);
   List of builtin commands, followed by their corresponding functions.
  */
 const char* builtin_str[] = {
-	"cd", "pwd", "ls", "help", "exit", "shutdown",
+	"cd", "pwd", "ls", "clear", "help", "exit", "shutdown",
 };
 
-int (*builtin_func[])(char**) = { &hsh_cd,   &hsh_pwd,	&hsh_ls,
-				  &hsh_help, &hsh_exit, &hsh_shutdown };
+int (*builtin_func[])(char**) = { &hsh_cd,	&hsh_pwd,  &hsh_ls,
+				  &hsh_clear,	&hsh_help, &hsh_exit,
+				  &hsh_shutdown };
 
 int lsh_num_builtins()
 {
@@ -153,6 +155,13 @@ int hsh_ls(char** args)
 	}
 
 	closedir(dir);
+	return 0;
+}
+
+int hsh_clear(char** args)
+{
+	(void)args;
+	printf("\x1b[2J\x1b[H");
 	return 0;
 }
 
@@ -347,6 +356,10 @@ void hsh_loop()
 
 int main(int argc, char** argv, char** envp)
 {
+	hsh_clear(nullptr);
+
+	printf("Welcome to hsh! Type 'help' for a list of commands.\n");
+
 	hsh_loop();
 
 	return 0;

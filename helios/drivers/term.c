@@ -194,22 +194,6 @@ void term_init()
 	timer_schedule(&g_terminal.cursor.timer, 500, cursor_callback, nullptr);
 }
 
-void term_clear()
-{
-	__screen_clear();
-
-	unsigned long flags;
-	spin_lock_irqsave(&g_terminal.lock, &flags);
-
-	g_terminal.cursor_x = 0;
-	g_terminal.cursor_y = 0;
-	memset(g_terminal.screen_buffer,
-	       ' ',
-	       g_terminal.rows * g_terminal.cols * sizeof(char));
-
-	spin_unlock_irqrestore(&g_terminal.lock, flags);
-}
-
 void term_write(const char* s, size_t len)
 {
 	for (size_t i = 0; i < len; i++) {
@@ -298,6 +282,34 @@ void __screen_buffer_putchar_at(char c, size_t x, size_t y)
 {
 	if (x >= g_terminal.cols || y >= g_terminal.rows) return;
 	g_terminal.screen_buffer[y * g_terminal.cols + x] = c;
+}
+
+// TODO: Make this more efficient (for instance, make the screen memset like __screen_clear)
+static void erase_to_end_of_screen(size_t x, size_t y)
+{
+	for (size_t row = y; row < g_terminal.rows; row++) {
+		size_t start_col = (row == y) ? x : 0;
+		for (size_t col = start_col; col < g_terminal.cols; col++) {
+			__screen_buffer_putchar_at(' ', col, row);
+			screen_putchar_at(' ',
+					  col,
+					  row,
+					  g_terminal.default_attrs.fg_color,
+					  g_terminal.default_attrs.bg_color);
+		}
+	}
+}
+
+void term_clear()
+{
+	unsigned long flags;
+	spin_lock_irqsave(&g_terminal.lock, &flags);
+
+	g_terminal.cursor_x = 0;
+	g_terminal.cursor_y = 0;
+	erase_to_end_of_screen(0, 0);
+
+	spin_unlock_irqrestore(&g_terminal.lock, flags);
 }
 
 // Expects to be called with g_terminal.lock held
@@ -392,6 +404,24 @@ static void process_sgr_param(int param)
 	}
 }
 
+static void handle_erase_seq()
+{
+	if (g_terminal.param_len == 0) {
+		erase_to_end_of_screen(g_terminal.cursor.x,
+				       g_terminal.cursor.y);
+	}
+
+	switch (g_terminal.param_buffer[0]) {
+	case '0':
+		erase_to_end_of_screen(g_terminal.cursor.x,
+				       g_terminal.cursor.y);
+		break;
+	case '2':
+		erase_to_end_of_screen(0, 0);
+		break;
+	}
+}
+
 static void handle_sgr_seq()
 {
 	// Handle empty parameter case (ESC[m)
@@ -428,6 +458,15 @@ static void handle_sgr_seq()
 	}
 }
 
+void handle_cursor_seq()
+{
+	if (g_terminal.param_len == 0) {
+		g_terminal.cursor_x = 0;
+		g_terminal.cursor_y = 0;
+		return;
+	}
+}
+
 static void handle_csi_char(char c)
 {
 	switch (c) {
@@ -436,6 +475,15 @@ static void handle_csi_char(char c)
 		handle_sgr_seq();
 		g_terminal.state = PARSER_NORMAL;
 		break;
+	case 'J': {
+		handle_erase_seq();
+		g_terminal.state = PARSER_NORMAL;
+		break;
+	case 'H':
+		handle_cursor_seq();
+		g_terminal.state = PARSER_NORMAL;
+		break;
+	}
 	default: {
 		if (g_terminal.param_len >=
 		    sizeof(g_terminal.param_buffer) - 1) {
