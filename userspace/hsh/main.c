@@ -10,16 +10,17 @@ int hsh_pwd(char** args);
 int hsh_ls(char** args);
 int hsh_help(char** args);
 int hsh_exit(char** args);
+int hsh_shutdown(char** args);
 
 /*
   List of builtin commands, followed by their corresponding functions.
  */
 const char* builtin_str[] = {
-	"cd", "pwd", "ls", "help", "exit",
+	"cd", "pwd", "ls", "help", "exit", "shutdown",
 };
 
-int (*builtin_func[])(
-	char**) = { &hsh_cd, &hsh_pwd, &hsh_ls, &hsh_help, &hsh_exit };
+int (*builtin_func[])(char**) = { &hsh_cd,   &hsh_pwd,	&hsh_ls,
+				  &hsh_help, &hsh_exit, &hsh_shutdown };
 
 int lsh_num_builtins()
 {
@@ -66,6 +67,7 @@ int hsh_cd(char** args)
 
 int hsh_pwd(char** args)
 {
+	(void)args;
 	char buf[256];
 	printf("%s\n", getcwd(buf, 256));
 	return 0;
@@ -156,6 +158,7 @@ int hsh_ls(char** args)
 
 int hsh_help(char** args)
 {
+	(void)args;
 	printf("Help yourself fucker\n");
 	printf("Here are the builtin commands:\n");
 	for (int i = 0; i < lsh_num_builtins(); i++) {
@@ -166,7 +169,15 @@ int hsh_help(char** args)
 
 int hsh_exit(char** args)
 {
+	(void)args;
 	return -1;
+}
+
+int hsh_shutdown(char** args)
+{
+	(void)args;
+	shutdown();
+	return 0;
 }
 
 // NOTE: Caller must free

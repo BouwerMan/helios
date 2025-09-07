@@ -107,10 +107,6 @@ void sleep(uint64_t millis)
 {
 	struct task* t = get_current_task();
 	if (!t) return;
-	log_debug("Sleeping task %d for %lu millis or %lu ticks",
-		  t->pid,
-		  millis,
-		  millis_to_ticks(millis));
 	// Don't need to convert to ticks since we have 1ms ticks but just incase
 	t->sleep_ticks = millis_to_ticks(millis);
 	yield_blocked();

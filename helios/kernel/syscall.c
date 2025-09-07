@@ -19,6 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "kernel/timer.h"
 #include "mm/kmalloc.h"
 #include <arch/idt.h>
 #include <arch/mmu/vmm.h>
@@ -326,6 +327,20 @@ void sys_access(struct registers* r)
 	SYSRET(r, (u64)res);
 }
 
+void sys_shutdown(struct registers* r)
+{
+	(void)r;
+	set_log_mode(LOG_DIRECT);
+	irq_log_flush();
+	console_flush();
+
+	log_warn("Shutting down in 1 second");
+	sleep(1000);
+
+	// QEMU shutdown command
+	outword(0x604, 0x2000);
+}
+
 typedef void (*handler)(struct registers* r);
 static const handler syscall_handlers[] = {
 	[SYS_READ] = sys_read,	     [SYS_WRITE] = sys_write,
@@ -335,7 +350,7 @@ static const handler syscall_handlers[] = {
 	[SYS_EXEC] = sys_exec,	     [SYS_GETCWD] = sys_getcwd,
 	[SYS_CHDIR] = sys_chdir,     [SYS_GETDENTS] = sys_getdents,
 	[SYS_OPEN] = sys_open,	     [SYS_CLOSE] = sys_close,
-	[SYS_ACCESS] = sys_access,
+	[SYS_ACCESS] = sys_access,   [SYS_SHUTDOWN] = sys_shutdown,
 };
 
 static constexpr int SYSCALL_COUNT =

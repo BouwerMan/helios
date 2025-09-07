@@ -11,3 +11,8 @@ ssize_t __syscall_read(int fd, void* buf, size_t count)
 {
 	return __syscall3(SYS_READ, fd, (long)buf, (long)count);
 }
+
+void __syscall_shutdown()
+{
+	__syscall0(SYS_SHUTDOWN);
+}

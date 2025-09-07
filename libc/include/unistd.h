@@ -28,6 +28,9 @@ int chdir(const char* path);
 
 int access(const char* path, int amode);
 
+extern void __syscall_shutdown();
+#define shutdown() __syscall_shutdown()
+
 #ifdef __cplusplus
 }
 #endif

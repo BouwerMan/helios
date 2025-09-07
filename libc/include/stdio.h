@@ -7,9 +7,8 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-#define EOF	  (-1)
-#define EOVERFLOW -75
-#define SEEK_SET  0
+#define EOF	 (-1)
+#define SEEK_SET 0
 
 typedef enum {
 	STREAM_UNBUFFERED,

@@ -17,4 +17,6 @@ ssize_t __libc_write(int fd, const void* buf, size_t count);
 ssize_t __syscall_read(int fd, void* buf, size_t count);
 ssize_t __syscall_write(int fd, const void* buf, size_t count);
 
+void __syscall_shutdown();
+
 #endif /* _INTERNAL_SYSCALLS_H */
