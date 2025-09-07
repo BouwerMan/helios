@@ -46,7 +46,7 @@ CRT0 := $(SYSROOT)/$(LIBDIR)/crt0.o
 CRTI := $(SYSROOT)/$(LIBDIR)/crti.o
 CRTN := $(SYSROOT)/$(LIBDIR)/crtn.o
 
-OPT ?= -O0
+OPT ?= -Og
 PIC ?=
 
 # CPPFLAGS := --sysroot=$(SYSROOT) -isystem$(INCLUDEDIR)

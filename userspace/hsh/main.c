@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <stdio.h>
@@ -78,19 +79,13 @@ int hsh_pwd(char** args)
 char get_type_indicator(unsigned char d_type)
 {
 	switch (d_type) {
-	case DT_DIR:
-		return '/';
-	case DT_LNK:
-		return '@';
-	case DT_FIFO:
-		return '|';
-	case DT_SOCK:
-		return '=';
+	case DT_DIR:  return '/';
+	case DT_LNK:  return '@';
+	case DT_FIFO: return '|';
+	case DT_SOCK: return '=';
 	case DT_CHR:
-	case DT_BLK:
-		return '#';  // Or separate chars
-	default:
-		return '\0'; // Regular files get no indicator
+	case DT_BLK:  return '#'; // Or separate chars
+	default:      return '\0';	  // Regular files get no indicator
 	}
 }
 
@@ -303,22 +298,28 @@ char* read_line()
 
 	while (1) {
 		c = getchar();
-
-		// If we hit EOF, replace it with a null character and return.
-		if (c == EOF || c == '\n') {
-			putchar(c); // Echo the character
-			buffer[position] = '\0';
-			return buffer;
-		} else if (c == '\b') {
-			// If we backspace we go back one position
-			if (position > 0) {
-				putchar(c); // Echo the character
-				buffer[--position] = '\0';
-			}
-		} else {
-			putchar(c); // Echo the character
+		if (isprint(c)) {
 			buffer[position] = (char)c;
 			position++;
+			putchar(c);
+		} else if (iscntrl(c)) {
+			switch (c) {
+			case 3: // Ctrl-C
+				putchar('^');
+				putchar('C');
+				putchar('\n');
+				buffer[0] = '\0';
+				return buffer;
+			case '\n':
+				putchar(c);
+				buffer[position] = '\0';
+				return buffer;
+			case '\b':
+				if (position > 0) {
+					putchar(c); // Echo the character
+					buffer[--position] = '\0';
+				}
+			}
 		}
 
 		if (position >= bufsize) {
@@ -354,7 +355,7 @@ void hsh_loop()
 	} while (status >= 0);
 }
 
-int main(int argc, char** argv, char** envp)
+int main(void)
 {
 	hsh_clear(nullptr);
 

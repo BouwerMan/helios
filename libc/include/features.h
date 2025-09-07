@@ -19,4 +19,8 @@
 */
 #define __pure __attribute__((pure))
 
+#define __noreturn __attribute__((noreturn))
+
+#define __no_throw __attribute__((nothrow))
+
 #endif /* _FEATURES_H */

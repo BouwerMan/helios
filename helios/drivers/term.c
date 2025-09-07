@@ -100,9 +100,9 @@ struct terminal {
 	size_t rows;
 	size_t cols;
 
-	// Current cursor position (in character coordinates)
-	size_t cursor_x;
-	size_t cursor_y;
+	// Current write position (in character coordinates)
+	size_t write_x;
+	size_t write_y;
 
 	// Escape sequence parser state
 	enum parser_state state;
@@ -160,8 +160,8 @@ void term_init()
 	g_terminal.cols = sc->fb->width / (sc->font->width + 1);
 	g_terminal.rows = sc->fb->height / sc->font->height;
 
-	g_terminal.cursor_x = 0;
-	g_terminal.cursor_y = 0;
+	g_terminal.write_x = 0;
+	g_terminal.write_y = 0;
 
 	g_terminal.state = PARSER_NORMAL;
 	g_terminal.param_len = 0;
@@ -305,8 +305,8 @@ void term_clear()
 	unsigned long flags;
 	spin_lock_irqsave(&g_terminal.lock, &flags);
 
-	g_terminal.cursor_x = 0;
-	g_terminal.cursor_y = 0;
+	g_terminal.write_x = 0;
+	g_terminal.write_y = 0;
 	erase_to_end_of_screen(0, 0);
 
 	spin_unlock_irqrestore(&g_terminal.lock, flags);
@@ -317,49 +317,49 @@ void __term_putchar(char c)
 {
 	switch (c) {
 	case '\n':
-		g_terminal.cursor_y++;
-		g_terminal.cursor_x = 0;
+		g_terminal.write_y++;
+		g_terminal.write_x = 0;
 		break;
 	case '\b':
-		if (g_terminal.cursor_x == 0) break;
-		--g_terminal.cursor_x;
+		if (g_terminal.write_x == 0) break;
+		--g_terminal.write_x;
 		__screen_buffer_putchar_at(
-			' ', g_terminal.cursor_x, g_terminal.cursor_y);
+			' ', g_terminal.write_x, g_terminal.write_y);
 		screen_putchar_at(' ',
-				  g_terminal.cursor_x,
-				  g_terminal.cursor_y,
+				  g_terminal.write_x,
+				  g_terminal.write_y,
 				  g_terminal.current_attrs.fg_color,
 				  g_terminal.current_attrs.bg_color);
 		break;
 	case '\t':
-		g_terminal.cursor_x = (g_terminal.cursor_x + 4) & ~3ULL;
+		g_terminal.write_x = (g_terminal.write_x + 4) & ~3ULL;
 		break;
 	default:
 		__screen_buffer_putchar_at(
-			c, g_terminal.cursor_x, g_terminal.cursor_y);
+			c, g_terminal.write_x, g_terminal.write_y);
 		screen_putchar_at((uint16_t)c,
-				  g_terminal.cursor_x,
-				  g_terminal.cursor_y,
+				  g_terminal.write_x,
+				  g_terminal.write_y,
 				  g_terminal.current_attrs.fg_color,
 				  g_terminal.current_attrs.bg_color);
-		g_terminal.cursor_x++;
+		g_terminal.write_x++;
 		break;
 	}
 
-	if (g_terminal.cursor_x >= g_terminal.cols) {
-		g_terminal.cursor_x = 0;
-		g_terminal.cursor_y++;
+	if (g_terminal.write_x >= g_terminal.cols) {
+		g_terminal.write_x = 0;
+		g_terminal.write_y++;
 	}
-	if (g_terminal.cursor_y >= g_terminal.rows) {
+	if (g_terminal.write_y >= g_terminal.rows) {
 		// TODO: Scroll region and scroll screen_buffer
 		scroll();
 		screen_buffer_scroll();
-		g_terminal.cursor_y = g_terminal.cursor_y - 1;
-		g_terminal.cursor_x = 0;
+		g_terminal.write_y = g_terminal.write_y - 1;
+		g_terminal.write_x = 0;
 	}
 
 	if (g_terminal.cursor.visible) __hide_cursor();
-	__show_cursor(g_terminal.cursor_x, g_terminal.cursor_y);
+	__show_cursor(g_terminal.write_x, g_terminal.write_y);
 }
 
 static void handle_escape_char(char c)
@@ -461,8 +461,8 @@ static void handle_sgr_seq()
 void handle_cursor_seq()
 {
 	if (g_terminal.param_len == 0) {
-		g_terminal.cursor_x = 0;
-		g_terminal.cursor_y = 0;
+		g_terminal.write_x = 0;
+		g_terminal.write_y = 0;
 		return;
 	}
 }
@@ -511,7 +511,7 @@ static void cursor_callback(void* data)
 	if (cursor->visible) {
 		__hide_cursor();
 	} else {
-		__show_cursor(g_terminal.cursor_x, g_terminal.cursor_y);
+		__show_cursor(g_terminal.write_x, g_terminal.write_y);
 	}
 
 	spin_unlock_irqrestore(&g_terminal.lock, flags);

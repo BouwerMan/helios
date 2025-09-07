@@ -57,45 +57,148 @@ unsigned char kbdus_shifted[128] = {
 	// ... rest same as kbdus (function keys, etc.)
 };
 
+typedef struct {
+	enum { KEY_NONE, KEY_CHAR, KEY_SEQUENCE } type;
+	char character;	      // for single chars
+	const char* sequence; // for escape sequences
+} key_result_t;
+
+enum SPECIAL_KEYS {
+	SC_LEFT_SHIFT = 0x2A,
+	SC_RIGHT_SHIFT = 0x36,
+	SC_LEFT_CTRL = 0x1D,
+	SC_LEFT_ALT = 0x38,
+	SC_CAPS_LOCK = 0x3A,
+	SC_ARROW_UP = 0x48,
+	SC_ARROW_DOWN = 0x50,
+	SC_ARROW_LEFT = 0x4B,
+	SC_ARROW_RIGHT = 0x4D,
+	SC_RELEASE_MASK = 0x80
+};
+
+static const char* ARROW_UP = "\033[A";
+static const char* ARROW_DOWN = "\033[B";
+static const char* ARROW_RIGHT = "\033[C";
+static const char* ARROW_LEFT = "\033[D";
+
 static bool is_shifted = false;
 static bool is_ctrl_pressed = false;
 static bool is_alt_pressed = false;
 static bool caps_lock_on = false;
 
-char process_scancode()
+static key_result_t res_none = { .type = KEY_NONE,
+				 .character = 0,
+				 .sequence = nullptr };
+
+static inline key_result_t make_char_result(char c)
+{
+	return (key_result_t) { .type = KEY_CHAR,
+				.character = c,
+				.sequence = nullptr };
+}
+
+static inline key_result_t make_sequence_result(const char* seq)
+{
+	return (key_result_t) { .type = KEY_SEQUENCE,
+				.character = 0,
+				.sequence = seq };
+}
+
+static inline key_result_t make_no_result(void)
+{
+	return (key_result_t) { .type = KEY_NONE };
+}
+
+static void handle_key_release(unsigned int scancode)
+{
+	enum SPECIAL_KEYS sk = (enum SPECIAL_KEYS)scancode;
+	switch (sk) {
+	case SC_LEFT_CTRL:   is_ctrl_pressed = false; break;
+	case SC_LEFT_ALT:    is_alt_pressed = false; break;
+	case SC_RIGHT_SHIFT:
+	case SC_LEFT_SHIFT:  is_shifted = false; break;
+	default:	     break; // Not a modifier key
+	}
+}
+
+static bool handle_modifier_keys(unsigned char scancode)
+{
+	enum SPECIAL_KEYS sk = (enum SPECIAL_KEYS)scancode;
+	switch (sk) {
+	case SC_LEFT_CTRL:   is_ctrl_pressed = true; return true;
+	case SC_LEFT_ALT:    is_alt_pressed = true; return true;
+	case SC_RIGHT_SHIFT:
+	case SC_LEFT_SHIFT:  is_shifted = true; return true;
+	case SC_CAPS_LOCK:   caps_lock_on = !caps_lock_on; return true;
+	default:	     return false; // Not a modifier key
+	}
+	return false;
+}
+
+static key_result_t handle_special_keys(unsigned char scancode)
+{
+	switch (scancode) {
+	case SC_ARROW_UP:    return make_sequence_result(ARROW_UP);
+	case SC_ARROW_DOWN:  return make_sequence_result(ARROW_DOWN);
+	case SC_ARROW_LEFT:  return make_sequence_result(ARROW_LEFT);
+	case SC_ARROW_RIGHT: return make_sequence_result(ARROW_RIGHT);
+	default:	     return make_no_result();
+	}
+}
+
+key_result_t process_scancode()
 {
 	unsigned char scancode = inb(0x60);
-	if (scancode & 0x80) {
-		// Key is released
+	static key_result_t res = { 0 };
 
-		scancode &= 0x7F; // Remove release bit
-
-		if (scancode == 42 || scancode == 54) {
-			is_shifted = false;
-		}
-		return 0;
-	} else {
-		// Key pressed
-
-		if (scancode == 42 || scancode == 54) { // Left or right shift
-			is_shifted = true;
-			return 0; // Don't output shift key itself
-		}
-		if (is_shifted) {
-			return (char)kbdus_shifted[scancode];
-		} else {
-			return (char)kbdus[scancode];
-		}
+	if (handle_modifier_keys(scancode)) {
+		return make_no_result();
 	}
+
+	if (scancode & SC_RELEASE_MASK) {
+		handle_key_release(scancode & ~SC_RELEASE_MASK);
+		return make_no_result();
+	}
+
+	// Check for special keys (arrows, function keys, etc.)
+	key_result_t special = handle_special_keys(scancode);
+	if (special.type != KEY_NONE) {
+		return special;
+	}
+
+	// Handle regular character keys
+	unsigned char c = is_shifted ? kbdus_shifted[scancode] :
+				       kbdus[scancode];
+
+	// Apply control modifier if needed
+	if (is_ctrl_pressed && c >= 'a' && c <= 'z') {
+		c = c - 'a' + 1; // Convert to control character
+	} else if (is_ctrl_pressed && c >= 'A' && c <= 'Z') {
+		c = c - 'A' + 1; // Convert to control character
+	}
+
+	return c ? make_char_result((char)c) : make_no_result();
 }
 
 void keyboard_interrupt_handler(struct registers* r)
 {
 	(void)r;
-	char c = process_scancode();
-	if (c != 0) {
-		struct tty* console_tty = find_tty_by_name("tty0");
-		tty_add_input_char(console_tty, c);
+	key_result_t key = process_scancode();
+
+	struct tty* console_tty = find_tty_by_name("tty0");
+
+	switch (key.type) {
+	case KEY_NONE: return; // No action needed
+	case KEY_CHAR: {
+		tty_add_input_char(console_tty, key.character);
+		break;
+	}
+	case KEY_SEQUENCE: {
+		for (const char* p = key.sequence; p && *p; p++) {
+			tty_add_input_char(console_tty, *p);
+		}
+		break;
+	}
 	}
 }
 
