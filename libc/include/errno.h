@@ -3,6 +3,8 @@
 #define _ERRNO_H
 #pragma once
 
+#include <helios/errno.h>
+
 extern int* __errno_location(void);
 #define errno (*__errno_location())
 

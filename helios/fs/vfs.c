@@ -706,11 +706,11 @@ int vfs_readdir(struct vfs_file* dir, struct dirent* out, long pos)
 	}
 
 	if (!dir || !out || pos < 0) {
-		return -VFS_ERR_INVAL;
+		return -EINVAL;
 	}
 
 	if (dir->dentry->inode->filetype != FILETYPE_DIR) {
-		return -VFS_ERR_NOTDIR;
+		return -ENOTDIR;
 	}
 
 	int ret_val = 1;
@@ -746,7 +746,7 @@ int vfs_readdir(struct vfs_file* dir, struct dirent* out, long pos)
 		}
 
 		// Set offset to next entry
-		out->d_off += 2;
+		out->d_off += 1;
 		dir->f_pos = out->d_off;
 		break;
 	}

@@ -1,4 +1,5 @@
 #include <dirent.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
@@ -114,9 +115,11 @@ int hsh_ls(char** args)
 		return 1;
 	}
 	struct dirent* entry;
+	errno = 0; // Clear errno before readdir()
 
 	while ((entry = readdir(dir)) != NULL) {
 		if (entry->d_name[0] == '.' && !show_hidden) {
+			errno = 0; // Clear errno before next readdir()
 			continue;
 		}
 
@@ -130,6 +133,21 @@ int hsh_ls(char** args)
 		} else {
 			printf("%s\n", entry->d_name);
 		}
+
+		errno = 0; // Clear errno before next readdir()
+	}
+
+	// Now check what NULL means
+	if (errno == ENOTDIR) {
+		// We just print out the single file
+		printf("%s\n", path);
+	} else if (errno != 0) {
+		// Error occurred during readdir()
+		// perror("readdir failed");
+		fprintf(stderr,
+			"hsh: ls: error reading directory '%s'\n",
+			path);
+		return errno;
 	}
 
 	closedir(dir);
@@ -320,6 +338,15 @@ int main(int argc, char** argv, char** envp)
 {
 	// printf("\x1b[1;36;45m"
 	//        "Hello from hsh!\n");
+
+	// GDB BREAKPOINT
+	DIR* dir = opendir("/usr/bin/init.elf");
+	struct dirent* entry;
+
+	while ((entry = readdir(dir)) != NULL) {
+	}
+
+	closedir(dir);
 
 	hsh_loop();
 

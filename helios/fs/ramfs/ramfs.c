@@ -175,6 +175,7 @@ struct vfs_superblock* ramfs_mount(const char* source, int flags)
 
 	sb->root_dentry = root_dentry;
 	sb->sops = &ramfs_sb_ops;
+	info->root = rdent;
 
 	return sb;
 

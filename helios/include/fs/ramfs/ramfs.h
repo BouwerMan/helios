@@ -45,6 +45,7 @@ struct ramfs_inode_info {
 };
 
 struct ramfs_sb_info {
+	struct ramfs_dentry* root;
 	size_t next_inode_id;
 	int flags;
 	DECLARE_HASHTABLE(ht, RAMFS_HASH_BITS);

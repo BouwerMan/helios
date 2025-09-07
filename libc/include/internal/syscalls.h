@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+// TODO: Get rid of these and just use syscall numbers
 ssize_t __libc_read(int fd, void* buf, size_t count);
 ssize_t __libc_write(int fd, const void* buf, size_t count);
 
@@ -15,7 +16,5 @@ ssize_t __libc_write(int fd, const void* buf, size_t count);
 
 ssize_t __syscall_read(int fd, void* buf, size_t count);
 ssize_t __syscall_write(int fd, const void* buf, size_t count);
-
-void* __syscall_get_errno_ptr();
 
 #endif /* _INTERNAL_SYSCALLS_H */

@@ -6,6 +6,8 @@
 #include <helios/dirent.h>
 #include <stddef.h>
 
+#include "sys/types.h"
+
 typedef struct __dir_stream {
 	int fd;		     // File descriptor to the open directory
 	struct dirent entry; // Current/next entry buffer
@@ -16,7 +18,7 @@ typedef struct __dir_stream {
 	char* buffer;	     // Read-ahead buffer
 	size_t buf_size;     // Buffer capacity
 	size_t buf_pos;	     // Current position in buffer
-	size_t buf_valid;    // Valid data length in buffer
+	ssize_t buf_valid;   // Valid data length in buffer
 } DIR;
 
 struct dirent* readdir(DIR* dirp);

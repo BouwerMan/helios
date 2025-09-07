@@ -126,11 +126,11 @@ void kernel_main()
 	}
 
 	log_info("Opening directory for reading");
-	int fd2 = vfs_open("/usr/bin/", O_RDONLY);
+	int fd2 = vfs_open("/usr/", O_RDONLY);
 	struct vfs_file* f2 = get_file(fd2);
 	struct dirent* dirent = kzalloc(sizeof(struct dirent));
 	off_t offset = 0;
-	while (vfs_readdir(f2, dirent, offset++)) {
+	while (vfs_readdir(f2, dirent, DIRENT_GET_NEXT)) {
 		log_debug(
 			"Found entry: %s, d_ino: %lu, d_off: %lu, d_reclen: %d, d_type: %d",
 			dirent->d_name,
@@ -139,8 +139,6 @@ void kernel_main()
 			dirent->d_reclen,
 			dirent->d_type);
 	}
-
-	vfs_normalize_path("./usr/testdir/../dir2", get_file(fd2)->dentry);
 
 	vfs_close(fd);
 	vfs_close(fd2);
@@ -159,8 +157,6 @@ void kernel_main()
 	log_info("Successfully got out of bootstrapping hell");
 	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
 
-	log_info("Sleeping for %d", 1000);
-	sleep(1000);
 	int init_res = launch_init();
 	if (init_res < 0) {
 		log_error("Init error code: %d", init_res);

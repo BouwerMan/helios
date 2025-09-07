@@ -1,5 +1,6 @@
 #include "arch/syscall.h"
 #include "dirent.h"
+#include "errno.h"
 #include "stdlib.h"
 #include "sys/types.h"
 #include <helios/dirent.h>
@@ -7,20 +8,28 @@
 
 ssize_t __getdents(int fd, struct dirent* dirp, size_t count)
 {
-	return (ssize_t)__syscall3(SYS_GETDENTS, fd, (long)dirp, (long)count);
+	// return (ssize_t)__syscall3(SYS_GETDENTS, fd, (long)dirp, (long)count);
+	ssize_t res = (ssize_t)__syscall3(
+		SYS_GETDENTS, (long)fd, (long)dirp, (long)count);
+	if (res < 0) {
+		errno = (int)-res;
+	}
+
+	return res;
 }
 
 struct dirent* readdir(DIR* dirp)
 {
-	if (dirp->buf_pos >= dirp->buf_valid) {
+	if (dirp->buf_pos >= (size_t)dirp->buf_valid) {
 		// Need to read more data
-		dirp->buf_valid = (size_t)__getdents(
+		dirp->buf_valid = __getdents(
 			dirp->fd, (struct dirent*)dirp->buffer, dirp->buf_size);
 		if (dirp->buf_valid <= 0) {
 			// Error or end of directory
 			if (dirp->buf_valid < 0) {
 				dirp->error = (int)-dirp->buf_valid;
 			}
+			// GDB BREAKPOINT
 			return nullptr;
 		}
 		dirp->buf_pos = 0;
