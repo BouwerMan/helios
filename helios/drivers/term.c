@@ -1,6 +1,12 @@
 #include "drivers/term.h"
 #include "drivers/screen.h"
+#include "kernel/helios.h"
+#include "kernel/timer.h"
 #include "lib/string.h"
+#include "mm/kmalloc.h"
+#include "mm/page.h"
+
+// https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797?permalink_comment_id=4102710
 
 enum parser_state {
 	PARSER_NORMAL, /**< Normal character processing state */
@@ -79,6 +85,14 @@ struct terminal_attrs {
 #define ATTR_REVERSE   (1 << 2)
 #define ATTR_BLINK     (1 << 3)
 
+struct term_cursor {
+	bool visible;
+	struct timer timer;
+
+	size_t x;
+	size_t y;
+};
+
 struct terminal {
 	struct screen_info* sc;
 
@@ -113,6 +127,10 @@ struct terminal {
 	uint32_t mode_flags;
 
 	spinlock_t lock; // Separate from screen_info lock
+
+	char* screen_buffer;
+
+	struct term_cursor cursor;
 };
 
 static struct terminal_attrs default_attrs = {
@@ -128,8 +146,15 @@ static void process_sgr_param(int param);
 static void handle_csi_char(char c);
 static void handle_sgr_seq();
 
+static void cursor_callback(void* data);
+
 void term_init()
 {
+	spin_init(&g_terminal.lock);
+
+	unsigned long flags;
+	spin_lock_irqsave(&g_terminal.lock, &flags);
+
 	struct screen_info* sc = get_screen_info();
 	g_terminal.sc = sc;
 	g_terminal.cols = sc->fb->width / (sc->font->width + 1);
@@ -153,14 +178,36 @@ void term_init()
 
 	g_terminal.mode_flags = 0;
 
-	spin_init(&g_terminal.lock);
+	list_init(&g_terminal.cursor.timer.list);
+	g_terminal.cursor.visible = true;
+
+	size_t pages = CEIL_DIV(
+		g_terminal.rows * g_terminal.cols * sizeof(char), PAGE_SIZE);
+	g_terminal.screen_buffer = (char*)get_free_pages(AF_KERNEL, pages);
+
+	memset(g_terminal.screen_buffer,
+	       ' ',
+	       g_terminal.rows * g_terminal.cols * sizeof(char));
+
+	spin_unlock_irqrestore(&g_terminal.lock, flags);
+
+	timer_schedule(&g_terminal.cursor.timer, 500, cursor_callback, nullptr);
 }
 
 void term_clear()
 {
 	__screen_clear();
+
+	unsigned long flags;
+	spin_lock_irqsave(&g_terminal.lock, &flags);
+
 	g_terminal.cursor_x = 0;
 	g_terminal.cursor_y = 0;
+	memset(g_terminal.screen_buffer,
+	       ' ',
+	       g_terminal.rows * g_terminal.cols * sizeof(char));
+
+	spin_unlock_irqrestore(&g_terminal.lock, flags);
 }
 
 void term_write(const char* s, size_t len)
@@ -172,6 +219,8 @@ void term_write(const char* s, size_t len)
 
 void term_putchar(char c)
 {
+	if (g_terminal.sc == NULL) return;
+
 	unsigned long flags;
 	spin_lock_irqsave(&g_terminal.lock, &flags);
 
@@ -207,6 +256,50 @@ void term_putchar(char c)
 	spin_unlock_irqrestore(&g_terminal.lock, flags);
 }
 
+void __hide_cursor()
+{
+	struct term_cursor* cursor = &g_terminal.cursor;
+
+	char cursor_char =
+		g_terminal
+			.screen_buffer[cursor->y * g_terminal.cols + cursor->x];
+	screen_putchar_at((uint16_t)cursor_char,
+			  cursor->x,
+			  cursor->y,
+			  g_terminal.current_attrs.fg_color,
+			  g_terminal.current_attrs.bg_color);
+	cursor->visible = false;
+}
+
+void __show_cursor(size_t x, size_t y)
+{
+	struct term_cursor* cursor = &g_terminal.cursor;
+
+	screen_draw_cursor_at(x, y);
+	cursor->x = x;
+	cursor->y = y;
+	cursor->visible = true;
+}
+
+static void screen_buffer_scroll()
+{
+	for (size_t row = 0; row < g_terminal.rows - 1; row++) {
+		memcpy(&g_terminal.screen_buffer[row * g_terminal.cols],
+		       &g_terminal.screen_buffer[(row + 1) * g_terminal.cols],
+		       g_terminal.cols);
+	}
+	memset(&g_terminal
+			.screen_buffer[(g_terminal.rows - 1) * g_terminal.cols],
+	       ' ',
+	       g_terminal.cols);
+}
+
+void __screen_buffer_putchar_at(char c, size_t x, size_t y)
+{
+	if (x >= g_terminal.cols || y >= g_terminal.rows) return;
+	g_terminal.screen_buffer[y * g_terminal.cols + x] = c;
+}
+
 // Expects to be called with g_terminal.lock held
 void __term_putchar(char c)
 {
@@ -217,8 +310,11 @@ void __term_putchar(char c)
 		break;
 	case '\b':
 		if (g_terminal.cursor_x == 0) break;
+		--g_terminal.cursor_x;
+		__screen_buffer_putchar_at(
+			' ', g_terminal.cursor_x, g_terminal.cursor_y);
 		screen_putchar_at(' ',
-				  --g_terminal.cursor_x,
+				  g_terminal.cursor_x,
 				  g_terminal.cursor_y,
 				  g_terminal.current_attrs.fg_color,
 				  g_terminal.current_attrs.bg_color);
@@ -227,11 +323,14 @@ void __term_putchar(char c)
 		g_terminal.cursor_x = (g_terminal.cursor_x + 4) & ~3ULL;
 		break;
 	default:
+		__screen_buffer_putchar_at(
+			c, g_terminal.cursor_x, g_terminal.cursor_y);
 		screen_putchar_at((uint16_t)c,
-				  g_terminal.cursor_x++,
+				  g_terminal.cursor_x,
 				  g_terminal.cursor_y,
 				  g_terminal.current_attrs.fg_color,
 				  g_terminal.current_attrs.bg_color);
+		g_terminal.cursor_x++;
 		break;
 	}
 
@@ -240,10 +339,15 @@ void __term_putchar(char c)
 		g_terminal.cursor_y++;
 	}
 	if (g_terminal.cursor_y >= g_terminal.rows) {
+		// TODO: Scroll region and scroll screen_buffer
 		scroll();
+		screen_buffer_scroll();
 		g_terminal.cursor_y = g_terminal.cursor_y - 1;
 		g_terminal.cursor_x = 0;
 	}
+
+	if (g_terminal.cursor.visible) __hide_cursor();
+	__show_cursor(g_terminal.cursor_x, g_terminal.cursor_y);
 }
 
 static void handle_escape_char(char c)
@@ -345,4 +449,24 @@ static void handle_csi_char(char c)
 	}
 	}
 	}
+}
+
+static void cursor_callback(void* data)
+{
+	(void)data;
+
+	unsigned long flags;
+	spin_lock_irqsave(&g_terminal.lock, &flags);
+
+	struct term_cursor* cursor = &g_terminal.cursor;
+
+	if (cursor->visible) {
+		__hide_cursor();
+	} else {
+		__show_cursor(g_terminal.cursor_x, g_terminal.cursor_y);
+	}
+
+	spin_unlock_irqrestore(&g_terminal.lock, flags);
+
+	timer_reschedule(&cursor->timer, 500);
 }

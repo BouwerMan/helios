@@ -110,7 +110,7 @@ void screen_init(uint32_t fg_color, uint32_t bg_color)
 	sc.bytesperline = (sc.font->width + 7) / 8;
 	spin_init(&sc.lock);
 
-	term_init();
+	// term_init();
 }
 
 struct screen_info* get_screen_info()
@@ -263,6 +263,19 @@ void screen_putchar_at(uint16_t c,
 	size_t pixel_y = cy * sc.char_height;
 	size_t fb_offset = (pixel_y * sc.scanline) + (pixel_x * sizeof(PIXEL));
 	draw_glyph(glyph, fb_offset, fg, bg);
+}
+
+void screen_draw_cursor_at(size_t cx, size_t cy)
+{
+	for (size_t y = 0; y < sc.char_height; y++) {
+		PIXEL* dst_line =
+			(PIXEL*)(sc.fb_buffer +
+				 (cy * sc.char_height + y) * sc.scanline +
+				 (cx * sc.char_width) * sizeof(PIXEL));
+		for (size_t x = 0; x < sc.char_width; x++) {
+			dst_line[x] ^= 0xFFFFFF; // Invert color
+		}
+	}
 }
 
 /*******************************************************************************

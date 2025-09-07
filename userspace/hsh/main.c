@@ -347,18 +347,6 @@ void hsh_loop()
 
 int main(int argc, char** argv, char** envp)
 {
-	// printf("\x1b[1;36;45m"
-	//        "Hello from hsh!\n");
-
-	// GDB BREAKPOINT
-	DIR* dir = opendir("/usr/bin/init.elf");
-	struct dirent* entry;
-
-	while ((entry = readdir(dir)) != NULL) {
-	}
-
-	closedir(dir);
-
 	hsh_loop();
 
 	return 0;

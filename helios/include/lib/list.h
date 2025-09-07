@@ -35,6 +35,7 @@ static constexpr uptr LIST_POISON2 = 0x122;
 
 // FIXME: I mix up the list and head orders a ton in this, standardize it or
 // I'll fight you
+// TODO: This will be the next big change, I'm going back to the linux way
 
 /**
  * __WRITE_ONCE - Ensures a value is written to a variable exactly once.

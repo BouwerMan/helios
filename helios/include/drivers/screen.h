@@ -84,3 +84,5 @@ void screen_putchar_at(uint16_t c,
 void screen_putchar(char c);
 
 struct screen_info* get_screen_info();
+
+void screen_draw_cursor_at(size_t cx, size_t cy);

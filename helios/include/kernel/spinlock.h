@@ -7,6 +7,8 @@
 // 1 means locked
 typedef volatile int spinlock_t;
 
+static constexpr int SPINLOCK_INIT = 0;
+
 /**
  * @brief Initializes a spinlock to the unlocked state.
  * @param lock Pointer to the spinlock to initialize.

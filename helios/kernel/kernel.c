@@ -20,6 +20,7 @@
 
 #include "drivers/console.h"
 #include "drivers/kbd.h"
+#include "drivers/term.h"
 #include "drivers/tty.h"
 #include "fs/ustar/tar.h"
 #include "fs/vfs.h"
@@ -99,6 +100,7 @@ void kernel_main()
 	syscall_init();
 	work_queue_init();
 	timer_init();
+	term_init();
 
 	// list_devices();
 	// ctrl_init();
