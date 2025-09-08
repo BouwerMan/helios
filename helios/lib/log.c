@@ -44,7 +44,6 @@ void log_output(const char* msg, int len)
 	case LOG_DIRECT:
 		write_serial_string(msg);
 		term_write(msg, (size_t)len);
-		// screen_putstring(msg);
 		break;
 	case LOG_BUFFERED:
 		if (unlikely(is_in_interrupt_context())) {

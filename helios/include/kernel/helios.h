@@ -36,27 +36,35 @@
 /**
  * @brief Return the maximum of two values.
  */
-#define MAX(a, b)                       \
-	({                              \
-		__typeof__(a) _a = (a); \
-		__typeof__(b) _b = (b); \
-		_a > _b ? _a : _b;      \
+#define MAX(a, b)                                  \
+	({                                         \
+		__typeof__(a) _max_a = (a);        \
+		__typeof__(b) _max_b = (b);        \
+		_max_a > _max_b ? _max_a : _max_b; \
 	})
 
 /**
  * @brief Return the minimum of two values.
  */
-#define MIN(a, b)                       \
-	({                              \
-		__typeof__(a) _a = (a); \
-		__typeof__(b) _b = (b); \
-		_a < _b ? _a : _b;      \
+#define MIN(a, b)                                  \
+	({                                         \
+		__typeof__(a) _min_a = (a);        \
+		__typeof__(b) _min_b = (b);        \
+		_min_a < _min_b ? _min_a : _min_b; \
 	})
 
 /**
  * @brief Clamp a value between lower and upper bounds.
  */
-#define CLAMP(val, lo, hi) (MAX((lo), MIN((val), (hi))))
+#define CLAMP(val, lo, hi)                             \
+	({                                             \
+		__typeof__(val) _clamp_val = (val);    \
+		__typeof__(lo) _clamp_lo = (lo);       \
+		__typeof__(hi) _clamp_hi = (hi);       \
+		(_clamp_val < _clamp_lo) ? _clamp_lo : \
+		(_clamp_val > _clamp_hi) ? _clamp_hi : \
+					   _clamp_val; \
+	})
 
 /**
  * @brief Get the number of elements in a statically sized array.

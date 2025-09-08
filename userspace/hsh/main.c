@@ -283,6 +283,24 @@ char** split_line(char* line)
 	return tokens;
 }
 
+void handle_escape()
+{
+	char buffer[32] = { 0 };
+	size_t i = 0;
+	while (true) {
+		int c = getchar();
+		if (c == EOF || c == '\n') {
+			break;
+		}
+		buffer[i++] = (char)(c);
+		if (isalpha(c)) {
+			break;
+		}
+	}
+	printf("\x1b%s", buffer);
+	fflush(stdout);
+}
+
 #define LSH_RL_BUFSIZE 1024
 char* read_line()
 {
@@ -319,6 +337,9 @@ char* read_line()
 					putchar(c); // Echo the character
 					buffer[--position] = '\0';
 				}
+				break;
+				// GDB BREAKPOINT
+			case '\x1b': handle_escape(); break;
 			}
 		}
 
@@ -360,6 +381,14 @@ int main(void)
 	hsh_clear(nullptr);
 
 	printf("Welcome to hsh! Type 'help' for a list of commands.\n");
+	char* cols_str = getenv("COLUMNS");
+	char* rows_str = getenv("ROWS");
+	int cols = atoi(cols_str);
+	int rows = atoi(rows_str);
+
+	printf("Terminal size: %sx%s\n",
+	       cols_str ? cols_str : "?",
+	       rows_str ? rows_str : "?");
 
 	hsh_loop();
 

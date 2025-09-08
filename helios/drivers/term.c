@@ -85,12 +85,19 @@ struct terminal_attrs {
 #define ATTR_REVERSE   (1 << 2)
 #define ATTR_BLINK     (1 << 3)
 
+// Represents the actual box where the cursor is drawn.
+// Not where the next character will be written.
 struct term_cursor {
 	bool visible;
 	struct timer timer;
 
-	size_t x;
-	size_t y;
+	int x;
+	int y;
+};
+
+struct screen_cell {
+	char character;
+	struct terminal_attrs attrs;
 };
 
 struct terminal {
@@ -101,8 +108,8 @@ struct terminal {
 	size_t cols;
 
 	// Current write position (in character coordinates)
-	size_t write_x;
-	size_t write_y;
+	int write_x;
+	int write_y;
 
 	// Escape sequence parser state
 	enum parser_state state;
@@ -128,7 +135,7 @@ struct terminal {
 
 	spinlock_t lock; // Separate from screen_info lock
 
-	char* screen_buffer;
+	struct screen_cell* screen_buffer;
 
 	struct term_cursor cursor;
 };
@@ -181,9 +188,10 @@ void term_init()
 	list_init(&g_terminal.cursor.timer.list);
 	g_terminal.cursor.visible = true;
 
-	size_t pages = CEIL_DIV(
-		g_terminal.rows * g_terminal.cols * sizeof(char), PAGE_SIZE);
-	g_terminal.screen_buffer = (char*)get_free_pages(AF_KERNEL, pages);
+	size_t pages = CEIL_DIV(g_terminal.rows * g_terminal.cols *
+					sizeof(struct screen_cell),
+				PAGE_SIZE);
+	g_terminal.screen_buffer = get_free_pages(AF_KERNEL, pages);
 
 	memset(g_terminal.screen_buffer,
 	       ' ',
@@ -194,8 +202,16 @@ void term_init()
 	timer_schedule(&g_terminal.cursor.timer, 500, cursor_callback, nullptr);
 }
 
+void term_get_size(size_t* rows, size_t* cols)
+{
+	if (rows) *rows = g_terminal.rows;
+	if (cols) *cols = g_terminal.cols;
+}
+
 void term_write(const char* s, size_t len)
 {
+	if (g_terminal.sc == nullptr) return;
+
 	for (size_t i = 0; i < len; i++) {
 		term_putchar(s[i]);
 	}
@@ -203,7 +219,7 @@ void term_write(const char* s, size_t len)
 
 void term_putchar(char c)
 {
-	if (g_terminal.sc == NULL) return;
+	if (g_terminal.sc == nullptr) return;
 
 	unsigned long flags;
 	spin_lock_irqsave(&g_terminal.lock, &flags);
@@ -243,26 +259,55 @@ void term_putchar(char c)
 void __hide_cursor()
 {
 	struct term_cursor* cursor = &g_terminal.cursor;
+	size_t index = (size_t)cursor->y * g_terminal.cols + (size_t)cursor->x;
 
-	char cursor_char =
-		g_terminal
-			.screen_buffer[cursor->y * g_terminal.cols + cursor->x];
-	screen_putchar_at((uint16_t)cursor_char,
-			  cursor->x,
-			  cursor->y,
-			  g_terminal.current_attrs.fg_color,
-			  g_terminal.current_attrs.bg_color);
+	struct screen_cell* cell = &g_terminal.screen_buffer[index];
+	screen_putchar_at((uint16_t)cell->character,
+			  (size_t)cursor->x,
+			  (size_t)cursor->y,
+			  cell->attrs.fg_color,
+			  cell->attrs.bg_color);
 	cursor->visible = false;
 }
 
-void __show_cursor(size_t x, size_t y)
+void __show_cursor(int x, int y)
 {
 	struct term_cursor* cursor = &g_terminal.cursor;
 
-	screen_draw_cursor_at(x, y);
+	screen_draw_cursor_at((size_t)x, (size_t)y);
 	cursor->x = x;
 	cursor->y = y;
 	cursor->visible = true;
+}
+
+// Actually moves the cursor without changing g_terminal.write_x/y
+void __place_cursor_block(int x, int y)
+{
+	if (g_terminal.cursor.visible) __hide_cursor();
+	__show_cursor(x, y);
+}
+
+// Moves the cursor and updates g_terminal.write_x/y
+void __place_cursor(int x, int y)
+{
+	x = CLAMP(x, 0, (int)g_terminal.cols - 1);
+	y = CLAMP(y, 0, (int)g_terminal.rows - 1);
+
+	__place_cursor_block(x, y);
+
+	g_terminal.write_x = x;
+	g_terminal.write_y = y;
+}
+
+void __move_cursor(int dx, int dy)
+{
+	int new_x = g_terminal.write_x + dx;
+	new_x = CLAMP(new_x, 0, (int)g_terminal.cols - 1);
+
+	int new_y = g_terminal.write_y + dy;
+	new_y = CLAMP(new_y, 0, (int)g_terminal.rows - 1);
+
+	__place_cursor(new_x, new_y);
 }
 
 static void screen_buffer_scroll()
@@ -281,7 +326,24 @@ static void screen_buffer_scroll()
 void __screen_buffer_putchar_at(char c, size_t x, size_t y)
 {
 	if (x >= g_terminal.cols || y >= g_terminal.rows) return;
-	g_terminal.screen_buffer[y * g_terminal.cols + x] = c;
+
+	size_t index = y * g_terminal.cols + x;
+	g_terminal.screen_buffer[index].character = c;
+	g_terminal.screen_buffer[index].attrs = g_terminal.current_attrs;
+}
+
+void __putchar_at(char c, int x, int y)
+{
+	if ((size_t)x >= g_terminal.cols || (size_t)y >= g_terminal.rows) {
+		return;
+	}
+
+	__screen_buffer_putchar_at(c, (size_t)x, (size_t)y);
+	screen_putchar_at((uint16_t)c,
+			  (size_t)x,
+			  (size_t)y,
+			  g_terminal.current_attrs.fg_color,
+			  g_terminal.current_attrs.bg_color);
 }
 
 // TODO: Make this more efficient (for instance, make the screen memset like __screen_clear)
@@ -323,34 +385,22 @@ void __term_putchar(char c)
 	case '\b':
 		if (g_terminal.write_x == 0) break;
 		--g_terminal.write_x;
-		__screen_buffer_putchar_at(
-			' ', g_terminal.write_x, g_terminal.write_y);
-		screen_putchar_at(' ',
-				  g_terminal.write_x,
-				  g_terminal.write_y,
-				  g_terminal.current_attrs.fg_color,
-				  g_terminal.current_attrs.bg_color);
+		__putchar_at(' ', g_terminal.write_x, g_terminal.write_y);
 		break;
 	case '\t':
-		g_terminal.write_x = (g_terminal.write_x + 4) & ~3ULL;
+		g_terminal.write_x = (g_terminal.write_x + 4) & (int)(~3ULL);
 		break;
 	default:
-		__screen_buffer_putchar_at(
-			c, g_terminal.write_x, g_terminal.write_y);
-		screen_putchar_at((uint16_t)c,
-				  g_terminal.write_x,
-				  g_terminal.write_y,
-				  g_terminal.current_attrs.fg_color,
-				  g_terminal.current_attrs.bg_color);
+		__putchar_at(c, g_terminal.write_x, g_terminal.write_y);
 		g_terminal.write_x++;
 		break;
 	}
 
-	if (g_terminal.write_x >= g_terminal.cols) {
+	if (g_terminal.write_x >= (int)g_terminal.cols) {
 		g_terminal.write_x = 0;
 		g_terminal.write_y++;
 	}
-	if (g_terminal.write_y >= g_terminal.rows) {
+	if (g_terminal.write_y >= (int)g_terminal.rows) {
 		// TODO: Scroll region and scroll screen_buffer
 		scroll();
 		screen_buffer_scroll();
@@ -358,17 +408,63 @@ void __term_putchar(char c)
 		g_terminal.write_x = 0;
 	}
 
-	if (g_terminal.cursor.visible) __hide_cursor();
-	__show_cursor(g_terminal.write_x, g_terminal.write_y);
+	__place_cursor_block(g_terminal.write_x, g_terminal.write_y);
 }
 
 static void handle_escape_char(char c)
 {
 	switch (c) {
-	case '[':
-		g_terminal.state = PARSER_CSI;
-		break;
+	case '[': g_terminal.state = PARSER_CSI; break;
 	}
+}
+
+static size_t parse_csi_param()
+{
+	if (g_terminal.param_count > 0) {
+		return g_terminal.param_count; // Already parsed
+	}
+
+	if (g_terminal.param_len == 0) {
+		// No parameters to parse
+		g_terminal.param_count = 0;
+		return 0;
+	}
+
+	g_terminal.param_buffer[g_terminal.param_len] = '\0';
+
+	char* buffer = g_terminal.param_buffer;
+	char* param_start = buffer;
+	size_t count = 0;
+
+	while (param_start <= buffer + g_terminal.param_len) {
+		char* param_end = strchr(param_start, ';');
+		if (!param_end) {
+			param_end = buffer + g_terminal.param_len;
+		}
+
+		// Convert parameter to integer
+		int param = 0;
+		for (char* p = param_start; p < param_end; p++) {
+			if (*p >= '0' && *p <= '9') {
+				param = param * 10 + (*p - '0');
+			}
+		}
+
+		g_terminal.params[count++] = param;
+
+		param_start = param_end + 1;
+		if (param_end == buffer + g_terminal.param_len) {
+			break;
+		}
+	}
+	g_terminal.param_count = count;
+	return g_terminal.param_count;
+}
+
+static int get_csi_param(size_t index, int default_val)
+{
+	return (index < g_terminal.param_count) ? g_terminal.params[index] :
+						  default_val;
 }
 
 static void process_sgr_param(int param)
@@ -407,18 +503,16 @@ static void process_sgr_param(int param)
 static void handle_erase_seq()
 {
 	if (g_terminal.param_len == 0) {
-		erase_to_end_of_screen(g_terminal.cursor.x,
-				       g_terminal.cursor.y);
+		erase_to_end_of_screen((size_t)g_terminal.cursor.x,
+				       (size_t)g_terminal.cursor.y);
 	}
 
 	switch (g_terminal.param_buffer[0]) {
 	case '0':
-		erase_to_end_of_screen(g_terminal.cursor.x,
-				       g_terminal.cursor.y);
+		erase_to_end_of_screen((size_t)g_terminal.cursor.x,
+				       (size_t)g_terminal.cursor.y);
 		break;
-	case '2':
-		erase_to_end_of_screen(0, 0);
-		break;
+	case '2': erase_to_end_of_screen(0, 0); break;
 	}
 }
 
@@ -430,31 +524,11 @@ static void handle_sgr_seq()
 		return;
 	}
 
-	g_terminal.param_buffer[g_terminal.param_len] = '\0';
+	parse_csi_param();
 
-	char* buffer = g_terminal.param_buffer;
-	char* param_start = buffer;
-
-	while (param_start <= buffer + g_terminal.param_len) {
-		char* param_end = strchr(param_start, ';');
-		if (!param_end) {
-			param_end = buffer + g_terminal.param_len;
-		}
-
-		// Convert parameter to integer
-		int param = 0;
-		for (char* p = param_start; p < param_end; p++) {
-			if (*p >= '0' && *p <= '9') {
-				param = param * 10 + (*p - '0');
-			}
-		}
-
+	for (size_t i = 0; i < g_terminal.param_count; i++) {
+		int param = get_csi_param(i, 0);
 		process_sgr_param(param);
-
-		param_start = param_end + 1;
-		if (param_end == buffer + g_terminal.param_len) {
-			break;
-		}
 	}
 }
 
@@ -467,6 +541,55 @@ void handle_cursor_seq()
 	}
 }
 
+static void handle_cursor_up()
+{
+	parse_csi_param();
+	int count = get_csi_param(0, -1);
+	if (count < 0) count = 1;
+
+	__move_cursor(0, -count);
+
+	// if (g_terminal.write_y >= count) {
+	// 	g_terminal.write_y -= count;
+	// } else {
+	// 	g_terminal.write_y = 0;
+	// }
+	//
+	// __place_cursor_block(g_terminal.write_x, g_terminal.write_y);
+}
+
+static void handle_cursor_down()
+{
+	parse_csi_param();
+	int count = get_csi_param(0, -1);
+	if (count < 0) count = 1;
+
+	__move_cursor(0, count);
+
+	// g_terminal.write_y += (size_t)count;
+	// if (g_terminal.write_y >= g_terminal.rows) {
+	// 	g_terminal.write_y = g_terminal.rows - 1;
+	// }
+	//
+	// __place_cursor_block(g_terminal.write_x, g_terminal.write_y);
+}
+static void handle_cursor_forward()
+{
+	parse_csi_param();
+	int count = get_csi_param(0, -1);
+	if (count < 0) count = 1;
+
+	__move_cursor(count, 0);
+}
+static void handle_cursor_backward()
+{
+	parse_csi_param();
+	int count = get_csi_param(0, -1);
+	if (count < 0) count = 1;
+
+	__move_cursor(-count, 0);
+}
+
 static void handle_csi_char(char c)
 {
 	switch (c) {
@@ -477,6 +600,22 @@ static void handle_csi_char(char c)
 		break;
 	case 'J': {
 		handle_erase_seq();
+		g_terminal.state = PARSER_NORMAL;
+		break;
+	case 'A': // Cursor up
+		handle_cursor_up();
+		g_terminal.state = PARSER_NORMAL;
+		break;
+	case 'B': // Cursor down
+		handle_cursor_down();
+		g_terminal.state = PARSER_NORMAL;
+		break;
+	case 'C': // Cursor forward/right
+		handle_cursor_forward();
+		g_terminal.state = PARSER_NORMAL;
+		break;
+	case 'D': // Cursor backward/left
+		handle_cursor_backward();
 		g_terminal.state = PARSER_NORMAL;
 		break;
 	case 'H':

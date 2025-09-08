@@ -343,14 +343,19 @@ int launch_init()
 		NULL,
 	};
 
+	size_t cols;
+	size_t rows;
+	term_get_size(&rows, &cols);
+
+	char cols_str[32];
+	snprintf(cols_str, 32, "COLUMNS=%zu", cols);
+	char rows_str[32];
+	snprintf(rows_str, 32, "ROWS=%zu", rows);
+
 	const char* envp[] = {
 		"PATH=/bin:/usr/bin:/usr/local/bin",
-		"HOME=/home/user",
-		"USER=user",
-		"SHELL=/bin/bash",
-		"TERM=xterm",
-		"LANG=en_US.UTF-8",
-		"PWD=/home/user/project",
+		&cols_str[0],
+		&rows_str[0],
 		NULL,
 	};
 

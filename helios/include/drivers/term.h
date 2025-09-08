@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 
+void term_get_size(size_t* rows, size_t* cols);
+
 void term_init();
 
 void term_clear();
