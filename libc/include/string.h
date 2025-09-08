@@ -68,8 +68,9 @@ char* strtok(char* restrict s1, const char* restrict s2);
 
 // FIXME: Unimplemented
 void* memset_explicit(void* s, int c, size_t n);
+
 // FIXME: Unimplemented
-char* strerror(int errnum);
+const char* strerror(int errnum);
 size_t strlen(const char*);
 
 extern void* memset(void* s, int c, size_t n);

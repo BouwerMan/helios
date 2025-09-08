@@ -29,7 +29,6 @@ struct dirent* readdir(DIR* dirp)
 			if (dirp->buf_valid < 0) {
 				dirp->error = (int)-dirp->buf_valid;
 			}
-			// GDB BREAKPOINT
 			return nullptr;
 		}
 		dirp->buf_pos = 0;
@@ -54,6 +53,7 @@ DIR* opendir(const char* name)
 	dir->buffer = zalloc(dir->buf_size);
 	if (!dir->buffer) {
 		free(dir);
+		errno = ENOMEM;
 		return nullptr;
 	}
 
@@ -62,6 +62,7 @@ DIR* opendir(const char* name)
 	if (fd < 0) {
 		free(dir->buffer);
 		free(dir);
+		errno = (int)-fd;
 		return nullptr;
 	}
 

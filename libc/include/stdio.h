@@ -55,6 +55,7 @@ int fseek(FILE*, long, int);
 long ftell(FILE*);
 size_t fwrite(const void*, size_t, size_t, FILE*);
 void setbuf(FILE*, char*);
+void perror(const char* s);
 
 // Pull in vfprintf
 #include <printf.h>

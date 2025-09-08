@@ -14,6 +14,14 @@ int hsh_help(char** args);
 int hsh_exit(char** args);
 int hsh_shutdown(char** args);
 
+struct terminal {
+	size_t rows;
+	size_t cols;
+
+	int write_x;
+	int write_y;
+};
+
 /*
   List of builtin commands, followed by their corresponding functions.
  */
@@ -59,10 +67,10 @@ int launch(const char* path, char** args)
 int hsh_cd(char** args)
 {
 	if (args[1] == NULL) {
-		fprintf(stderr, "lsh: expected argument to \"cd\"\n");
+		fprintf(stderr, "hsh: expected argument to \"cd\"\n");
 	} else {
 		if (chdir(args[1]) != 0) {
-			// perror
+			perror("hsh: cd");
 		}
 	}
 	return 0;
@@ -109,8 +117,8 @@ int hsh_ls(char** args)
 
 	DIR* dir = opendir(path);
 	if (!dir) {
-		// perror("hsh: ls");
-		fprintf(stderr, "hsh: ls: cannot access '%s'\n", path);
+		perror("hsh: ls");
+		// fprintf(stderr, "hsh: ls: cannot access '%s'\n", path);
 		return 1;
 	}
 	struct dirent* entry;
@@ -142,10 +150,10 @@ int hsh_ls(char** args)
 		printf("%s\n", path);
 	} else if (errno != 0) {
 		// Error occurred during readdir()
-		// perror("readdir failed");
-		fprintf(stderr,
-			"hsh: ls: error reading directory '%s'\n",
-			path);
+		perror("readdir failed");
+		// fprintf(stderr,
+		// 	"hsh: ls: error reading directory '%s'\n",
+		// 	path);
 		return errno;
 	}
 

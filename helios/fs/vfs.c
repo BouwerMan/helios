@@ -637,17 +637,10 @@ int __fill_dirent(struct vfs_dentry* dentry, struct dirent* dirent)
 	dirent->d_ino = dentry->inode->id;
 
 	switch (dentry->inode->filetype) {
-	case FILETYPE_DIR:
-		dirent->d_type = DT_DIR;
-		break;
-	case FILETYPE_FILE:
-		dirent->d_type = DT_REG;
-		break;
-	case FILETYPE_CHAR_DEV:
-		dirent->d_type = DT_CHR;
-		break;
-	default:
-		dirent->d_type = DT_UNKNOWN;
+	case FILETYPE_DIR:	dirent->d_type = DT_DIR; break;
+	case FILETYPE_FILE:	dirent->d_type = DT_REG; break;
+	case FILETYPE_CHAR_DEV: dirent->d_type = DT_CHR; break;
+	default:		dirent->d_type = DT_UNKNOWN;
 	}
 	dirent->d_reclen = sizeof(struct dirent);
 
@@ -793,7 +786,7 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags)
 			}
 		} else {
 			kfree(norm_path);
-			return -VFS_ERR_NOENT;
+			return -ENOENT;
 		}
 	}
 
@@ -804,7 +797,7 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags)
 		log_error("Could not allocate vfs_file");
 		dput(dentry);
 		kfree(norm_path);
-		return -VFS_ERR_NOMEM;
+		return -ENOMEM;
 	}
 
 	file->dentry = dentry;
@@ -828,7 +821,7 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags)
 		dput(dentry);
 		slab_free(&file_cache, file);
 		kfree(norm_path);
-		return -VFS_ERR_NOSPC; // Is this the right code?
+		return -EMFILE; // Is this the right code?
 	}
 	log_debug("Opened file %s with fd %d and dref_count %d",
 		  dentry->name,
@@ -919,12 +912,12 @@ int vfs_create(const char* path,
 	       struct vfs_dentry** out_dentry)
 {
 	if (!path) {
-		return -VFS_ERR_INVAL;
+		return -EINVAL;
 	}
 
 	char* norm_path = vfs_normalize_path(path, get_current_task()->cwd);
 	if (!norm_path) {
-		return -VFS_ERR_NOMEM;
+		return -ENOMEM;
 	}
 
 	int arg_check = vfs_create_args_valid(path, mode, flags, out_dentry);
@@ -950,7 +943,7 @@ int vfs_create(const char* path,
 		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
-		return -VFS_ERR_NOTDIR;
+		return -ENOTDIR;
 	}
 
 	// Try to lookup the file by name
@@ -963,7 +956,7 @@ int vfs_create(const char* path,
 			kfree(norm_path);
 			kfree(parent);
 			kfree(name);
-			return -VFS_ERR_EXIST;
+			return -EEXIST;
 		}
 		// File exists but not O_EXCL — treat as success?
 		*out_dentry = child;
@@ -971,7 +964,7 @@ int vfs_create(const char* path,
 		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
-		return VFS_OK;
+		return 0;
 	}
 
 	child = dentry_alloc(pdentry, name);
@@ -981,7 +974,7 @@ int vfs_create(const char* path,
 		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
-		return -VFS_ERR_NOMEM;
+		return -ENOMEM;
 	}
 
 	if (!pdentry->inode->ops || !pdentry->inode->ops->create) {
@@ -990,7 +983,7 @@ int vfs_create(const char* path,
 		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
-		return -VFS_ERR_NODEV;
+		return -ENODEV;
 	}
 
 	res = pdentry->inode->ops->create(pdentry->inode, child, mode);
@@ -1010,7 +1003,7 @@ int vfs_create(const char* path,
 	kfree(norm_path);
 	kfree(parent);
 	kfree(name);
-	return VFS_OK;
+	return 0;
 }
 
 int vfs_mkdir(const char* path, uint16_t mode)
@@ -1132,9 +1125,7 @@ off_t vfs_lseek(int fd, off_t offset, int whence)
 	}
 
 	switch (whence) {
-	case SEEK_SET:
-		file->f_pos = offset;
-		return file->f_pos;
+	case SEEK_SET: file->f_pos = offset; return file->f_pos;
 	case SEEK_CUR:
 		if (file->f_pos + offset < 0) break;
 		file->f_pos += offset;

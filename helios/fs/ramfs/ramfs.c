@@ -22,18 +22,20 @@
 #undef LOG_LEVEL
 #define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
-#include <lib/log.h>
+#include "lib/log.h"
 #undef FORCE_LOG_REDEF
 
 #include "fs/ramfs/ramfs.h"
 #include "fs/vfs.h"
 #include "kernel/panic.h"
-#include <lib/hashtable.h>
-#include <lib/string.h>
-#include <mm/kmalloc.h>
-#include <mm/page.h>
-#include <mm/page_alloc.h>
-#include <mm/slab.h>
+#include "lib/hashtable.h"
+#include "lib/string.h"
+#include "mm/kmalloc.h"
+#include "mm/page.h"
+#include "mm/page_alloc.h"
+#include "mm/slab.h"
+
+#include <uapi/helios/errno.h>
 
 // TODO: Locking
 
@@ -297,7 +299,7 @@ int ramfs_open(struct vfs_inode* inode, struct vfs_file* file)
 {
 	file->private_data = RAMFS_FILE(inode);
 
-	return VFS_OK;
+	return 0;
 }
 
 int ramfs_close(struct vfs_inode* inode, struct vfs_file* file)
@@ -442,14 +444,14 @@ int ramfs_create(struct vfs_inode* dir,
 	struct vfs_inode* inode =
 		new_inode(dir->sb, RAMFS_SB_INFO(dir->sb)->next_inode_id++);
 	if (!inode) {
-		return -VFS_ERR_NOMEM;
+		return -ENOMEM;
 	}
 
 	struct ramfs_file* rfile = kzalloc(sizeof(struct ramfs_file));
 	if (!rfile) {
 		// TODO: Destroy inode
 		// kfree(inode);
-		return -VFS_ERR_NOMEM;
+		return -ENOMEM;
 	}
 
 	inode->filetype = FILETYPE_FILE;
@@ -472,7 +474,7 @@ int ramfs_create(struct vfs_inode* dir,
 			  dentry->name,
 			  vfs_get_err_name(VFS_ERR_NOMEM));
 		// kfree(node);
-		return -VFS_ERR_NOMEM;
+		return -ENOMEM;
 	}
 
 	rdent->inode_info = info;
@@ -489,7 +491,7 @@ int ramfs_create(struct vfs_inode* dir,
 	log_debug(
 		"fs_data: %p, rfile: %p", (void*)inode->fs_data, (void*)rfile);
 
-	return VFS_OK;
+	return 0;
 }
 
 /**
