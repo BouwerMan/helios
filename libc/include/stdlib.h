@@ -9,8 +9,6 @@
 extern "C" {
 #endif
 
-extern char** environ;
-
 /**
  * @brief Convert ASCII string to integer
  * 

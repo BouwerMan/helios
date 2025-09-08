@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -46,8 +47,8 @@ int launch(const char* path, char** args)
 	pid = fork();
 	if (pid == 0) {
 		//Child process
-		execve(path, args, environ);
-		exit(1);
+		execvp(path, args);
+		exit(-1);
 	} else if (pid < 0) {
 		// Error
 		fprintf(stderr, "hsh: fork failed\n");
@@ -188,48 +189,10 @@ int hsh_exit(char** args)
 int hsh_shutdown(char** args)
 {
 	(void)args;
+#ifdef SHUTDOWN
 	shutdown();
+#endif
 	return 0;
-}
-
-// NOTE: Caller must free
-char* find_in_path(const char* cmd)
-{
-	if (strchr(cmd, '/')) {
-		// Command contains a slash, treat as a path
-		if (access(cmd, X_OK) == 0) {
-			return strdup(cmd);
-		} else {
-			return nullptr;
-		}
-	}
-
-	char* path_env = getenv("PATH");
-	if (!path_env) {
-		return NULL; // No PATH set
-	}
-
-	char* path_copy = strdup(path_env);
-	char* dir = strtok(path_copy, ":");
-	char* result = NULL;
-
-	while (dir) {
-		// +2 for '/' and null terminator
-		size_t len = strlen(dir) + strlen(cmd) + 2;
-		char* full_path = malloc(len);
-		snprintf(full_path, len, "%s/%s", dir, cmd);
-
-		if (access(full_path, X_OK) == 0) {
-			result = full_path;
-			break;
-		}
-
-		free(full_path);
-		dir = strtok(NULL, ":");
-	}
-
-	free(path_copy);
-	return result;
 }
 
 int execute(char** args)
@@ -244,16 +207,12 @@ int execute(char** args)
 		}
 	}
 
-	char* cmd_path = find_in_path(args[0]);
-	if (cmd_path) {
-		int ret = launch(cmd_path, args);
-		free(cmd_path);
-		return ret;
+	int ret = launch(args[0], args);
+	if (ret == -1) {
+		fprintf(stderr, "hsh: command not found: %s\n", args[0]);
+		return 1;
 	}
-
-	fprintf(stderr, "hsh: command not found: %s\n", args[0]);
-	return 1;
-	// return launch(args);
+	return ret;
 }
 
 #define HSH_TOK_BUFSIZE 64
