@@ -1,14 +1,17 @@
+#include "internal/features.h"
 #include "stdio.h"
 #include "unistd.h"
 
-int getchar(void)
+int __getchar(void)
 {
 	return fgetc(stdin);
 }
+weak_alias(__getchar, getchar);
 
-int fgetc(FILE* stream)
+int __fgetc(FILE* stream)
 {
 	char c;
-	ssize_t r = read(stream->fd, &c, 1);
+	ssize_t r = read(stream->__fd, &c, 1);
 	return c;
 }
+weak_alias(__fgetc, fgetc);

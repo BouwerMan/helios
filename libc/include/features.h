@@ -21,6 +21,31 @@
 
 #define __noreturn __attribute__((noreturn))
 
-#define __no_throw __attribute__((nothrow))
+#define __restrict __restrict__
 
-#endif /* _FEATURES_H */
+#define __warn_unused_result __attribute__((warn_unused_result))
+
+// Memory allocation attributes
+#ifndef __alloc_size
+#define __alloc_size(...) __attribute__((alloc_size(__VA_ARGS__)))
+#endif
+
+#ifndef __malloc
+#define __malloc __attribute__((malloc))
+#endif
+
+#ifndef __nothrow
+#define __nothrow __attribute__((nothrow))
+#endif
+
+#ifndef __nonnull
+#define __nonnull(...) __attribute__((nonnull(__VA_ARGS__)))
+#endif
+
+#ifdef __GNUC__
+#define __unimplemented(msg) __attribute__((error("Unimplemented: " msg)))
+#else
+#define __unimplemented(msg) /* Falls back to link error */
+#endif
+
+#endif			     /* _FEATURES_H */

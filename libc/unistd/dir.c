@@ -1,10 +1,12 @@
+#include <helios/dirent.h>
+
 #include "arch/syscall.h"
 #include "dirent.h"
 #include "errno.h"
+#include "stdio.h"
 #include "stdlib.h"
+#include "string.h"
 #include "sys/types.h"
-#include <helios/dirent.h>
-#include <stdio.h>
 
 ssize_t __getdents(int fd, struct dirent* dirp, size_t count)
 {
@@ -44,18 +46,20 @@ struct dirent* readdir(DIR* dirp)
 DIR* opendir(const char* name)
 {
 	// Allocating first so I don't have to figure out how to clean up on error
-	DIR* dir = zalloc(sizeof(DIR));
+	DIR* dir = malloc(sizeof(DIR));
 	if (!dir) {
 		return nullptr;
 	}
+	memset(dir, 0, sizeof(DIR));
 
 	dir->buf_size = 4096;
-	dir->buffer = zalloc(dir->buf_size);
+	dir->buffer = malloc(dir->buf_size);
 	if (!dir->buffer) {
 		free(dir);
 		errno = ENOMEM;
 		return nullptr;
 	}
+	memset(dir->buffer, 0, dir->buf_size);
 
 	// TODO: Better flags
 	int fd = (int)__syscall2(SYS_OPEN, (long)name, 0);

@@ -1,39 +1,39 @@
 #include <helios/errno.h>
 
 #include "arch/syscall.h"
+#include "internal/features.h"
 #include "printf.h"
 #include "stdint.h"
 #include "stdio.h"
 
-int putchar(int ic)
+int __putchar(int ic)
 {
 	char c = (char)ic;
 	__syscall3(SYS_WRITE, 1, (long)&c, 1);
 	return ic;
 }
+weak_alias(__putchar, putchar);
 
-int fputc(int c, FILE* stream)
+int __fputc(int c, FILE* stream)
 {
 	if (!stream) {
 		return -EINVAL;
 	}
-	if (!stream->writable) {
+	if (!stream->__writable) {
 		return -EPERM;
 	}
 
-	stream->buffer[stream->buffer_pos++] = (char)c;
+	stream->__buffer[stream->__buffer_pos++] = (char)c;
 	bool should_flush = false;
 
-	switch (stream->mode) {
-	case STREAM_UNBUFFERED:
-		should_flush = true;
-		break;
+	switch (stream->__mode) {
+	case STREAM_UNBUFFERED: should_flush = true; break;
 	case STREAM_LINEBUFFERED:
 		should_flush = (c == '\n') ||
-			       (stream->buffer_pos >= stream->buffer_size);
+			       (stream->__buffer_pos >= stream->__buffer_size);
 		break;
 	case STREAM_FULLYBUFFERED:
-		should_flush = (stream->buffer_pos >= stream->buffer_size);
+		should_flush = (stream->__buffer_pos >= stream->__buffer_size);
 		break;
 	}
 
@@ -43,9 +43,10 @@ int fputc(int c, FILE* stream)
 
 	return c;
 }
+weak_alias(__fputc, fputc);
 
 // Needed for printf lib
 void putchar_(char c)
 {
-	fputc(c, stdout);
+	__fputc(c, stdout);
 }

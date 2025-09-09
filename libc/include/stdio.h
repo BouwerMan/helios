@@ -5,6 +5,8 @@
 
 #define __need_size_t
 #include <stddef.h>
+
+#include <features.h>
 #include <sys/types.h>
 
 #define EOF	 (-1)
@@ -18,25 +20,25 @@ typedef enum {
 
 typedef struct __file_stream {
 	// Buffer management
-	char* buffer;	    // The actual buffer memory
-	size_t buffer_size; // Total buffer capacity
-	size_t buffer_pos;  // Current position in buffer
-	size_t buffer_end;  // End of valid data in buffer (for reads)
+	char* __buffer;	      // The actual buffer memory
+	size_t __buffer_size; // Total buffer capacity
+	size_t __buffer_pos;  // Current position in buffer
+	size_t __buffer_end;  // End of valid data in buffer (for reads)
 
 	// Underlying file descriptor
-	int fd;
+	int __fd;
 
 	// Buffering behavior
-	buffer_mode_t mode;
+	buffer_mode_t __mode;
 
 	// Stream state flags
-	unsigned int eof : 1;	   // End of file reached
-	unsigned int error : 1;	   // Error occurred
-	unsigned int readable : 1; // Stream supports reading
-	unsigned int writable : 1; // Stream supports writing
+	unsigned int __eof : 1;	     // End of file reached
+	unsigned int __error : 1;    // Error occurred
+	unsigned int __readable : 1; // Stream supports reading
+	unsigned int __writable : 1; // Stream supports writing
 
 	// Position tracking (for seekable streams)
-	off_t position;
+	off_t __position;
 } FILE;
 
 #ifdef __cplusplus
@@ -48,7 +50,7 @@ extern FILE* stdout;
 extern FILE* stderr;
 
 int fclose(FILE*);
-int fflush(FILE* stream);
+int fflush(FILE* __stream) __nothrow;
 FILE* fopen(const char*, const char*);
 size_t fread(void*, size_t, size_t, FILE*);
 int fseek(FILE*, long, int);
@@ -59,16 +61,17 @@ void perror(const char* s);
 
 // Pull in vfprintf
 #include <printf.h>
-int fprintf(FILE* stream, const char* format, ...)
-	__attribute__((format(printf, 2, 3)));
-int vfprintf(FILE* stream, const char* format, va_list arg)
-	__attribute__((format(printf, 2, 0)));
+int fprintf(FILE* __restrict __stream, const char* __restrict __format, ...)
+	__attribute__((format(printf, 2, 3))) __nothrow;
+int vfprintf(FILE* __restrict __stream,
+	     const char* __restrict __format,
+	     va_list __arg) __attribute__((format(printf, 2, 0))) __nothrow;
 
-int putchar(int c);
-int fputc(int c, FILE* stream);
+int putchar(int __c) __nothrow;
+int fputc(int __c, FILE* __stream) __nothrow;
 
-int fputs(const char* s, FILE* stream);
-int puts(const char*);
+int fputs(const char* __s, FILE* __stream) __nothrow;
+int puts(const char* __s) __nothrow;
 
 int getchar(void);
 int fgetc(FILE* stream);

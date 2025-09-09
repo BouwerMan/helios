@@ -1,6 +1,5 @@
-#ifndef _LIBALLOC_H
-#define _LIBALLOC_H
-#pragma once
+#ifndef _INTERNAL_LIBALLOC_H
+#define _INTERNAL_LIBALLOC_H
 
 #include <stddef.h>
 #include <string.h>
@@ -21,7 +20,6 @@
 // typedef	unsigned long	uintptr_t;
 
 // This lets you prefix malloc and friends
-#define PREFIX(func) func
 
 #ifdef __cplusplus
 extern "C" {
@@ -65,29 +63,6 @@ extern void* liballoc_alloc(size_t);
  * \return 0 if the memory was successfully freed.
  */
 extern int liballoc_free(void*, size_t);
-
-[[nodiscard, gnu::malloc, gnu::alloc_size(1), gnu::nothrow]]
-extern void* PREFIX(malloc)(size_t);	     ///< The standard function.
-
-[[nodiscard, gnu::alloc_size(2), gnu::nothrow]]
-extern void* PREFIX(realloc)(void*, size_t); ///< The standard function.
-
-[[nodiscard, gnu::malloc, gnu::alloc_size(1, 2), gnu::nothrow]]
-extern void* PREFIX(calloc)(size_t, size_t); ///< The standard function.
-
-extern void PREFIX(free)(void*);	     ///< The standard function.
-
-[[gnu::malloc, gnu::alloc_size(1), gnu::nothrow]]
-static inline void* PREFIX(zalloc)(size_t size)
-{
-	void* m = PREFIX(malloc)(size);
-
-	if (!m) {
-		return NULL;
-	}
-
-	return memset(m, 0, size);
-}
 
 #ifdef __cplusplus
 }

@@ -1,6 +1,7 @@
 #include "arch/syscall.h"
 #include "stdio.h"
 #include "stdlib.h"
+#include "string.h"
 #include "unistd.h"
 
 // TODO: errno and better error handling

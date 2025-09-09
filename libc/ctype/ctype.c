@@ -1,4 +1,5 @@
 #include "ctype.h"
+#include "internal/features.h"
 
 // Character classification bitmasks
 #define _ALPHA	0x01 // alphabetic (a-z, A-Z)
@@ -169,77 +170,89 @@ static constexpr unsigned char _ctype_table[256] = {
 				  // Extended ASCII entries default to 0
 };
 
-// Basic classification functions
-int isalpha(int c)
+int __isalpha(int c)
 {
 	return (unsigned)c < 256 && (_ctype_table[c] & _ALPHA);
 }
+weak_alias(__isalpha, isalpha);
 
-int isdigit(int c)
+int __isdigit(int c)
 {
 	return (unsigned)c < 256 && (_ctype_table[c] & _DIGIT);
 }
+weak_alias(__isdigit, isdigit);
 
-int isalnum(int c)
+int __isalnum(int c)
 {
 	return (unsigned)c < 256 && (_ctype_table[c] & (_ALPHA | _DIGIT));
 }
+weak_alias(__isalnum, isalnum);
 
-int isupper(int c)
+int __isupper(int c)
 {
 	return (unsigned)c < 256 && (_ctype_table[c] & _UPPER);
 }
+weak_alias(__isupper, isupper);
 
-int islower(int c)
+int __islower(int c)
 {
 	return (unsigned)c < 256 && (_ctype_table[c] & _LOWER);
 }
+weak_alias(__islower, islower);
 
-int isxdigit(int c)
+int __isxdigit(int c)
 {
 	return (unsigned)c < 256 && (_ctype_table[c] & _XDIGIT);
 }
+weak_alias(__isxdigit, isxdigit);
 
-int iscntrl(int c)
+int __iscntrl(int c)
 {
 	return (unsigned)c < 256 && (_ctype_table[c] & _CNTRL);
 }
+weak_alias(__iscntrl, iscntrl);
 
-int ispunct(int c)
+int __ispunct(int c)
 {
 	return (unsigned)c < 256 && (_ctype_table[c] & _PUNCT);
 }
+weak_alias(__ispunct, ispunct);
 
-int isspace(int c)
+int __isspace(int c)
 {
 	return (unsigned)c < 256 && (_ctype_table[c] & _SPACE);
 }
+weak_alias(__isspace, isspace);
 
 // Derived classification functions
-int isgraph(int c)
+int __isgraph(int c)
 {
 	return (unsigned)c < 256 &&
 	       (_ctype_table[c] & (_ALPHA | _DIGIT | _PUNCT));
 }
+weak_alias(__isgraph, isgraph);
 
-int isprint(int c)
+int __isprint(int c)
 {
 	return (unsigned)c < 256 &&
 	       ((_ctype_table[c] & (_ALPHA | _DIGIT | _PUNCT)) || c == ' ');
 }
+weak_alias(__isprint, isprint);
 
-int isblank(int c)
+int __isblank(int c)
 {
 	return c == ' ' || c == '\t';
 }
+weak_alias(__isblank, isblank);
 
-// Case conversion functions
-int toupper(int c)
+int __toupper(int c)
 {
-	return islower(c) ? c - 'a' + 'A' : c;
+	return __islower(c) ? c - 'a' + 'A' : c;
 }
+weak_alias(__toupper, toupper);
 
-int tolower(int c)
+int __tolower(int c)
 {
-	return isupper(c) ? c - 'A' + 'a' : c;
+	return __isupper(c) ? c - 'A' + 'a' : c;
 }
+weak_alias(__tolower, tolower);

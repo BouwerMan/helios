@@ -1,9 +1,11 @@
-#include "stdio.h"
-#include "stdlib.h"
-#include "sys/mman.h"
-#include "unistd.h"
 #include <helios/errno.h>
 #include <helios/mman.h>
+
+#include "stdio.h"
+#include "stdlib.h"
+#include "string.h"
+#include "sys/mman.h"
+#include "unistd.h"
 
 #define BUFFER_SIZE 8192
 
@@ -13,20 +15,24 @@ FILE* stderr;
 
 FILE* __create_stream(int fd, buffer_mode_t mode, bool readable, bool writable)
 {
-	FILE* stream = zalloc(sizeof(FILE));
-	stream->fd = fd;
+	FILE* stream = malloc(sizeof(FILE));
+	if (!stream) {
+		return nullptr;
+	}
+	memset(stream, 0, sizeof(FILE));
+	stream->__fd = fd;
 
 	int prot = readable ? PROT_READ : 0;
 	prot |= writable ? PROT_WRITE : 0;
 	void* buf = mmap(
 		nullptr, BUFFER_SIZE, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
-	stream->buffer = (char*)buf;
-	stream->buffer_size = BUFFER_SIZE;
-	stream->mode = mode;
+	stream->__buffer = (char*)buf;
+	stream->__buffer_size = BUFFER_SIZE;
+	stream->__mode = mode;
 
-	stream->readable = readable;
-	stream->writable = writable;
+	stream->__readable = readable;
+	stream->__writable = writable;
 
 	return stream;
 }
@@ -49,17 +55,18 @@ int fflush(FILE* stream)
 	if (!stream) {
 		return -EINVAL;
 	}
-	if (!stream->writable) {
+	if (!stream->__writable) {
 		return -EPERM;
 	}
 
-	ssize_t written = write(stream->fd, stream->buffer, stream->buffer_pos);
+	ssize_t written =
+		write(stream->__fd, stream->__buffer, stream->__buffer_pos);
 
 	if (written < 0) {
-		stream->error = true;
+		stream->__error = true;
 		return EOF;
 	}
 
-	stream->buffer_pos = 0;
+	stream->__buffer_pos = 0;
 	return 0;
 }
