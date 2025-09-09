@@ -1,9 +1,11 @@
 #include <helios/errno.h>
 
 #include "errno.h"
-#include "stdio.h"
+#include "internal/features.h"
+#include "internal/stdio.h"
 
-void perror(const char* s)
+void __perror(const char* s)
 {
-	fprintf(stderr, "%s: %s\n", s, __get_error_string(errno));
+	__fprintf(stderr, "%s: %s\n", s, __get_error_string(errno));
 }
+weak_alias(__perror, perror);

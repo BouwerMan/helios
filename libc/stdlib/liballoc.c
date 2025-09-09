@@ -235,7 +235,7 @@ static struct liballoc_major* allocate_new_page(unsigned int size)
 	return maj;
 }
 
-void* __liballoc_malloc(size_t req_size)
+void* __malloc(size_t req_size)
 {
 	int startedBet = 0;
 	unsigned long long bestSize = 0;
@@ -263,7 +263,7 @@ void* __liballoc_malloc(size_t req_size)
 		FLUSH();
 #endif
 		liballoc_unlock();
-		return __liballoc_malloc(1);
+		return __malloc(1);
 	}
 
 	if (l_memRoot == NULL) {
@@ -294,7 +294,7 @@ void* __liballoc_malloc(size_t req_size)
 	}
 
 #ifdef DEBUG
-	printf("liballoc: %x __liballoc_malloc( %i ): ",
+	printf("liballoc: %x __malloc( %i ): ",
 	       __builtin_return_address(0),
 	       size);
 	FLUSH();
@@ -568,17 +568,16 @@ void* __liballoc_malloc(size_t req_size)
 	FLUSH();
 #endif
 #if defined DEBUG || defined INFO
-	printf("liballoc: WARNING: __liballoc_malloc( %i ) returning NULL.\n",
-	       size);
+	printf("liballoc: WARNING: __malloc( %i ) returning NULL.\n", size);
 	liballoc_dump();
 	FLUSH();
 #endif
 	errno = ENOMEM;
 	return NULL;
 }
-weak_alias(__liballoc_malloc, malloc);
+weak_alias(__malloc, malloc);
 
-void __liballoc_free(void* ptr)
+void __free(void* ptr)
 {
 	struct liballoc_minor* min;
 	struct liballoc_major* maj;
@@ -586,7 +585,7 @@ void __liballoc_free(void* ptr)
 	if (ptr == NULL) {
 		l_warningCount += 1;
 #if defined DEBUG || defined INFO
-		printf("liballoc: WARNING: __liballoc_free( NULL ) called from %x\n",
+		printf("liballoc: WARNING: __free( NULL ) called from %x\n",
 		       __builtin_return_address(0));
 		FLUSH();
 #endif
@@ -618,14 +617,14 @@ void __liballoc_free(void* ptr)
 
 		if (min->magic == LIBALLOC_DEAD) {
 #if defined DEBUG || defined INFO
-			printf("liballoc: ERROR: multiple __liballoc_free() attempt on %x from %x.\n",
+			printf("liballoc: ERROR: multiple __free() attempt on %x from %x.\n",
 			       ptr,
 			       __builtin_return_address(0));
 			FLUSH();
 #endif
 		} else {
 #if defined DEBUG || defined INFO
-			printf("liballoc: ERROR: Bad __liballoc_free( %x ) called from %x\n",
+			printf("liballoc: ERROR: Bad __free( %x ) called from %x\n",
 			       ptr,
 			       __builtin_return_address(0));
 			FLUSH();
@@ -638,9 +637,7 @@ void __liballoc_free(void* ptr)
 	}
 
 #ifdef DEBUG
-	printf("liballoc: %x __liballoc_free( %x ): ",
-	       __builtin_return_address(0),
-	       ptr);
+	printf("liballoc: %x __free( %x ): ", __builtin_return_address(0), ptr);
 	FLUSH();
 #endif
 
@@ -685,24 +682,24 @@ void __liballoc_free(void* ptr)
 
 	liballoc_unlock(); // release the lock
 }
-weak_alias(__liballoc_free, free);
+weak_alias(__free, free);
 
-void* __liballoc_calloc(size_t nobj, size_t size)
+void* __calloc(size_t nobj, size_t size)
 {
 	int real_size;
 	void* p;
 
 	real_size = nobj * size;
 
-	p = __liballoc_malloc(real_size);
+	p = __malloc(real_size);
 
 	liballoc_memset(p, 0, real_size);
 
 	return p;
 }
-weak_alias(__liballoc_calloc, calloc);
+weak_alias(__calloc, calloc);
 
-void* __liballoc_realloc(void* p, size_t size)
+void* __realloc(void* p, size_t size)
 {
 	void* ptr;
 	struct liballoc_minor* min;
@@ -710,12 +707,12 @@ void* __liballoc_realloc(void* p, size_t size)
 
 	// Honour the case of size == 0 => free old and return NULL
 	if (size == 0) {
-		__liballoc_free(p);
+		__free(p);
 		return NULL;
 	}
 
 	// In the case of a NULL pointer, return a simple malloc.
-	if (p == NULL) return __liballoc_malloc(size);
+	if (p == NULL) return __malloc(size);
 
 	// Unalign the pointer if required.
 	ptr = p;
@@ -745,14 +742,14 @@ void* __liballoc_realloc(void* p, size_t size)
 
 		if (min->magic == LIBALLOC_DEAD) {
 #if defined DEBUG || defined INFO
-			printf("liballoc: ERROR: multiple __liballoc_free() attempt on %x from %x.\n",
+			printf("liballoc: ERROR: multiple __free() attempt on %x from %x.\n",
 			       ptr,
 			       __builtin_return_address(0));
 			FLUSH();
 #endif
 		} else {
 #if defined DEBUG || defined INFO
-			printf("liballoc: ERROR: Bad __liballoc_free( %x ) called from %x\n",
+			printf("liballoc: ERROR: Bad __free( %x ) called from %x\n",
 			       ptr,
 			       __builtin_return_address(0));
 			FLUSH();
@@ -778,10 +775,10 @@ void* __liballoc_realloc(void* p, size_t size)
 	liballoc_unlock();
 
 	// If we got here then we're reallocating to a block bigger than us.
-	ptr = __liballoc_malloc(size); // We need to allocate new memory
+	ptr = __malloc(size); // We need to allocate new memory
 	liballoc_memcpy(ptr, p, real_size);
-	__liballoc_free(p);
+	__free(p);
 
 	return ptr;
 }
-weak_alias(__liballoc_realloc, realloc);
+weak_alias(__realloc, realloc);

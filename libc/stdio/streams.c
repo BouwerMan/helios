@@ -1,7 +1,8 @@
 #include <helios/errno.h>
 #include <helios/mman.h>
 
-#include "stdio.h"
+#include "internal/features.h"
+#include "internal/stdio.h"
 #include "stdlib.h"
 #include "string.h"
 #include "sys/mman.h"
@@ -50,7 +51,7 @@ void __cleanup_streams(void)
 	fflush(stderr);
 }
 
-int fflush(FILE* stream)
+int __fflush(FILE* stream)
 {
 	if (!stream) {
 		return -EINVAL;
@@ -70,3 +71,4 @@ int fflush(FILE* stream)
 	stream->__buffer_pos = 0;
 	return 0;
 }
+weak_alias(__fflush, fflush);

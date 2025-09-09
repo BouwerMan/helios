@@ -1,11 +1,12 @@
-#include "ctype.h"
-#include "stdlib.h"
+#include "internal/ctype.h"
+#include "internal/features.h"
+#include "internal/stdlib.h"
 
-int atoi(const char* nptr)
+int __atoi(const char* nptr)
 {
 	if (!nptr) return 0;
 
-	while (*nptr && isspace(*nptr)) {
+	while (*nptr && __isspace(*nptr)) {
 		nptr++;
 	}
 
@@ -23,3 +24,4 @@ int atoi(const char* nptr)
 
 	return result * sign;
 }
+weak_alias(__atoi, atoi);

@@ -14,7 +14,7 @@ LIBC_CPPFLAGS := $(CPPFLAGS) -D__is_libc \
 		 -isystem$(SYSROOT)$(INCLUDEDIR)
 
 # Compile knobs: inherit toolchain defaults + arch extras
-LIBC_CFLAGS   := $(CFLAGS) $(ARCH_CFLAGS)
+LIBC_CFLAGS   := $(CFLAGS) $(ARCH_CFLAGS) -pedantic
 
 # --- Sources ------------------------------------------------------------------
 SRC_DIRS:=ctype stdio stdlib string sys unistd $(ARCHDIR)

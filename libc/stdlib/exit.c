@@ -1,13 +1,13 @@
-#include "stdio.h"
-#include <arch/syscall.h>
-#include <stdlib.h>
+#include "arch/syscall.h"
+#include "internal/stdio.h"
+#include "internal/stdlib.h"
 
 [[noreturn]]
 void _exit(int status)
 {
 	__syscall1(SYS_EXIT, (long)status);
 	while (1) {
-		__builtin_ia32_pause();
+		__syscall1(SYS_EXIT, (long)status);
 	}
 }
 

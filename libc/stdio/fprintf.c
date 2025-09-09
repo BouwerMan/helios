@@ -1,7 +1,5 @@
-#include <stdio.h>
-
-#include "./stdio.h"
 #include "internal/features.h"
+#include "internal/stdio.h"
 
 int __fprintf(FILE* __restrict stream, const char* __restrict format, ...)
 {

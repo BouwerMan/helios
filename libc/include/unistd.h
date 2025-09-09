@@ -6,6 +6,7 @@
 #define __need_size_t
 #include <stddef.h>
 
+#include <features.h>
 #include <sys/types.h>
 
 #ifdef __cplusplus
@@ -14,26 +15,28 @@ extern "C" {
 
 extern char** environ;
 
-ssize_t read(int fd, void* buf, size_t count);
-ssize_t write(int fd, const void* buf, size_t count);
+ssize_t read(int __fd, void* __buf, size_t __count) __nothrow;
+ssize_t write(int __fd, const void* __buf, size_t __count) __nothrow;
 
-int execv(const char*, char* const argv[]);
-int execve(const char* path, char* const argv[], char* const envp[]);
-int execvp(const char* path, char* const argv[]);
+int execv(const char* __path, char* const __argv[]);
+int execve(const char* __path, char* const __argv[], char* const __envp[]);
+int execvp(const char* __path, char* const __argv[]);
 pid_t fork(void);
 
 pid_t getpid(void);
 pid_t getppid(void);
 
-char* getcwd(char* buf, size_t size);
-int chdir(const char* path);
+char* getcwd(char* __buf, size_t __size);
+int chdir(const char* __path);
 
 #include <helios/fs.h>
 
-int access(const char* path, int amode);
+int access(const char* __path, int __amode);
 
-extern void __syscall_shutdown();
+#ifndef shutdown
 #define shutdown() __syscall_shutdown()
+extern void __syscall_shutdown();
+#endif
 
 #ifdef __cplusplus
 }

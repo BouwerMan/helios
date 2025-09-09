@@ -1,7 +1,22 @@
-#include <stdio.h>
+#include "internal/features.h"
+#include "internal/stdio.h"
 
-int puts(const char* string)
+int __puts(const char* s)
 {
-	printf("%s\n", string);
+	if (__fputs(s, stdout) < 0 || __fputc('\n', stdout) < 0) {
+		return -1;
+	}
 	return 0;
 }
+weak_alias(__puts, puts);
+
+int __fputs(const char* __restrict s, FILE* __restrict stream)
+{
+	for (const char* p = s; *p; p++) {
+		if (__fputc(*p, stream) < 0) {
+			return -1;
+		}
+	}
+	return 0;
+}
+weak_alias(__fputs, fputs);

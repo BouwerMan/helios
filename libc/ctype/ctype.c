@@ -1,4 +1,4 @@
-#include "ctype.h"
+#include "internal/ctype.h"
 #include "internal/features.h"
 
 // Character classification bitmasks
@@ -20,7 +20,7 @@
 // Helper macro to build table entries
 #define CTYPE(flags) (flags)
 
-static constexpr unsigned char _ctype_table[256] = {
+static constexpr unsigned char __ctype_table[256] = {
 	// Control characters (0-31)
 	['\0'] = CTYPE(_CNTRL),
 	['\x01'] = CTYPE(_CNTRL),
@@ -172,55 +172,55 @@ static constexpr unsigned char _ctype_table[256] = {
 
 int __isalpha(int c)
 {
-	return (unsigned)c < 256 && (_ctype_table[c] & _ALPHA);
+	return (unsigned)c < 256 && (__ctype_table[c] & _ALPHA);
 }
 weak_alias(__isalpha, isalpha);
 
 int __isdigit(int c)
 {
-	return (unsigned)c < 256 && (_ctype_table[c] & _DIGIT);
+	return (unsigned)c < 256 && (__ctype_table[c] & _DIGIT);
 }
 weak_alias(__isdigit, isdigit);
 
 int __isalnum(int c)
 {
-	return (unsigned)c < 256 && (_ctype_table[c] & (_ALPHA | _DIGIT));
+	return (unsigned)c < 256 && (__ctype_table[c] & (_ALPHA | _DIGIT));
 }
 weak_alias(__isalnum, isalnum);
 
 int __isupper(int c)
 {
-	return (unsigned)c < 256 && (_ctype_table[c] & _UPPER);
+	return (unsigned)c < 256 && (__ctype_table[c] & _UPPER);
 }
 weak_alias(__isupper, isupper);
 
 int __islower(int c)
 {
-	return (unsigned)c < 256 && (_ctype_table[c] & _LOWER);
+	return (unsigned)c < 256 && (__ctype_table[c] & _LOWER);
 }
 weak_alias(__islower, islower);
 
 int __isxdigit(int c)
 {
-	return (unsigned)c < 256 && (_ctype_table[c] & _XDIGIT);
+	return (unsigned)c < 256 && (__ctype_table[c] & _XDIGIT);
 }
 weak_alias(__isxdigit, isxdigit);
 
 int __iscntrl(int c)
 {
-	return (unsigned)c < 256 && (_ctype_table[c] & _CNTRL);
+	return (unsigned)c < 256 && (__ctype_table[c] & _CNTRL);
 }
 weak_alias(__iscntrl, iscntrl);
 
 int __ispunct(int c)
 {
-	return (unsigned)c < 256 && (_ctype_table[c] & _PUNCT);
+	return (unsigned)c < 256 && (__ctype_table[c] & _PUNCT);
 }
 weak_alias(__ispunct, ispunct);
 
 int __isspace(int c)
 {
-	return (unsigned)c < 256 && (_ctype_table[c] & _SPACE);
+	return (unsigned)c < 256 && (__ctype_table[c] & _SPACE);
 }
 weak_alias(__isspace, isspace);
 
@@ -228,14 +228,14 @@ weak_alias(__isspace, isspace);
 int __isgraph(int c)
 {
 	return (unsigned)c < 256 &&
-	       (_ctype_table[c] & (_ALPHA | _DIGIT | _PUNCT));
+	       (__ctype_table[c] & (_ALPHA | _DIGIT | _PUNCT));
 }
 weak_alias(__isgraph, isgraph);
 
 int __isprint(int c)
 {
 	return (unsigned)c < 256 &&
-	       ((_ctype_table[c] & (_ALPHA | _DIGIT | _PUNCT)) || c == ' ');
+	       ((__ctype_table[c] & (_ALPHA | _DIGIT | _PUNCT)) || c == ' ');
 }
 weak_alias(__isprint, isprint);
 

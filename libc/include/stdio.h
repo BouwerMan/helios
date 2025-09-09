@@ -57,7 +57,7 @@ int fseek(FILE*, long, int);
 long ftell(FILE*);
 size_t fwrite(const void*, size_t, size_t, FILE*);
 void setbuf(FILE*, char*);
-void perror(const char* s);
+void perror(const char* __s) __nothrow;
 
 // Pull in vfprintf
 #include <printf.h>
@@ -70,15 +70,11 @@ int vfprintf(FILE* __restrict __stream,
 int putchar(int __c) __nothrow;
 int fputc(int __c, FILE* __stream) __nothrow;
 
-int fputs(const char* __s, FILE* __stream) __nothrow;
+int fputs(const char* __restrict __s, FILE* __restrict __stream) __nothrow;
 int puts(const char* __s) __nothrow;
 
 int getchar(void);
 int fgetc(FILE* stream);
-
-void __cleanup_streams(void);
-FILE* __create_stream(int fd, buffer_mode_t mode, bool readable, bool writable);
-void __init_streams(void);
 
 #ifdef __cplusplus
 }

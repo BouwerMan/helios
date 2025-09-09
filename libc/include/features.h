@@ -30,8 +30,8 @@
 #define __alloc_size(...) __attribute__((alloc_size(__VA_ARGS__)))
 #endif
 
-#ifndef __malloc
-#define __malloc __attribute__((malloc))
+#ifndef __malloc_like
+#define __malloc_like __attribute__((malloc))
 #endif
 
 #ifndef __nothrow

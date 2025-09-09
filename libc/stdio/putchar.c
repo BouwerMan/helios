@@ -2,9 +2,9 @@
 
 #include "arch/syscall.h"
 #include "internal/features.h"
+#include "internal/stdio.h"
 #include "printf.h"
 #include "stdint.h"
-#include "stdio.h"
 
 int __putchar(int ic)
 {
@@ -38,7 +38,7 @@ int __fputc(int c, FILE* stream)
 	}
 
 	if (should_flush) {
-		return fflush(stream);
+		return __fflush(stream);
 	}
 
 	return c;
