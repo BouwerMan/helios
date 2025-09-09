@@ -27,6 +27,7 @@
 #include "kernel/tasks/scheduler.h"
 #include "lib/log.h"
 #include "lib/string.h"
+#include "mm/address_space.h"
 
 /*******************************************************************************
 * Global Variable Definitions

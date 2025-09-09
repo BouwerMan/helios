@@ -1,5 +1,6 @@
 #include "fs/vfs.h"
 #include "mm/kmalloc.h"
+#include "mm/page.h"
 #include "uapi/helios/mman.h"
 #include <arch/mmu/vmm.h>
 #include <kernel/panic.h>
@@ -84,8 +85,16 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
 			return -1;
 		}
 
-		new_mr->file_inode = pos->file_inode;
-		new_mr->file_offset = pos->file_offset;
+		// new_mr->file_inode = pos->file_inode;
+		// new_mr->file_offset = pos->file_offset;
+		new_mr->kind = pos->kind;
+		new_mr->is_private = pos->is_private;
+		if (pos->flags & MAP_ANONYMOUS) {
+			new_mr->kind = MR_ANON;
+			new_mr->anon.tag = pos->anon.tag;
+		} else if (pos->kind == MR_FILE) {
+			new_mr->file = pos->file;
+		}
 
 		add_region(dest, new_mr);
 
@@ -116,39 +125,60 @@ void vas_set_pml4(struct address_space* vas, pgd_t* pml4)
 }
 
 int map_region(struct address_space* vas,
-	       struct vfs_inode* inode,
-	       off_t file_offset,
+	       struct mr_file file,
 	       uptr start,
 	       uptr end,
 	       unsigned long prot,
 	       unsigned long flags)
 {
-	// TODO: Accept inode input as well for file-backed mappings.
-	// And maybe file offset
 	log_debug("Mapping region: %lx - %lx, prot: %lx, flags: %lx",
 		  start,
 		  end,
 		  prot,
 		  flags);
-	log_debug("Inode: %ld, file_offset: %ld",
-		  inode ? inode->id : 0,
-		  file_offset);
+
+	if (!is_page_aligned(start) || !is_page_aligned(end) || start >= end) {
+		return -EINVAL;
+	}
+
+	bool want_priv = !!(flags & MAP_PRIVATE);
+	bool want_shared = !!(flags & MAP_SHARED);
+	if (want_priv == want_shared) { // must be exactly one
+		return -EINVAL;
+	}
+
 	struct memory_region* mr = alloc_mem_region(start, end, prot, flags);
 	if (!mr) {
 		return -ENOMEM;
 	}
 
+	mr->is_private = want_priv;
+
 	if (flags & MAP_ANONYMOUS) {
 		// Anonymous mapping, not backed by a file
+		mr->kind = MR_ANON;
+		mr->anon.tag = 0;
+		// TODO: Don't map pages until accessed (lazy allocation)
+		// Move this to page fault handler
 		int err = vmm_map_anon_region(vas, mr);
 		vmm_write_region(vas, mr->start, nullptr, mr->end - mr->start);
 		if (err < 0) {
 			return err;
 		}
+	} else {
+		// File-backed mapping
+		if (!file.inode) {
+			destroy_mem_region(mr);
+			return -EINVAL;
+		}
+		if (!is_page_aligned((uptr)file.file_lo) ||
+		    file.file_hi < file.file_lo) {
+			destroy_mem_region(mr);
+			return -EINVAL;
+		}
+		mr->kind = MR_FILE;
+		mr->file = file;
 	}
-
-	mr->file_inode = inode;
-	mr->file_offset = file_offset;
 
 	add_region(vas, mr);
 
@@ -192,23 +222,56 @@ void address_space_dump(struct address_space* vas)
 {
 	if (!vas) return;
 
-	struct memory_region* pos = NULL;
-	log_info("Dumping address space");
-	log_info("Start              | "
-		 "End                | "
-		 "Prot               | "
-		 "Flags              | "
-		 "Has_inode? (offset)");
+	log_info("Dumping address space (PML4 phys=0x%016lx, pml4=%p)",
+		 (unsigned long)vas->pml4_phys,
+		 (void*)vas->pml4);
+
 	log_info(
-		"---------------------------------------------------------------------------------");
-	list_for_each_entry (pos, &vas->mr_list, list) {
-		log_info("0x%016lx | 0x%016lx | 0x%016lx | 0x%016lx | %d(%ld)",
-			 pos->start,
-			 pos->end,
-			 pos->prot,
-			 pos->flags,
-			 pos->file_inode != nullptr,
-			 pos->file_offset);
+		"Start              | End                | Prot       | Flags      | Kind   | Share  | Details");
+	log_info(
+		"--------------------------------------------------------------------------------------------------------------");
+
+	struct memory_region* mr = NULL;
+	list_for_each_entry (mr, &vas->mr_list, list) {
+		const char* kind = (mr->kind == MR_FILE) ? "FILE" :
+				   (mr->kind == MR_ANON) ? "ANON" :
+							   "DEVICE";
+		const char* share = mr->is_private ? "priv" : "shared";
+
+		if (mr->kind == MR_FILE) {
+			log_info(
+				"0x%016lx | 0x%016lx | 0x%08lx | 0x%08lx | %-6s | %-6s | inode=%p off=[0x%lx..0x%lx) pgoff=%zu delta=%u",
+				(unsigned long)mr->start,
+				(unsigned long)mr->end,
+				(unsigned long)mr->prot,
+				(unsigned long)mr->flags,
+				kind,
+				share,
+				(void*)mr->file.inode,
+				(unsigned long)mr->file.file_lo,
+				(unsigned long)mr->file.file_hi,
+				(size_t)mr->file.pgoff,
+				(unsigned)mr->file.delta);
+		} else if (mr->kind == MR_ANON) {
+			log_info(
+				"0x%016lx | 0x%016lx | 0x%08lx | 0x%08lx | %-6s | %-6s | tag=%u",
+				(unsigned long)mr->start,
+				(unsigned long)mr->end,
+				(unsigned long)mr->prot,
+				(unsigned long)mr->flags,
+				kind,
+				share,
+				(unsigned)mr->anon.tag);
+		} else { /* MR_DEVICE (or future kinds) */
+			log_info(
+				"0x%016lx | 0x%016lx | 0x%08lx | 0x%08lx | %-6s | %-6s | (device mapping)",
+				(unsigned long)mr->start,
+				(unsigned long)mr->end,
+				(unsigned long)mr->prot,
+				(unsigned long)mr->flags,
+				kind,
+				share);
+		}
 	}
 }
 

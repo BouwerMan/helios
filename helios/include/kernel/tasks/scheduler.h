@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include <kernel/spinlock.h>
-#include <lib/list.h>
-#include <mm/address_space.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#include "kernel/spinlock.h"
+#include "lib/list.h"
 
 typedef void (*entry_func)(void);
 

@@ -669,16 +669,11 @@ void vmm_write_region(struct address_space* vas,
 static size_t get_table_index(int level, uintptr_t vaddr)
 {
 	switch (level) {
-	case 0:
-		return _pml4_index(vaddr);
-	case 1:
-		return _pdpt_index(vaddr);
-	case 2:
-		return _pd_index(vaddr);
-	case 3:
-		return _pt_index(vaddr);
-	default:
-		return (size_t)-1; // Invalid level
+	case 0:	 return _pml4_index(vaddr);
+	case 1:	 return _pdpt_index(vaddr);
+	case 2:	 return _pd_index(vaddr);
+	case 3:	 return _pt_index(vaddr);
+	default: return (size_t)-1; // Invalid level
 	}
 }
 
@@ -804,8 +799,7 @@ static void map_memmap_entry(uint64_t* pml4,
 	case LIMINE_MEMMAP_EXECUTABLE_AND_MODULES:
 		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK;
 		break;
-	default:
-		return;
+	default: return;
 	}
 
 	uintptr_t start = entry->base;
@@ -890,19 +884,27 @@ static int do_demand_paging(struct registers* r)
 	}
 
 	log_debug("Fault address %lx is within a valid region", fault_addr);
+
 	struct memory_region* mr = get_region(vas, fault_addr);
-	struct vfs_inode* inode = mr->file_inode;
+	// TODO: Zero fill the page instead of failing if no file backing
+	// since it is in a valid region
+	if (mr->kind != MR_FILE) {
+		log_error("Region is not file-backed, cannot demand page");
+		return -ENOENT;
+	}
+	struct vfs_inode* inode = mr->file.inode;
 	struct inode_mapping* map = inode->mapping;
 	if (!inode || !map) {
-		// TODO: Zero fill the page instead of failing
-		// since it is in a valid region
 		log_error("Implement zero fill");
 		return -ENOENT;
 	}
 
 	u64 offset_in_region = fault_addr - mr->start;
-	u64 file_position = (u64)mr->file_offset + offset_in_region;
+	u64 file_position = (u64)mr->file.file_lo + offset_in_region;
 	pgoff_t index = file_position / PAGE_SIZE;
+	off_t init_left = mr->file.file_hi - (off_t)file_position;
+	size_t to_read = (init_left < (off_t)PAGE_SIZE) ? (size_t)init_left :
+							  PAGE_SIZE;
 	struct page* page = imap_lookup_or_create(map, index);
 	if (!page) {
 		log_error("OOM during demand paging!");
@@ -922,6 +924,10 @@ static int do_demand_paging(struct registers* r)
 				imap_remove(map, page);
 				return -EIO;
 			}
+			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
+			memset((void*)((uptr)kvaddr + to_read),
+			       0,
+			       PAGE_SIZE - to_read);
 		} else {
 			// No readpage operation, just zero the page
 			log_warn("No readpage operation, zeroing page");

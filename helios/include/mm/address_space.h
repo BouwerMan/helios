@@ -1,34 +1,101 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include <kernel/types.h>
-#include <lib/list.h>
-#include <mm/page_tables.h>
+#include "kernel/types.h"
+#include "lib/list.h"
+#include "mm/page.h"
+#include "mm/page_tables.h"
 
 /**
  * struct address_space - Represents a virtual address space.
+ *
+ * Invariants:
+ *  - mr_list contains non-overlapping regions sorted by start (recommended).
+ *  - All regions are page-aligned: start % PAGE_SIZE == 0, end % PAGE_SIZE == 0.
  */
 struct address_space {
 	uptr pml4_phys;		  /* Physical address of the PML4 table. */
 	pgd_t* pml4;		  /* Has to go second for switch.asm */
-	struct list_head mr_list; /* List of memory regions. */
+	struct list_head mr_list; /* List of memory regions (VMAs). */
+};
+
+/**
+ * enum mr_kind - Backing type of a memory_region.
+ *
+ * MR_FILE: pages are faulted by reading from a file (vfs_inode).
+ * MR_ANON: pages are zero-filled on demand (no file IO).
+ * MR_DEVICE: (future) MMIO or special pager; not needed for ELF, but handy long-term.
+ */
+enum mr_kind {
+	MR_ANON = 0,
+	MR_FILE = 1,
+	MR_DEVICE = 2,
+};
+
+/**
+ * struct mr_file - File-backed bookkeeping for demand paging.
+ *
+ * file_lo: page-aligned file offset that corresponds to 'start' (vstart).
+ * file_hi: exclusive end of the initialized bytes for THIS segment
+ *          (i.e., p_offset + p_filesz). Never read past this; zero the rest.
+ * pgoff   : file_lo / PAGE_SIZE, convenient for a page cache index.
+ * delta   : intra-page bias: p_vaddr % PAGE == p_offset % PAGE (0..PAGE_SIZE-1).
+ *           Not strictly required if you always use file_lo/start deltas, but useful
+ *           for debugging and certain corner cases.
+ */
+struct mr_file {
+	struct vfs_inode* inode;
+	off_t file_lo;	/* aligned_down(p_offset) */
+	off_t file_hi;	/* p_offset + p_filesz (exclusive) */
+	pgoff_t pgoff;	/* file_lo >> PAGE_SHIFT */
+	uint16_t delta; /* p_vaddr - align_down(p_vaddr) */
+};
+
+/**
+ * struct mr_anon - Anonymous (zero-fill) bookkeeping.
+ * tag: optional accounting/debug identifier (e.g., "bss", "heap").
+ */
+struct mr_anon {
+	uint32_t tag;
 };
 
 /**
  * struct memory_region - Represents a virtual memory area (VMA).
+ *
+ * Semantics for ELF segments:
+ *  - FILE region covers [vstart, vstart + align_up(delta + p_filesz)).
+ *    Reads are clamped to [file_lo, file_hi) and any unread tail is zeroed.
+ *  - If p_memsz > p_filesz, a second ANON region covers the remainder:
+ *      [align_up(p_vaddr + p_filesz), align_up(p_vaddr + p_memsz)).
+ *
+ * Fault-time algorithm (FILE):
+ *  let VA = align_down(fault_addr)
+ *  page_off = VA - start
+ *  file_off = file.file_lo + page_off
+ *  init_left = file.file_hi - file_off
+ *  to_read = init_left > 0 ? min(PAGE_SIZE, (size_t)init_left) : 0
+ *  read 'to_read' bytes; zero the rest of the page
+ *
+ * Fault-time algorithm (ANON):
+ *  allocate zeroed page; map with 'prot'
  */
 struct memory_region {
-	uptr start;		     /* VMR start, inclusive */
-	uptr end;		     /* VMR end, exclusive */
+	uptr start;	     /* VMA start, inclusive (page-aligned) */
+	uptr end;	     /* VMA end, exclusive (page-aligned) */
 
-	unsigned long prot;	     /* Memory protection flags. */
-	unsigned long flags;	     /* Additional flags for the region. */
+	unsigned long prot;  /* PROT_READ/WRITE/EXEC (ELF p_flags->prot). */
+	unsigned long flags; /* MAP_PRIVATE/SHARED and your VM bits. */
 
-	struct vfs_inode* file_inode;
-	off_t file_offset;	     /* Offset within the file, if mapped. */
+	enum mr_kind kind;   /* MR_FILE vs MR_ANON (MR_DEVICE optional). */
+	bool is_private;     /* True for MAP_PRIVATE → CoW on first write. */
+
+	union {
+		struct mr_file file; /* Valid when kind == MR_FILE */
+		struct mr_anon anon; /* Valid when kind == MR_ANON */
+	};
 
 	struct address_space* owner; /* Owning address space. */
-	struct list_head list; /* Links into the address_space's mr_list. */
+	struct list_head list;	     /* Link in address_space::mr_list. */
 };
 
 /**
@@ -108,6 +175,7 @@ void vas_set_pml4(struct address_space* vas, pgd_t* pml4);
 /**
  * map_region - Creates and maps a new memory region.
  *
+ * FIXME:
  * @vas: The address space to add the new region to.
  * @inode: The inode backing the region, or NULL for anonymous.
  * @file_offset: The offset within the file to start mapping from.
@@ -119,8 +187,7 @@ void vas_set_pml4(struct address_space* vas, pgd_t* pml4);
  * Return: 0 on success, negative error code on failure
  */
 int map_region(struct address_space* vas,
-	       struct vfs_inode* inode,
-	       off_t file_offset,
+	       struct mr_file file,
 	       uptr start,
 	       uptr end,
 	       unsigned long prot,

@@ -51,13 +51,11 @@ static bool validate(struct elf_file_header* header);
  *
  * @param ctx The exec context containing the new address space.
  * @param inode Pointer to the inode of the ELF file, or nullptr for anonymous mapping.
- * @param elf Pointer to the ELF file. If anonymous mapping is used, this is required to copy data from.
  * @param prog Pointer to the ELF program header.
  * @return 0 on success, -1 on failure.
  */
 static int load_program_header(struct exec_context* ctx,
 			       struct vfs_inode* inode,
-			       struct vfs_file* file,
 			       struct elf_program_header* prog);
 
 /**
@@ -116,6 +114,8 @@ struct exec_context* prepare_exec(const char* path,
 		log_error("Failed to setup user stack");
 		return nullptr;
 	}
+
+	address_space_dump(ctx->new_vas);
 
 	ctx->prepared = true;
 	return ctx;
@@ -210,7 +210,7 @@ int __load_elf(struct exec_context* ctx, struct vfs_file* file)
 		switch (prog->type) {
 		case PT_LOAD:
 			if (load_program_header(
-				    ctx, file->dentry->inode, file, prog) < 0) {
+				    ctx, file->dentry->inode, prog) < 0) {
 				// TODO: Free previous program sections
 				log_error("Failed to load program header");
 				return -1;
@@ -265,86 +265,124 @@ static bool validate(struct elf_file_header* header)
 
 static int load_program_header(struct exec_context* ctx,
 			       struct vfs_inode* inode,
-			       struct vfs_file* file,
 			       struct elf_program_header* prog)
 {
-	size_t pages = CEIL_DIV(prog->size_in_memory, PAGE_SIZE);
+	log_debug(
+		"PT_LOAD: vaddr=0x%lx off=0x%lx filesz=0x%llx memsz=0x%llx flags=0x%lx",
+		(unsigned long)prog->virtual_address,
+		(unsigned long)prog->offset,
+		(unsigned long long)prog->size_in_file,
+		(unsigned long long)prog->size_in_memory,
+		(unsigned long)prog->flags);
 
-	vaddr_t vaddr_start = align_down_page((vaddr_t)prog->virtual_address);
-	vaddr_t vaddr_end = vaddr_start + (pages * PAGE_SIZE);
+	if ((prog->virtual_address & (PAGE_SIZE - 1)) !=
+	    (prog->offset & (PAGE_SIZE - 1))) {
+		log_error(
+			"ELF invariant violated: vaddr%%PAGE=0x%lx, off%%PAGE=0x%lx",
+			(unsigned long)(prog->virtual_address &
+					(PAGE_SIZE - 1)),
+			(unsigned long)(prog->offset & (PAGE_SIZE - 1)));
+		return -ENOEXEC;
+	}
 
-	// uptr align_offset = prog->virtual_address - vaddr_start;
-	// off_t aligned_file_offset = (off_t)(prog->offset - align_offset);
+	vaddr_t vstart = align_down_page((vaddr_t)prog->virtual_address);
+	u16 delta = (u16)(prog->virtual_address - vstart);
+	uptr fstart = align_down_page((uptr)prog->offset);
+
+	uptr file_vend = align_up_page(
+		(uptr)(prog->virtual_address + prog->size_in_file));
+	uptr bss_vstart = file_vend;
+	uptr bss_vend = align_up_page(
+		(uptr)(prog->virtual_address + prog->size_in_memory));
 
 	unsigned long prot = (prog->flags & PF_EXEC) ? PROT_EXEC : 0;
 	prot |= prog->flags & PF_WRITE ? PROT_WRITE : 0;
 	prot |= prog->flags & PF_READ ? PROT_READ : 0;
 
+	char pstr[4] = { (prot & PROT_READ) ? 'r' : '-',
+			 (prot & PROT_WRITE) ? 'w' : '-',
+			 (prot & PROT_EXEC) ? 'x' : '-',
+			 '\0' };
+
+	log_debug("align: vstart=0x%lx fstart=0x%lx delta=%u",
+		  (unsigned long)vstart,
+		  (unsigned long)fstart,
+		  (unsigned)delta);
+	log_debug("split: file_vend=0x%lx bss=[0x%lx..0x%lx)",
+		  (unsigned long)file_vend,
+		  (unsigned long)bss_vstart,
+		  (unsigned long)bss_vend);
+	log_debug("prot : 0x%lx (%s)", (unsigned long)prot, pstr);
+
 	if (prog->size_in_file == 0) {
-		// Pure BSS segment - map as anonymous
+		// Pure BSS
 		log_debug(
-			"Mapping pure BSS region: vaddr 0x%lx-0x%lx, prot 0x%lx",
-			vaddr_start,
-			vaddr_end,
-			prot);
-		map_region(ctx->new_vas,
-			   nullptr,
-			   0,
-			   vaddr_start,
-			   vaddr_end,
-			   prot,
-			   MAP_PRIVATE | MAP_ANONYMOUS);
-	} else if (prog->size_in_file == prog->size_in_memory) {
-		// Pure data segment - map as file-backed
-		uptr align_offset = prog->virtual_address - vaddr_start;
-		off_t aligned_file_offset =
-			(off_t)(prog->offset - align_offset);
+			"map ANON: [0x%lx..0x%lx) prot=0x%lx (%s) flags=0x%lx",
+			(unsigned long)vstart,
+			(unsigned long)bss_vend,
+			(unsigned long)prot,
+			pstr,
+			(unsigned long)(MAP_PRIVATE | MAP_ANONYMOUS));
 
-		log_debug(
-			"Mapping data region: vaddr 0x%lx-0x%lx, file offset 0x%lx, prot 0x%lx",
-			vaddr_start,
-			vaddr_end,
-			aligned_file_offset,
-			prot);
-		map_region(ctx->new_vas,
-			   inode,
-			   aligned_file_offset,
-			   vaddr_start,
-			   vaddr_end,
-			   prot,
-			   MAP_PRIVATE);
-	} else {
-		// Mixed data + BSS segment
-		log_debug(
-			"Mapping mixed data+BSS region: vaddr 0x%lx-0x%lx, data_size 0x%lx, total_size 0x%lx",
-			vaddr_start,
-			vaddr_end,
-			prog->size_in_file,
-			prog->size_in_memory);
-
-		// Map entire region as anonymous (zero-filled)
-		map_region(ctx->new_vas,
-			   nullptr,
-			   0,
-			   vaddr_start,
-			   vaddr_end,
-			   prot,
-			   MAP_PRIVATE | MAP_ANONYMOUS);
-
-		if (prog->size_in_file > 0) {
-			// Copy data portion from ELF
-			void* segment_data = get_free_page(AF_KERNEL);
-			// TODO: Make vfs_file_seek
-			file->f_pos = (off_t)prog->offset;
-			// vfs_lseek(file->fd, prog->offset);
-			vfs_file_read(file, segment_data, prog->size_in_file);
-			vmm_write_region(ctx->new_vas,
-					 prog->virtual_address,
-					 segment_data,
-					 prog->size_in_file);
-			free_page(segment_data);
+		int err = map_region(ctx->new_vas,
+				     (struct mr_file) { 0 },
+				     vstart,
+				     bss_vend,
+				     prot,
+				     MAP_PRIVATE | MAP_ANONYMOUS);
+		if (err) {
+			log_error("map ANON failed: err=%d", err);
+			return err;
 		}
-		// BSS portion is already zero-filled by anonymous mapping
+		return 0;
+	}
+	struct mr_file f = {
+		.inode = inode,
+		.file_lo = (off_t)fstart,
+		.file_hi = (off_t)(prog->offset + prog->size_in_file),
+		.pgoff = (u64)fstart >> PAGE_SHIFT,
+		.delta = delta,
+	};
+
+	log_debug("map FILE: [0x%lx..0x%lx) prot=0x%lx (%s) "
+		  "file_lo=0x%llx file_hi=0x%llx pgoff=%zu delta=%u",
+		  (unsigned long)vstart,
+		  (unsigned long)file_vend,
+		  (unsigned long)prot,
+		  pstr,
+		  (unsigned long long)f.file_lo,
+		  (unsigned long long)f.file_hi,
+		  (size_t)f.pgoff,
+		  (unsigned)f.delta);
+
+	int err = map_region(
+		ctx->new_vas, f, vstart, file_vend, prot, MAP_PRIVATE);
+	if (err) {
+		log_error("map FILE failed: err=%d", err);
+		return err;
+	}
+
+	// ANON tail if memsz > filesz
+	// if (prog->size_in_memory > prog->size_in_file) {
+	if (bss_vstart < bss_vend) {
+		log_debug(
+			"map ANON tail: [0x%lx..0x%lx) prot=0x%lx (%s) flags=0x%lx",
+			(unsigned long)bss_vstart,
+			(unsigned long)bss_vend,
+			(unsigned long)prot,
+			pstr,
+			(unsigned long)(MAP_PRIVATE | MAP_ANONYMOUS));
+
+		err = map_region(ctx->new_vas,
+				 (struct mr_file) { 0 },
+				 bss_vstart,
+				 bss_vend,
+				 prot,
+				 MAP_PRIVATE | MAP_ANONYMOUS);
+		if (err) {
+			log_error("map ANON tail failed: err=%d", err);
+			return err;
+		}
 	}
 
 	return 0;
@@ -372,8 +410,7 @@ static int setup_user_stack(struct exec_context* ctx,
 		  stack_top);
 
 	map_region(ctx->new_vas,
-		   nullptr,
-		   -1,
+		   (struct mr_file) { 0 },
 		   stack_base,
 		   stack_top,
 		   PROT_READ | PROT_WRITE,
