@@ -7,7 +7,6 @@
 #include "kernel/bitops.h"
 #include "kernel/tasks/scheduler.h"
 #include "kernel/types.h"
-#include "mm/page_alloc.h"
 
 static constexpr int PAGE_SHIFT = 12;
 static constexpr size_t PAGE_SIZE = (1UL << PAGE_SHIFT);
@@ -29,9 +28,6 @@ static constexpr flags_t PG_UPTODATE = BIT(2);
 static constexpr flags_t PG_DIRTY = BIT(3);
 static constexpr flags_t PG_LOCKED = BIT(4);
 static constexpr flags_t PG_MAPPED = BIT(5);
-
-typedef size_t pfn_t;
-typedef long pgoff_t;
 
 extern struct page* mem_map;
 extern pfn_t max_pfn;
@@ -152,6 +148,8 @@ static inline struct page* get_page(struct page* pg)
 	if (pg) atomic_inc(&pg->ref_count);
 	return pg;
 }
+
+#include "mm/page_alloc.h" // For __free_page
 
 static inline void put_page(struct page* pg)
 {

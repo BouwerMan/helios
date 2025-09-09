@@ -203,10 +203,14 @@ struct file_ops {
 	int (*open)(struct vfs_inode* inode, struct vfs_file* file);
 	int (*close)(struct vfs_inode* inode, struct vfs_file* file);
 
-	ssize_t (*read)(struct vfs_file* file, char* buffer, size_t count);
+	ssize_t (*read)(struct vfs_file* file,
+			char* buffer,
+			size_t count,
+			off_t* offset);
 	ssize_t (*write)(struct vfs_file* file,
 			 const char* buffer,
-			 size_t count);
+			 size_t count,
+			 off_t* offset);
 
 	int (*readdir)(struct vfs_file* file,
 		       struct dirent* dirent,
@@ -345,10 +349,23 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags);
 int vfs_close(int fd);
 ssize_t vfs_getdents(int fd, struct dirent* dirp, size_t count);
 int vfs_readdir(struct vfs_file* dir, struct dirent* out, long pos);
+
+ssize_t __vfs_pwrite(struct vfs_file* file,
+		     const char* buffer,
+		     size_t count,
+		     off_t* offset);
+ssize_t vfs_pwrite(int fd, const char* buffer, size_t count, off_t offset);
 ssize_t vfs_file_write(struct vfs_file* file, const char* buffer, size_t count);
 ssize_t vfs_write(int fd, const char* buffer, size_t count);
+
+ssize_t __vfs_pread(struct vfs_file* file,
+		    char* buffer,
+		    size_t count,
+		    off_t* offset);
+ssize_t vfs_pread(int fd, char* buffer, size_t count, off_t offset);
 ssize_t vfs_file_read(struct vfs_file* file, char* buffer, size_t count);
 ssize_t vfs_read(int fd, char* buffer, size_t count);
+
 off_t vfs_lseek(int fd, off_t offset, int whence);
 int vfs_mkdir(const char* path, uint16_t mode);
 int vfs_create(const char* path,

@@ -50,8 +50,10 @@ struct address_space* alloc_address_space()
 	return vas;
 }
 
-struct memory_region*
-alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags)
+struct memory_region* alloc_mem_region(uptr start,
+				       uptr end,
+				       unsigned long prot,
+				       unsigned long flags)
 {
 	struct memory_region* mr = slab_alloc(&mem_cache);
 	if (!mr) return nullptr;
@@ -216,63 +218,6 @@ struct memory_region* get_region(struct address_space* vas, vaddr_t vaddr)
 	}
 
 	return pos;
-}
-
-void address_space_dump(struct address_space* vas)
-{
-	if (!vas) return;
-
-	log_info("Dumping address space (PML4 phys=0x%016lx, pml4=%p)",
-		 (unsigned long)vas->pml4_phys,
-		 (void*)vas->pml4);
-
-	log_info(
-		"Start              | End                | Prot       | Flags      | Kind   | Share  | Details");
-	log_info(
-		"--------------------------------------------------------------------------------------------------------------");
-
-	struct memory_region* mr = NULL;
-	list_for_each_entry (mr, &vas->mr_list, list) {
-		const char* kind = (mr->kind == MR_FILE) ? "FILE" :
-				   (mr->kind == MR_ANON) ? "ANON" :
-							   "DEVICE";
-		const char* share = mr->is_private ? "priv" : "shared";
-
-		if (mr->kind == MR_FILE) {
-			log_info(
-				"0x%016lx | 0x%016lx | 0x%08lx | 0x%08lx | %-6s | %-6s | inode=%p off=[0x%lx..0x%lx) pgoff=%zu delta=%u",
-				(unsigned long)mr->start,
-				(unsigned long)mr->end,
-				(unsigned long)mr->prot,
-				(unsigned long)mr->flags,
-				kind,
-				share,
-				(void*)mr->file.inode,
-				(unsigned long)mr->file.file_lo,
-				(unsigned long)mr->file.file_hi,
-				(size_t)mr->file.pgoff,
-				(unsigned)mr->file.delta);
-		} else if (mr->kind == MR_ANON) {
-			log_info(
-				"0x%016lx | 0x%016lx | 0x%08lx | 0x%08lx | %-6s | %-6s | tag=%u",
-				(unsigned long)mr->start,
-				(unsigned long)mr->end,
-				(unsigned long)mr->prot,
-				(unsigned long)mr->flags,
-				kind,
-				share,
-				(unsigned)mr->anon.tag);
-		} else { /* MR_DEVICE (or future kinds) */
-			log_info(
-				"0x%016lx | 0x%016lx | 0x%08lx | 0x%08lx | %-6s | %-6s | (device mapping)",
-				(unsigned long)mr->start,
-				(unsigned long)mr->end,
-				(unsigned long)mr->prot,
-				(unsigned long)mr->flags,
-				kind,
-				share);
-		}
-	}
 }
 
 static void __free_addr_space(struct address_space* vas)

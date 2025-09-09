@@ -309,19 +309,22 @@ int ramfs_close(struct vfs_inode* inode, struct vfs_file* file)
 	return VFS_OK;
 }
 
-ssize_t ramfs_read(struct vfs_file* file, char* buffer, size_t count)
+ssize_t ramfs_read(struct vfs_file* file,
+		   char* buffer,
+		   size_t count,
+		   off_t* offset)
 {
 	struct ramfs_file* rf = file->private_data;
 
-	if (!rf->data || (size_t)file->f_pos > rf->size) {
+	if (!rf->data || (size_t)(*offset) > rf->size) {
 		log_debug("EOF");
 		return 0;
 	}
 
-	size_t to_read = MIN(rf->size - (size_t)file->f_pos, count);
-	memcpy(buffer, rf->data + file->f_pos, to_read);
+	size_t to_read = MIN(rf->size - (size_t)(*offset), count);
+	memcpy(buffer, rf->data + *offset, to_read);
 
-	file->f_pos += to_read;
+	*offset += to_read;
 
 	return (ssize_t)to_read;
 }
@@ -343,10 +346,10 @@ int ramfs_readpage(struct vfs_inode* inode, struct page* page)
 
 	size_t source_offset = (size_t)page->index * PAGE_SIZE;
 
-	log_info("Reading page index %lu (offset %zu) from inode %zu",
-		 page->index,
-		 source_offset,
-		 inode->id);
+	log_debug("Reading page index %lu (offset %zu) from inode %zu",
+		  page->index,
+		  source_offset,
+		  inode->id);
 
 	if (source_offset >= rf->size) {
 		// Reading past end of file, so we just write a "hole"
@@ -371,7 +374,10 @@ int ramfs_readpage(struct vfs_inode* inode, struct page* page)
 	return VFS_OK;
 }
 
-ssize_t ramfs_write(struct vfs_file* file, const char* buffer, size_t count)
+ssize_t ramfs_write(struct vfs_file* file,
+		    const char* buffer,
+		    size_t count,
+		    off_t* offset)
 {
 	struct ramfs_file* rf = file->private_data;
 
@@ -379,7 +385,7 @@ ssize_t ramfs_write(struct vfs_file* file, const char* buffer, size_t count)
 	if (!rf->data || rf->size + count > rf->capacity) {
 		size_t old_cap = rf->capacity;
 
-		size_t needed = (size_t)file->f_pos + count;
+		size_t needed = (size_t)(*offset) + count;
 		size_t needed_pages = CEIL_DIV(needed, PAGE_SIZE);
 
 		char* new_data = get_free_pages(AF_KERNEL, needed_pages);
@@ -397,9 +403,9 @@ ssize_t ramfs_write(struct vfs_file* file, const char* buffer, size_t count)
 	}
 
 	// Write data and update file position and size
-	memcpy(rf->data + file->f_pos, buffer, count);
-	rf->size = MAX(rf->size, (size_t)file->f_pos + count);
-	file->f_pos += count;
+	memcpy(rf->data + (*offset), buffer, count);
+	rf->size = MAX(rf->size, (size_t)(*offset) + count);
+	*offset += count;
 	file->dentry->inode->f_size = rf->size;
 
 	return (ssize_t)count;

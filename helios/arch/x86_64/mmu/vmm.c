@@ -30,28 +30,30 @@
 * We will have a mapping of the entire physical memory space at hhdm_offset.
 */
 
+#include <stdint.h>
+#include <uapi/helios/errno.h>
+#include <uapi/helios/mman.h>
+
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
 #include <lib/log.h>
 #undef FORCE_LOG_REDEF
 
-#include <arch/idt.h>
-#include <arch/mmu/vmm.h>
-#include <arch/regs.h>
-#include <drivers/console.h>
-#include <kernel/bootinfo.h>
-#include <kernel/helios.h>
-#include <kernel/irq_log.h>
-#include <kernel/panic.h>
-#include <kernel/tasks/scheduler.h>
-#include <lib/string.h>
-#include <mm/address_space.h>
-#include <mm/page.h>
-#include <mm/page_alloc.h>
-#include <stdint.h>
-#include <uapi/helios/errno.h>
-#include <uapi/helios/mman.h>
+#include "arch/idt.h"
+#include "arch/mmu/vmm.h"
+#include "arch/regs.h"
+#include "drivers/console.h"
+#include "kernel/bootinfo.h"
+#include "kernel/helios.h"
+#include "kernel/irq_log.h"
+#include "kernel/panic.h"
+#include "kernel/tasks/scheduler.h"
+#include "lib/string.h"
+#include "mm/address_space.h"
+#include "mm/address_space_dump.h"
+#include "mm/page.h"
+#include "mm/page_alloc.h"
 
 /*******************************************************************************
 * Private Function Prototypes
@@ -89,8 +91,10 @@ static void page_fault_fail(struct registers* r);
  *               virtual address, or NULL if the entry does not exist and
  *               @create is false.
  */
-static pte_t*
-walk_page_table(pgd_t* pml4, uptr vaddr, bool create, flags_t flags);
+static pte_t* walk_page_table(pgd_t* pml4,
+			      uptr vaddr,
+			      bool create,
+			      flags_t flags);
 
 static void log_page_table_walk(u64* pml4, uptr vaddr);
 
@@ -730,8 +734,10 @@ static bool prune_page_table_recursive(uint64_t* table,
 	return is_table_empty(table);
 }
 
-static pte_t*
-walk_page_table(pgd_t* pml4, uptr vaddr, bool create, flags_t flags)
+static pte_t* walk_page_table(pgd_t* pml4,
+			      uptr vaddr,
+			      bool create,
+			      flags_t flags)
 {
 	if (create && (flags & PAGE_PRESENT) == 0) {
 		log_warn(
@@ -871,109 +877,237 @@ static int do_demand_paging(struct registers* r)
 
 	uint64_t fault_addr;
 	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
+
+	vaddr_t vaddr = align_down_page(fault_addr);
+	struct memory_region* mr = get_region(vas, vaddr);
+	if (!mr) {
+		log_error("No VMA covers vaddr=0x%lx", (unsigned long)vaddr);
+		return -ENOENT;
+	}
+
+	// Region identity snapshot
+	const char* kind = (mr->kind == MR_FILE) ? "FILE" :
+			   (mr->kind == MR_ANON) ? "ANON" :
+						   "DEVICE";
+	char prot_str[4] = { (mr->prot & PROT_READ) ? 'r' : '-',
+			     (mr->prot & PROT_WRITE) ? 'w' : '-',
+			     (mr->prot & PROT_EXEC) ? 'x' : '-',
+			     '\0' };
 	log_debug(
-		"Demand paging in address_space %lx (pid: %d) at %lx caused by %lx",
-		vas->pml4_phys,
-		task->pid,
-		fault_addr,
-		r->rip);
-	fault_addr &= PAGE_FRAME_MASK;
+		"VMA: [%016lx..%016lx) kind=%s prot=%s flags=0x%lx private=%d",
+		(unsigned long)mr->start,
+		(unsigned long)mr->end,
+		kind,
+		prot_str,
+		(unsigned long)mr->flags,
+		(int)mr->is_private);
 
-	if (!is_within_vas(vas, fault_addr)) {
-		return -ENOENT;
+	bool need_exec = r->err_code & 0x10;
+	bool need_write = r->err_code & 0x2;
+	bool need_read = !need_write;
+
+	if (need_exec && !(mr->prot & PROT_EXEC)) {
+		log_error("NX violation at vaddr=0x%lx in %s VMA",
+			  (unsigned long)vaddr,
+			  kind);
+		return -EACCES;
+	}
+	if (need_write && !(mr->prot & PROT_WRITE)) {
+		log_error("Write disallowed at vaddr=0x%lx in %s VMA",
+			  (unsigned long)vaddr,
+			  kind);
+		return -EACCES;
+	}
+	if (need_read && !(mr->prot & PROT_READ)) {
+		log_error("Read disallowed at vaddr=0x%lx in %s VMA",
+			  (unsigned long)vaddr,
+			  kind);
+		return -EACCES;
 	}
 
-	log_debug("Fault address %lx is within a valid region", fault_addr);
+	flags_t prot_flags = PAGE_PRESENT | PAGE_USER;
+	if (mr->prot & PROT_WRITE) prot_flags |= PAGE_WRITE;
+	if (!(mr->prot & PROT_EXEC)) prot_flags |= PAGE_NO_EXECUTE;
 
-	struct memory_region* mr = get_region(vas, fault_addr);
-	// TODO: Zero fill the page instead of failing if no file backing
-	// since it is in a valid region
-	if (mr->kind != MR_FILE) {
-		log_error("Region is not file-backed, cannot demand page");
-		return -ENOENT;
+	if (mr->kind == MR_ANON) {
+		// Case 1: Anonymous region
+		struct page* page = alloc_zeroed_page(AF_NORMAL);
+		if (!page) {
+			log_error("OOM allocating anon page for vaddr=0x%lx",
+				  (unsigned long)vaddr);
+			return -ENOMEM;
+		}
+		int err = vmm_map_page(
+			vas->pml4, vaddr, page_to_phys(page), prot_flags);
+		if (err < 0) {
+			log_error(
+				"Map anon vaddr=0x%lx paddr=0x%lx failed err=%d",
+				(unsigned long)vaddr,
+				(unsigned long)page_to_phys(page),
+				err);
+			return err;
+		}
+
+		log_debug(
+			"Mapped ANON page vaddr=0x%lx paddr=0x%lx prot_flags=0x%lx",
+			(unsigned long)vaddr,
+			(unsigned long)page_to_phys(page),
+			(unsigned long)prot_flags);
+		return 0;
 	}
+
+	// Case 2: File-backed region
+
 	struct vfs_inode* inode = mr->file.inode;
 	struct inode_mapping* map = inode->mapping;
-	if (!inode || !map) {
-		log_error("Implement zero fill");
-		return -ENOENT;
-	}
 
-	u64 offset_in_region = fault_addr - mr->start;
-	u64 file_position = (u64)mr->file.file_lo + offset_in_region;
-	pgoff_t index = file_position / PAGE_SIZE;
-	off_t init_left = mr->file.file_hi - (off_t)file_position;
-	size_t to_read = (init_left < (off_t)PAGE_SIZE) ? (size_t)init_left :
-							  PAGE_SIZE;
+	// Compute file geometry for this faulting page
+	size_t page_off = (size_t)(vaddr - mr->start); // offset within VMA
+	off_t file_off =
+		mr->file.file_lo + (off_t)page_off;    // absolute file offset
+	off_t init_left = mr->file.file_hi - file_off; // may be <= 0
+	size_t to_read = (size_t)CLAMP(init_left, 0, (off_t)PAGE_SIZE);
+
+	pgoff_t index = (pgoff_t)(file_off >> PAGE_SHIFT);
+	size_t tail = PAGE_SIZE - to_read;
+
+	log_debug(
+		"FILE: vaddr=0x%lx page_off=0x%zx file_off=0x%llx "
+		"file_lo=0x%llx file_hi=0x%llx index=%llu to_read=%zu tail_zero=%zu",
+		(unsigned long)vaddr,
+		page_off,
+		(unsigned long long)file_off,
+		(unsigned long long)mr->file.file_lo,
+		(unsigned long long)mr->file.file_hi,
+		(unsigned long long)index,
+		to_read,
+		tail);
+
 	struct page* page = imap_lookup_or_create(map, index);
 	if (!page) {
-		log_error("OOM during demand paging!");
+		log_error("OOM creating cache page (index=%llu) for inode=%p",
+			  (unsigned long long)index,
+			  (void*)inode);
 		return -ENOMEM;
 	}
 
-	if (!(page->flags & PG_MAPPED)) {
-		log_error("Page not mapped in inode mapping");
-		return -EIO;
-	}
+	if (to_read == 0) {
+		// Entire page is beyond file_hi within the FILE-VMA → pure BSS page
+		void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
+		memset(kvaddr, 0, PAGE_SIZE);
+		log_debug("FILE: BSS page zeroed (index=%llu)",
+			  (unsigned long long)index);
+		page->flags |= PG_UPTODATE;
 
-	if (!(page->flags & PG_UPTODATE)) {
-		if (map->imops->readpage) {
+	} else if (!(page->flags & PG_UPTODATE)) {
+		// Cache miss: populate front bytes from disk, then zero the tail
+		if (map->imops && map->imops->readpage) {
 			int res = map->imops->readpage(inode, page);
 			if (res < 0) {
-				log_error("Failed to read page from inode");
+				log_error(
+					"Readpage failed (index=%llu, file_off=0x%llx) err=%d",
+					(unsigned long long)index,
+					(unsigned long long)file_off,
+					res);
 				imap_remove(map, page);
 				return -EIO;
 			}
 			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
-			memset((void*)((uptr)kvaddr + to_read),
-			       0,
-			       PAGE_SIZE - to_read);
+			memset((char*)kvaddr + to_read, 0, tail);
+			log_debug(
+				"FILE: readpage filled %zu bytes, zeroed %zu (index=%llu)",
+				to_read,
+				tail,
+				(unsigned long long)index);
 		} else {
-			// No readpage operation, just zero the page
-			log_warn("No readpage operation, zeroing page");
+			// No readpage -> we must synthesize the page (rare)
 			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
 			memset(kvaddr, 0, PAGE_SIZE);
+			log_warn(
+				"FILE: no readpage op; zeroed whole page (index=%llu)",
+				(unsigned long long)index);
+		}
+		page->flags |= PG_UPTODATE;
+
+	} else {
+		// Cache hit. Defensively ensure the last page's tail is zero.
+		if (to_read < PAGE_SIZE) {
+			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
+			memset((char*)kvaddr + to_read, 0, tail);
+			log_debug(
+				"FILE: cache hit; ensured tail-zero %zu bytes (index=%llu)",
+				tail,
+				(unsigned long long)index);
+		} else {
+			log_debug(
+				"FILE: cache hit; full page content present (index=%llu)",
+				(unsigned long long)index);
 		}
 	}
-	// Now the page has the content, add it to the mapping and set UPTODATE
 
-	page->flags |= PG_UPTODATE;
-
-	flags_t prot_flags = PAGE_PRESENT | PAGE_USER;
-	prot_flags |= (mr->prot & PROT_WRITE) ? PAGE_WRITE : 0;
-	prot_flags |= (mr->prot & PROT_EXEC) ? 0 : PAGE_NO_EXECUTE;
-
-	// Map page into cr3
-	log_debug(
-		"Mapping page at vaddr %lx (paddr %lx) with flags 0x%lx (prot 0x%lx)",
-		fault_addr,
-		page_to_phys(page),
-		prot_flags,
-		mr->prot);
-
-	// We give our reference to map_page, so we don't put_page
-	vmm_map_page(vas->pml4, fault_addr, page_to_phys(page), prot_flags);
+	// Map into the task's page tables
+	int err =
+		vmm_map_page(vas->pml4, vaddr, page_to_phys(page), prot_flags);
+	if (err < 0) {
+		log_error(
+			"PF: map FILE vaddr=0x%lx paddr=0x%lx prot_flags=0x%lx failed err=%d "
+			"(index=%llu file_off=0x%llx)",
+			(unsigned long)vaddr,
+			(unsigned long)page_to_phys(page),
+			(unsigned long)prot_flags,
+			err,
+			(unsigned long long)index,
+			(unsigned long long)file_off);
+		imap_remove(map, page);
+		return err;
+	}
 
 	unlock_page(page);
-
-	log_debug("vaddr %lx, ref count: %d",
-		  fault_addr,
+	log_debug("PF: done vaddr=0x%lx page.ref=%d",
+		  (unsigned long)vaddr,
 		  atomic_read(&page->ref_count));
-
 	return 0;
 }
 
 static void page_fault(struct registers* r)
 {
+	if (!is_scheduler_init()) {
+		goto fail;
+	}
+
+	struct task* task = get_current_task();
+	struct address_space* vas = task->vas;
+
 	uint64_t fault_addr;
 	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
 	uint64_t cr3;
 	__asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
 
+	// Decode PF error code bits (x86-64)
+	bool pf_present = r->err_code & 0x1; // 0 = not-present, 1 = protection
+	bool pf_write = r->err_code & 0x2;
+	bool pf_user = r->err_code & 0x4;
+	bool pf_rsvd = r->err_code & 0x8;
+	bool pf_exec = r->err_code & 0x10; // instruction fetch (NX)
+
+	log_debug(
+		"PF: cr2=0x%lx rip=0x%lx ec=0x%lx [P=%d W=%d U=%d I=%d RSVD=%d] "
+		"vas.PML4=0x%lx pid=%d",
+		(unsigned long)fault_addr,
+		(unsigned long)r->rip,
+		(unsigned long)r->err_code,
+		pf_present,
+		pf_write,
+		pf_user,
+		pf_exec,
+		pf_rsvd,
+		(unsigned long)vas->pml4_phys,
+		task->pid);
+
 	bool is_write_fault = r->err_code & 0x2;
 	bool is_present_fault = r->err_code & 0x1;
 
-	if (!is_write_fault || !is_present_fault) {
+	if (!is_present_fault) {
 		// This is not a CoW fault. It might be a real error (like a segfault)
 		// or something else like demand paging. For now, we'll treat it as a failure.
 		if (do_demand_paging(r) == 0) {
@@ -981,13 +1115,10 @@ static void page_fault(struct registers* r)
 		}
 		goto fail;
 	}
-
-	if (!is_scheduler_init()) {
+	if (!is_write_fault) {
 		goto fail;
 	}
 
-	struct task* task = get_current_task();
-	struct address_space* vas = task->vas;
 	vaddr_t page_aligned_addr = fault_addr & PAGE_FRAME_MASK;
 
 	if (vas->pml4_phys != cr3) {
@@ -1063,7 +1194,7 @@ static void page_fault_fail(struct registers* r)
 	struct task* task = get_current_task();
 	log_error("Faulting task: '%s' (PID: %d)", task->name, task->pid);
 
-	address_space_dump(task->vas);
+	VAS_DUMP(task->vas);
 
 	void* return_address = (void*)(*(u64*)(r->rbp + 8));
 

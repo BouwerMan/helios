@@ -1087,34 +1087,147 @@ int vfs_mkdir(const char* path, uint16_t mode)
 	return VFS_OK;
 }
 
-ssize_t vfs_file_write(struct vfs_file* file, const char* buffer, size_t count)
+ssize_t __vfs_pwrite(struct vfs_file* file,
+		     const char* buffer,
+		     size_t count,
+		     off_t* offset)
 {
-	if (!file) {
-		return -VFS_ERR_INVAL;
+	if (!file || !offset || !buffer) {
+		return -EINVAL;
 	}
 
-	return file->fops->write(file, buffer, count);
+	if (count == 0) {
+		return 0;
+	}
+
+	if (!file->fops || !file->fops->write) {
+		return -ENOSYS;
+	}
+
+	return file->fops->write(file, buffer, count, offset);
+}
+
+ssize_t vfs_file_write(struct vfs_file* file, const char* buffer, size_t count)
+{
+	if (!file || !buffer) {
+		return -EINVAL;
+	}
+
+	if (count == 0) {
+		return 0;
+	}
+
+	return __vfs_pwrite(file, buffer, count, &file->f_pos);
 }
 
 ssize_t vfs_write(int fd, const char* buffer, size_t count)
 {
+	// TODO: Handle O_APPEND
+	if (!buffer) {
+		return -EINVAL;
+	}
+
+	if (count == 0) {
+		return 0;
+	}
+
 	struct vfs_file* file = get_file(fd);
+
+	if (!file) {
+		return -EBADF;
+	}
+
 	return vfs_file_write(file, buffer, count);
+}
+
+ssize_t vfs_pwrite(int fd, const char* buffer, size_t count, off_t offset)
+{
+	if (!buffer) {
+		return -EINVAL;
+	}
+
+	if (count == 0) {
+		return 0;
+	}
+
+	struct vfs_file* file = get_file(fd);
+
+	if (!file) {
+		return -EBADF;
+	}
+
+	return __vfs_pwrite(file, buffer, count, &offset);
+}
+
+ssize_t __vfs_pread(struct vfs_file* file,
+		    char* buffer,
+		    size_t count,
+		    off_t* offset)
+{
+	if (!file || !offset || !buffer) {
+		return -EINVAL;
+	}
+
+	if (count == 0) {
+		return 0;
+	}
+
+	if (!file->fops || !file->fops->read) {
+		return -ENOSYS;
+	}
+
+	return file->fops->read(file, buffer, count, offset);
 }
 
 ssize_t vfs_file_read(struct vfs_file* file, char* buffer, size_t count)
 {
-	if (!file) {
-		return -VFS_ERR_INVAL;
+	if (!file || !buffer) {
+		return -EINVAL;
 	}
 
-	return file->fops->read(file, buffer, count);
+	if (count == 0) {
+		return 0;
+	}
+
+	return __vfs_pread(file, buffer, count, &file->f_pos);
 }
 
 ssize_t vfs_read(int fd, char* buffer, size_t count)
 {
+	if (!buffer) {
+		return -EINVAL;
+	}
+
+	if (count == 0) {
+		return 0;
+	}
+
 	struct vfs_file* file = get_file(fd);
+
+	if (!file) {
+		return -EBADF;
+	}
+
 	return vfs_file_read(file, buffer, count);
+}
+
+ssize_t vfs_pread(int fd, char* buffer, size_t count, off_t offset)
+{
+	if (!buffer) {
+		return -EINVAL;
+	}
+
+	if (count == 0) {
+		return 0;
+	}
+
+	struct vfs_file* file = get_file(fd);
+
+	if (!file) {
+		return -EBADF;
+	}
+
+	return __vfs_pread(file, buffer, count, &offset);
 }
 
 off_t vfs_lseek(int fd, off_t offset, int whence)

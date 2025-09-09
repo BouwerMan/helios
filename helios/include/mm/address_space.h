@@ -149,8 +149,10 @@ void address_space_init();
  *
  * Return: A pointer to the new memory_region, or NULL on failure.
  */
-struct memory_region*
-alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags);
+struct memory_region* alloc_mem_region(uptr start,
+				       uptr end,
+				       unsigned long prot,
+				       unsigned long flags);
 
 /**
  * destroy_mem_region - Destroys and deallocates a memory_region.
@@ -193,5 +195,4 @@ int map_region(struct address_space* vas,
 	       unsigned long prot,
 	       unsigned long flags);
 
-void address_space_dump(struct address_space* vas);
 struct address_space* alloc_address_space();

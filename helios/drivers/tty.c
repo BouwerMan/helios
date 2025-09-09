@@ -137,8 +137,12 @@ ssize_t __write_to_tty(struct tty* tty, const char* buffer, size_t count)
  *
  * Return: Number of bytes successfully written to the TTY
  */
-ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count)
+ssize_t tty_write(struct vfs_file* file,
+		  const char* buffer,
+		  size_t count,
+		  off_t* offset)
 {
+	(void)offset;
 	struct tty* tty = file->private_data;
 
 	return __write_to_tty(tty, buffer, count);
@@ -194,8 +198,12 @@ ssize_t __read_from_tty(struct tty* tty, char* buffer, size_t count)
 	return (ssize_t)bytes_read;
 }
 
-ssize_t tty_read(struct vfs_file* file, char* buffer, size_t count)
+ssize_t tty_read(struct vfs_file* file,
+		 char* buffer,
+		 size_t count,
+		 off_t* offset)
 {
+	(void)offset;
 	struct tty* tty = file->private_data;
 	return __read_from_tty(tty, buffer, count);
 }

@@ -273,6 +273,16 @@ struct page* alloc_pages(aflags_t flags, size_t order)
 	return pg;
 }
 
+struct page* alloc_zeroed_page(aflags_t flags)
+{
+	struct page* pg = alloc_page(flags);
+	if (pg) {
+		void* vaddr = (void*)PHYS_TO_HHDM(page_to_phys(pg));
+		memset(vaddr, 0, PAGE_SIZE);
+	}
+	return pg;
+}
+
 /**
  * @brief Allocates a contiguous block of pages and returns their virtual address.
  *

@@ -19,13 +19,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "kernel/tasks/fork.h"
+#include "arch/mmu/vmm.h"
 #include "fs/vfs.h"
-#include <arch/mmu/vmm.h>
-#include <kernel/tasks/fork.h>
-#include <kernel/tasks/scheduler.h>
-#include <lib/log.h>
-#include <lib/string.h>
-#include <mm/address_space.h>
+#include "kernel/tasks/scheduler.h"
+#include "lib/log.h"
+#include "lib/string.h"
+#include "mm/address_space.h"
+#include "mm/address_space_dump.h"
 
 extern struct scheduler_queue squeue;
 
@@ -63,7 +64,7 @@ pid_t do_fork(struct registers* regs)
 	res = address_space_dup(child->vas, parent->vas);
 	if (res < 0) {
 		log_error("Could not duplicate address space");
-		address_space_dump(parent->vas);
+		VAS_DUMP(parent->vas);
 		return -1;
 	}
 

@@ -27,7 +27,7 @@
 #include "kernel/tasks/scheduler.h"
 #include "lib/log.h"
 #include "lib/string.h"
-#include "mm/address_space.h"
+#include "mm/address_space_dump.h"
 
 /*******************************************************************************
 * Global Variable Definitions
@@ -410,7 +410,7 @@ static void default_exception_handler(struct registers* registers)
 	struct task* task = get_current_task();
 	log_error("Faulted in task '%s' (PID: %d)", task->name, task->pid);
 
-	address_space_dump(task->vas);
+	VAS_DUMP(task->vas);
 
 	void* return_address = (void*)(*(u64*)(registers->rbp + 8));
 

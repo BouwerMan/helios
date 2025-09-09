@@ -35,6 +35,9 @@ typedef unsigned long vaddr_t;
 
 typedef int pid_t;
 
+typedef size_t pfn_t;
+typedef long pgoff_t;
+
 typedef struct {
 	int counter;
 } atomic_t;

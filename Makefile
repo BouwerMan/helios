@@ -102,10 +102,10 @@ qemu: iso
 		-d cpu_reset \
 		-D log.txt \
 		-no-reboot \
-		-serial stdio \
 		-enable-kvm \
 		-cpu host \
-		# -display none
+		-serial stdio
+		# -debugcon stdio
 
 gdbinit:
 	@echo "Generating .gdbinit..."
@@ -118,6 +118,7 @@ qemugdb: iso gdbinit
 		-d cpu_reset \
 		-D log.txt \
 		-serial stdio
+		# -debugcon stdio
 
 clean:
 	-@$(MAKE) -C ./libc clean

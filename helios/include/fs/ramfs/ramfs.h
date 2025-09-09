@@ -82,8 +82,14 @@ void ramfs_init();
 struct vfs_superblock* ramfs_mount(const char* source, int flags);
 int ramfs_open(struct vfs_inode* inode, struct vfs_file* file);
 int ramfs_close(struct vfs_inode* inode, struct vfs_file* file);
-ssize_t ramfs_read(struct vfs_file* file, char* buffer, size_t count);
-ssize_t ramfs_write(struct vfs_file* file, const char* buffer, size_t count);
+
+ssize_t
+ramfs_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset);
+ssize_t ramfs_write(struct vfs_file* file,
+		    const char* buffer,
+		    size_t count,
+		    off_t* offset);
+
 int ramfs_readdir(struct vfs_file* file, struct dirent* dirent, off_t offset);
 int ramfs_readpage(struct vfs_inode* inode, struct page* page);
 

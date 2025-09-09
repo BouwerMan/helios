@@ -110,7 +110,7 @@ void serial_tty_init()
 		panic("Didn't get free pages");
 	}
 	rb->size = RING_BUFFER_SIZE;
-	spinlock_init(&rb->lock);
+	spin_init(&rb->lock);
 
 	sem_init(&tty->write_lock, 1);
 	register_tty(tty);
@@ -129,6 +129,7 @@ void write_serial(char a)
 	while (is_transmit_empty() == 0)
 		__builtin_ia32_pause();
 	outb(COM1_PORT, (u8)a);
+	// outb(0xe9, (u8)a);
 }
 
 /**

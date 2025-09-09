@@ -22,6 +22,7 @@
 #include "fs/vfs.h"
 #include "kernel/tasks/scheduler.h"
 #include "mm/address_space.h"
+#include "mm/address_space_dump.h"
 #include "mm/kmalloc.h"
 #include <arch/gdt/gdt.h>
 #include <arch/mmu/vmm.h>
@@ -115,7 +116,7 @@ struct exec_context* prepare_exec(const char* path,
 		return nullptr;
 	}
 
-	address_space_dump(ctx->new_vas);
+	VAS_DUMP(ctx->new_vas);
 
 	ctx->prepared = true;
 	return ctx;

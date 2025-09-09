@@ -74,49 +74,50 @@ enum LOG_MODE {
 		}                                                                                                   \
 	} while (0)
 
-#if !defined(log_debug) || defined(FORCE_LOG_REDEF)
+#define _LOG_UNUSED(fmt, ...)                                                 \
+	do {                                                                  \
+		(void)fmt;                                                    \
+		(void)(0 __VA_OPT__(, __VA_ARGS__));                          \
+		if (0) {                                                      \
+			/* compile-time format checking, no runtime cost */   \
+			(void)snprintf(                                       \
+				(char*)0, 0, fmt __VA_OPT__(, ) __VA_ARGS__); \
+		}                                                             \
+	} while (0)
+
 #if LOG_LEVEL <= LOG_LEVEL_DEBUG
 #define log_debug(fmt, ...) \
 	_LOG_IMPL("[DEBUG]", "", fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
-#define log_debug(fmt, ...) ((void)0)
-#endif
+#define log_debug(fmt, ...) _LOG_UNUSED(fmt __VA_OPT__(, __VA_ARGS__))
 #endif
 
-#if !defined(log_info) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_INFO
 #define log_info(fmt, ...) \
 	_LOG_IMPL("[INFO] ", LOG_COLOR_CYAN, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
-#define log_info(fmt, ...) ((void)0)
-#endif
+#define log_info(fmt, ...) _LOG_UNUSED(fmt __VA_OPT__(, __VA_ARGS__))
 #endif
 
-#if !defined(log_warn) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_WARN
 #define log_warn(fmt, ...) \
 	_LOG_IMPL("[WARN] ", LOG_COLOR_YELLOW, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
-#define log_warn(fmt, ...) ((void)0)
-#endif
+#define log_warn(fmt, ...) _LOG_UNUSED(fmt __VA_OPT__(, __VA_ARGS__))
 #endif
 
-#if !defined(log_error) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_ERROR
 #define log_error(fmt, ...) \
 	_LOG_IMPL("[ERROR]", LOG_COLOR_RED, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
-#define log_error(fmt, ...) ((void)0)
-#endif
+#define log_error(fmt, ...) _LOG_UNUSED(fmt __VA_OPT__(, __VA_ARGS__))
 #endif
 
-#if !defined(log_init) || defined(FORCE_LOG_REDEF)
 #if LOG_LEVEL <= LOG_LEVEL_INFO
 #define log_init(fmt, ...) \
 	_LOG_IMPL("[INIT] ", LOG_COLOR_GREEN, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
-#define log_init(fmt, ...) ((void)0)
-#endif
+#define log_init(fmt, ...) _LOG_UNUSED(fmt __VA_OPT__(, __VA_ARGS__))
 #endif
 
 /**

@@ -9,11 +9,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <kernel/helios.h>
-#include <kernel/spinlock.h>
-#include <lib/list.h>
-#include <mm/page_alloc_flags.h>
-#include <mm/zones.h>
+#include "kernel/helios.h"
+#include "kernel/spinlock.h"
+#include "lib/list.h"
+#include "lib/string.h"
+#include "mm/page_alloc_flags.h"
+#include "mm/zones.h"
 
 static constexpr int MAX_ORDER = 10; // 2^10 pages (1024 pages), or 4MiB blocks
 
@@ -86,6 +87,8 @@ static inline struct page* alloc_page(aflags_t flags)
 {
 	return alloc_pages(flags, 0);
 }
+
+struct page* alloc_zeroed_page(aflags_t flags);
 
 /**
  * @brief Allocates a contiguous block of pages and returns their virtual address.
