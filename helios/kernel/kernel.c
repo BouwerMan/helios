@@ -178,6 +178,6 @@ void kernel_main()
 loop:
 	log_info("Entering idle loop");
 	for (;;) {
-		halt();
+		yield();
 	}
 }

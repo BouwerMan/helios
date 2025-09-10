@@ -1174,6 +1174,7 @@ fail:
 [[noreturn]]
 static void page_fault_fail(struct registers* r)
 {
+	// GDB BREAKPOINT
 	uint64_t fault_addr;
 	__asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
 	uint64_t cr3;

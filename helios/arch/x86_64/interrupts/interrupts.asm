@@ -137,10 +137,14 @@ interrupt_common_stub:
 	; Check if this is a syscall (interrupt 128)
 	cmp dword [rdi + INT_OFF], 128
 	je .syscall_path
+	; Check if this is a yield syscall (interrupt 48)
+	cmp dword [rdi + INT_OFF], 48
+	je .schedule_and_return
 
 .interrupt_path:
 	inc dword [rel g_interrupt_nesting_level]
 	call interrupt_handler
+	dec dword [rel g_interrupt_nesting_level]
 	jmp .schedule_and_return
 
 .syscall_path:
@@ -149,10 +153,12 @@ interrupt_common_stub:
 	; Fall through to schedule_and_return
 
 .schedule_and_return:
+	inc dword [rel g_interrupt_nesting_level]
 	mov rdi, r15 ; restore rdi to point to the struct registers
 	cld
 	call schedule
 	mov rdi, r15 ; rdi gets clobered by schedule
+	dec dword [rel g_interrupt_nesting_level]
 	; Fall through to interrupt_return
 	
 ; rdi: struct registers to pop from
@@ -162,6 +168,8 @@ interrupt_return:
 
 	; Only decrement nesting level for actual interrupts (not syscalls)
 	cmp dword [rdi + INT_OFF], 128
+	je .return_from_interrupt
+	cmp dword [rdi + INT_OFF], 48
 	je .return_from_interrupt
 	dec dword [rel g_interrupt_nesting_level]
 
