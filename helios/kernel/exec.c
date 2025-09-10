@@ -77,9 +77,8 @@ static int setup_user_stack(struct exec_context* ctx,
 * Public Function Definitions
 *******************************************************************************/
 
-struct exec_context* prepare_exec(const char* path,
-				  const char** argv,
-				  const char** envp)
+struct exec_context*
+prepare_exec(const char* path, const char** argv, const char** envp)
 {
 	log_debug("Preparing exec for %s", path);
 
@@ -108,8 +107,11 @@ struct exec_context* prepare_exec(const char* path,
 
 	vfs_close(fd);
 
-	int err = setup_user_stack(
-		ctx, DEFAULT_STACK_TOP, STACK_SIZE_PAGES, argv, envp);
+	int err = setup_user_stack(ctx,
+				   DEFAULT_STACK_TOP,
+				   STACK_SIZE_PAGES,
+				   argv,
+				   envp);
 
 	if (err < 0) {
 		log_error("Failed to setup user stack");
@@ -181,7 +183,8 @@ int __load_elf(struct exec_context* ctx, struct vfs_file* file)
 		return -ENOEXEC;
 	}
 
-	log_info("Loading ELF binary with entry point at 0x%lx", header->entry);
+	log_debug("Loading ELF binary with entry point at 0x%lx",
+		  header->entry);
 
 	if (header->type != ET_EXE) {
 		log_error("Invalid elf type: %d", header->type);
@@ -210,8 +213,9 @@ int __load_elf(struct exec_context* ctx, struct vfs_file* file)
 
 		switch (prog->type) {
 		case PT_LOAD:
-			if (load_program_header(
-				    ctx, file->dentry->inode, prog) < 0) {
+			if (load_program_header(ctx,
+						file->dentry->inode,
+						prog) < 0) {
 				// TODO: Free previous program sections
 				log_error("Failed to load program header");
 				return -1;
@@ -356,8 +360,12 @@ static int load_program_header(struct exec_context* ctx,
 		  (size_t)f.pgoff,
 		  (unsigned)f.delta);
 
-	int err = map_region(
-		ctx->new_vas, f, vstart, file_vend, prot, MAP_PRIVATE);
+	int err = map_region(ctx->new_vas,
+			     f,
+			     vstart,
+			     file_vend,
+			     prot,
+			     MAP_PRIVATE);
 	if (err) {
 		log_error("map FILE failed: err=%d", err);
 		return err;

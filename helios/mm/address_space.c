@@ -50,10 +50,8 @@ struct address_space* alloc_address_space()
 	return vas;
 }
 
-struct memory_region* alloc_mem_region(uptr start,
-				       uptr end,
-				       unsigned long prot,
-				       unsigned long flags)
+struct memory_region*
+alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags)
 {
 	struct memory_region* mr = slab_alloc(&mem_cache);
 	if (!mr) return nullptr;
@@ -78,8 +76,10 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
 	log_debug("Duplicating address space");
 	struct memory_region* pos = nullptr;
 	list_for_each_entry (pos, &src->mr_list, list) {
-		struct memory_region* new_mr = alloc_mem_region(
-			pos->start, pos->end, pos->prot, pos->flags);
+		struct memory_region* new_mr = alloc_mem_region(pos->start,
+								pos->end,
+								pos->prot,
+								pos->flags);
 
 		if (!new_mr) {
 			log_error("Could not allocate mem region");

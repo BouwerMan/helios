@@ -17,11 +17,13 @@ AlignTrailingComments:
   OverEmptyLines: 2
 AlignAfterOpenBracket: Align
 PointerAlignment: Left
+CommentPragmas: '^ IWYU pragma:'
 
 AlignConsecutiveAssignments: false
 AlignConsecutiveDeclarations: false
 AlignEscapedNewlines: Left
 AlignOperands: true
+AllowAllArgumentsOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortBlocksOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: true
@@ -51,7 +53,7 @@ PenaltyBreakComment: 10
 PenaltyBreakFirstLessLess: 0
 PenaltyBreakString: 10
 PenaltyExcessCharacter: 100
-PenaltyReturnTypeOnItsOwnLine: 200
+PenaltyReturnTypeOnItsOwnLine: 60
 
 ForEachMacros:
 - 'hlist_for_each'
@@ -62,3 +64,5 @@ ForEachMacros:
 - 'list_for_each_entry_continue'
 - 'hash_for_each'
 - 'hash_for_each_possible'
+
+SpaceAfterCStyleCast: false

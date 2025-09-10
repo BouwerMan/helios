@@ -863,7 +863,10 @@ static void task_remove(struct task* task)
 static void idle_task_entry()
 {
 	while (1) {
-		halt();
+		if (need_reschedule || !list_empty(&squeue.ready_list)) {
+			yield();
+		}
+		__builtin_ia32_pause();
 	}
 }
 

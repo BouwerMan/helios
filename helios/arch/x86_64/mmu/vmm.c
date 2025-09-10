@@ -35,7 +35,7 @@
 #include <uapi/helios/mman.h>
 
 #undef LOG_LEVEL
-#define LOG_LEVEL 1
+#define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
 #include <lib/log.h>
 #undef FORCE_LOG_REDEF
@@ -91,10 +91,8 @@ static void page_fault_fail(struct registers* r);
  *               virtual address, or NULL if the entry does not exist and
  *               @create is false.
  */
-static pte_t* walk_page_table(pgd_t* pml4,
-			      uptr vaddr,
-			      bool create,
-			      flags_t flags);
+static pte_t*
+walk_page_table(pgd_t* pml4, uptr vaddr, bool create, flags_t flags);
 
 static void log_page_table_walk(u64* pml4, uptr vaddr);
 
@@ -124,9 +122,8 @@ static bool is_table_empty(uint64_t* table);
  *
  * @return       True if the table is empty after pruning, false otherwise.
  */
-static bool prune_page_table_recursive(uint64_t* table,
-				       int level,
-				       uintptr_t vaddr);
+static bool
+prune_page_table_recursive(uint64_t* table, int level, uintptr_t vaddr);
 
 /**
  * @brief Invalidates a single page in the TLB (Translation Lookaside Buffer).
@@ -189,8 +186,9 @@ void vmm_init()
 	log_debug("Current PML4: %p", (void*)kernel.pml4);
 	for (size_t i = 0; i < bootinfo->memmap_entry_count; i++) {
 		struct bootinfo_memmap_entry* entry = &bootinfo->memmap[i];
-		map_memmap_entry(
-			kernel.pml4, entry, bootinfo->executable.virtual_base);
+		map_memmap_entry(kernel.pml4,
+				 entry,
+				 bootinfo->executable.virtual_base);
 	}
 
 	vmm_load_cr3(HHDM_TO_PHYS(kernel.pml4));
@@ -238,8 +236,10 @@ int vmm_map_page(pgd_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
 
 	// We want PAGE_PRESENT and PAGE_WRITE on almost all the higher levels
 	flags_t walk_flags = flags & (PAGE_USER | PAGE_PRESENT | PAGE_WRITE);
-	pte_t* pte = walk_page_table(
-		pml4, vaddr, true, walk_flags | PAGE_PRESENT | PAGE_WRITE);
+	pte_t* pte = walk_page_table(pml4,
+				     vaddr,
+				     true,
+				     walk_flags | PAGE_PRESENT | PAGE_WRITE);
 
 	if (!pte || pte->pte & PAGE_PRESENT) {
 		log_warn("Could not find pte or pte is already present");
@@ -373,6 +373,9 @@ paddr_t get_phys_addr(pgd_t* pml4, vaddr_t vaddr)
 {
 	u64 low = vaddr & FLAGS_MASK;
 	pte_t* pte = walk_page_table(pml4, vaddr & PAGE_FRAME_MASK, false, 0);
+	if (!pte || !(pte->pte & PAGE_PRESENT)) {
+		return 0;
+	}
 
 	paddr_t paddr = pte->pte & PAGE_FRAME_MASK;
 
@@ -705,9 +708,8 @@ static bool is_table_empty(uint64_t* table)
  *
  * @return       True if the table is empty after pruning, false otherwise.
  */
-static bool prune_page_table_recursive(uint64_t* table,
-				       int level,
-				       uintptr_t vaddr)
+static bool
+prune_page_table_recursive(uint64_t* table, int level, uintptr_t vaddr)
 {
 	size_t index = get_table_index(level, vaddr);
 	uintptr_t entry = table[index];
@@ -734,10 +736,8 @@ static bool prune_page_table_recursive(uint64_t* table,
 	return is_table_empty(table);
 }
 
-static pte_t* walk_page_table(pgd_t* pml4,
-			      uptr vaddr,
-			      bool create,
-			      flags_t flags)
+static pte_t*
+walk_page_table(pgd_t* pml4, uptr vaddr, bool create, flags_t flags)
 {
 	if (create && (flags & PAGE_PRESENT) == 0) {
 		log_warn(
@@ -818,8 +818,10 @@ static void map_memmap_entry(uint64_t* pml4,
 		if (entry->type != LIMINE_MEMMAP_EXECUTABLE_AND_MODULES)
 			continue;
 		uintptr_t exe_virt = (phys - start) + exe_virt_base;
-		vmm_map_page(
-			(pgd_t*)pml4, exe_virt, phys, flags & ~PAGE_NO_EXECUTE);
+		vmm_map_page((pgd_t*)pml4,
+			     exe_virt,
+			     phys,
+			     flags & ~PAGE_NO_EXECUTE);
 	}
 }
 
@@ -937,8 +939,10 @@ static int do_demand_paging(struct registers* r)
 				  (unsigned long)vaddr);
 			return -ENOMEM;
 		}
-		int err = vmm_map_page(
-			vas->pml4, vaddr, page_to_phys(page), prot_flags);
+		int err = vmm_map_page(vas->pml4,
+				       vaddr,
+				       page_to_phys(page),
+				       prot_flags);
 		if (err < 0) {
 			log_error(
 				"Map anon vaddr=0x%lx paddr=0x%lx failed err=%d",

@@ -176,6 +176,7 @@ void kernel_main()
 	outword(0x604, 0x2000);
 #endif
 loop:
+	yield_blocked();
 	log_info("Entering idle loop");
 	for (;;) {
 		yield();
