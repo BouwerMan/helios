@@ -126,8 +126,9 @@ void serial_tty_init()
  */
 void write_serial(char a)
 {
-	while (is_transmit_empty() == 0)
+	while (is_transmit_empty() == 0) {
 		__builtin_ia32_pause();
+	}
 	outb(COM1_PORT, (u8)a);
 	// outb(0xe9, (u8)a);
 }
@@ -142,8 +143,12 @@ void write_serial(char a)
  */
 void write_serial_string(const char* s)
 {
-	while (*s)
-		write_serial(*s++);
+	while (*s) {
+		while (is_transmit_empty() == 0) {
+			__builtin_ia32_pause();
+		}
+		outb(COM1_PORT, (u8)(*s++));
+	}
 }
 
 /**
