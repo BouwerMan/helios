@@ -128,7 +128,7 @@ static int __split_path(const char* path, char** parent_out, char** name_out);
  */
 void vfs_init()
 {
-	sb_list = kmalloc(sizeof(uintptr_t) * 8);
+	sb_list = (struct vfs_superblock**)kmalloc(sizeof(*sb_list) * 8);
 
 	int res = slab_cache_init(&dentry_cache,
 				  "VFS Dentry",
@@ -516,7 +516,8 @@ struct vfs_dentry* __dentry_lookup(struct vfs_dentry* parent, const char* name)
 	struct vfs_dentry* child = dentry_alloc(parent, name);
 
 	// Check hash table first
-	if ((found = dentry_ht_check(child))) {
+	found = dentry_ht_check(child);
+	if (found) {
 		// Since we found it, we free all the child init stuff then
 		// return found
 		log_debug("Found dentry %s in hash table", name);
@@ -778,9 +779,11 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags)
 	if (!dentry || !dentry->inode) {
 		log_debug("Dentry not found for path: %s", path);
 		if (flags & O_CREAT) {
-			int res = vfs_create(
-				norm_path, VFS_PERM_ALL, flags, &dentry);
-			if (res < 0) {
+			int res = vfs_create(norm_path,
+					     VFS_PERM_ALL,
+					     flags,
+					     &dentry);
+			if (res < 0 || !dentry || !dentry->inode) {
 				kfree(norm_path);
 				return res;
 			}
@@ -1159,10 +1162,8 @@ ssize_t vfs_pwrite(int fd, const char* buffer, size_t count, off_t offset)
 	return __vfs_pwrite(file, buffer, count, &offset);
 }
 
-ssize_t __vfs_pread(struct vfs_file* file,
-		    char* buffer,
-		    size_t count,
-		    off_t* offset)
+ssize_t
+__vfs_pread(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
 {
 	if (!file || !offset || !buffer) {
 		return -EINVAL;
@@ -1234,7 +1235,7 @@ off_t vfs_lseek(int fd, off_t offset, int whence)
 {
 	struct vfs_file* file = get_file(fd);
 	if (!file) {
-		return -VFS_ERR_INVAL;
+		return -EBADF;
 	}
 
 	switch (whence) {
@@ -1246,9 +1247,10 @@ off_t vfs_lseek(int fd, off_t offset, int whence)
 	case SEEK_END:
 		file->f_pos = (off_t)file->dentry->inode->f_size + offset;
 		return file->f_pos;
+	default: break;
 	}
 
-	return -VFS_ERR_INVAL;
+	return -EINVAL;
 }
 
 struct vfs_file* get_file(int fd)
@@ -1628,7 +1630,8 @@ char* vfs_normalize_path(const char* path, struct vfs_dentry* base_dir)
 	if (stack_depth == 0) {
 		char* result = kmalloc(2);
 		if (result) {
-			strcpy(result, "/");
+			result[0] = '/';
+			result[1] = '\0';
 		}
 		kfree(abs_path);
 		return result;

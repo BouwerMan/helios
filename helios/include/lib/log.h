@@ -37,7 +37,6 @@ enum LOG_MODE {
 #undef log_error
 #undef log_init
 #endif
-// TODO: Make screen accept ANSI color codes
 
 // This internal macro handles the heavy lifting of formatting the log message.
 // It captures the length from snprintf and passes it to log_output to avoid a strlen call.
@@ -74,15 +73,16 @@ enum LOG_MODE {
 		}                                                                                                   \
 	} while (0)
 
-#define _LOG_UNUSED(fmt, ...)                                                 \
-	do {                                                                  \
-		(void)fmt;                                                    \
-		(void)(0 __VA_OPT__(, __VA_ARGS__));                          \
-		if (0) {                                                      \
-			/* compile-time format checking, no runtime cost */   \
-			(void)snprintf(                                       \
-				(char*)0, 0, fmt __VA_OPT__(, ) __VA_ARGS__); \
-		}                                                             \
+#define _LOG_UNUSED(fmt, ...)                                               \
+	do {                                                                \
+		(void)fmt;                                                  \
+		(void)(0 __VA_OPT__(, __VA_ARGS__));                        \
+		if (0) {                                                    \
+			/* compile-time format checking, no runtime cost */ \
+			(void)snprintf((char*)0,                            \
+				       0,                                   \
+				       fmt __VA_OPT__(, ) __VA_ARGS__);     \
+		}                                                           \
 	} while (0)
 
 #if LOG_LEVEL <= LOG_LEVEL_DEBUG

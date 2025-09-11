@@ -345,7 +345,7 @@ static int load_program_header(struct exec_context* ctx,
 		.inode = inode,
 		.file_lo = (off_t)fstart,
 		.file_hi = (off_t)(prog->offset + prog->size_in_file),
-		.pgoff = (u64)fstart >> PAGE_SHIFT,
+		.pgoff = (long)(fstart >> PAGE_SHIFT),
 		.delta = delta,
 	};
 
@@ -425,14 +425,7 @@ static int setup_user_stack(struct exec_context* ctx,
 		   PROT_READ | PROT_WRITE,
 		   MAP_ANONYMOUS | MAP_PRIVATE | MAP_GROWSDOWN);
 
-	// Just some defaults just in case
 	// TODO: Split this into new function
-	if (argv == nullptr) {
-		argv = (const char*[]) { "helios", NULL };
-	}
-	if (envp == nullptr) {
-		envp = (const char*[]) { "PATH=/bin", NULL };
-	}
 
 	struct address_space* vas = ctx->new_vas;
 	uptr current_sp = stack_top;
@@ -440,8 +433,22 @@ static int setup_user_stack(struct exec_context* ctx,
 
 	size_t envc = arg_len(envp);
 	size_t argc = arg_len(argv);
+
+	// Just some defaults just in case
+	if (envp == nullptr || envc == 0) {
+		envp = (const char*[]) { "PATH=/bin", NULL };
+		envc = 1;
+	}
+
+	if (argv == nullptr || argc == 0) {
+		argv = (const char*[]) { "helios", NULL };
+		argc = 1;
+	}
+
 	uptr env_addrs[envc];
 	uptr arg_addrs[argc];
+	memset(env_addrs, 0, sizeof(env_addrs));
+	memset(arg_addrs, 0, sizeof(arg_addrs));
 
 	for (ssize_t i = (ssize_t)envc - 1; i >= 0; i--) {
 		string = envp[i];

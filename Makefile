@@ -35,7 +35,7 @@ SRCFILES := $(shell find $(PROJDIRS) -type f -name "*.c")
 HDRFILES := $(shell find $(PROJDIRS) -type f -name "*.h")
 ALLFILES := $(SRCFILES) $(HDRFILES)
 
-.PHONY: all libc helios clean qemu headers iso todolist limine userspace compile_commands
+.PHONY: all libc helios clean qemu headers iso todolist limine userspace compile_commands tidy
 
 all: headers helios libc userspace
 
@@ -66,6 +66,13 @@ compile_commands:
 # Force recompiles so Bear sees every compile invocation across sub-makes.
 	@bear --output compile_commands.json -- $(MAKE) -B all
 	@echo "Wrote compile_commands.json"
+
+TIDY_FILES := $(shell git ls-files '*.c')
+
+tidy:
+	test -f compile_commands.json || (echo "error: compile_commands.json not found. Run 'make compile_commands' first."; exit 1)
+	@echo "Running clang-tidy on $(words $(TIDY_FILES)) files"
+	@echo "$(TIDY_FILES)" | xargs -n1 -P$$(nproc) clang-tidy -p . --quiet
 
 INITRAMFS_DIR := $(CURDIR)/sysroot/boot
 INITRAMFS_TAR := $(INITRAMFS_DIR)/initramfs.tar

@@ -1,0 +1,40 @@
+---
+# Keep formatting decisions in .clang-format
+FormatStyle: file
+
+# Only lint your project headers (tune this to your tree)
+HeaderFilterRegex: '^(.*/)?(helios/(include/|arch/|drivers/|fs/|kernel/|lib/|mm/)|libc/(include/|arch/|ctype/|stdio/|stdlib/|string/|sys/|unistd/)|userspace/)'
+
+# Baseline: strong static analysis, C-friendly readability/bugprone checks,
+# Linux-kernel module checks; explicitly drop the insecure buffer check.
+Checks: >
+  -*,
+  clang-analyzer-*,
+  -clang-analyzer-cplusplus*,
+  -clang-analyzer-osx.*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  bugprone-*,
+  -bugprone-reserved-identifier,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-too-small-loop-variable,
+  -readability-implicit-bool-conversion,
+  readability-misleading-indentation,
+  linuxkernel-*
+
+# Promote/style knobs you can uncomment later if you want a stricter gate:
+# WarningsAsErrors: >
+#   clang-analyzer-*,bugprone-*,linuxkernel-*
+
+# Make the implicit-bool rules play nice with idiomatic C:
+CheckOptions:
+  readability-implicit-bool-conversion.AllowIntegerConditions: 'true'    # allow: if (len) ...
+  readability-implicit-bool-conversion.AllowPointerConditions: 'true'    # allow: if (ptr) ...
+  readability-implicit-bool-conversion.UseUpperCaseLiteralSuffix: 'false'
+
+# Don’t spam on system headers
+SystemHeaders: false
+
+# Don’t inherit parent configs unless you want layering
+InheritParentConfig: false
+
+UseColor: true
