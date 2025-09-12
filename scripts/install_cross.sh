@@ -20,7 +20,7 @@ GCC_VERSION=gcc-15.2.0
 
 # Set to true to build the C++ compiler, false for C only.
 BUILD_CXX=false
-#
+
 # Function to check for required command-line tools.
 check_dependencies() {
 	echo "--- Checking for dependencies ---"

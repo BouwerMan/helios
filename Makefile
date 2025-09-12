@@ -35,6 +35,28 @@ SRCFILES := $(shell find $(PROJDIRS) -type f -name "*.c")
 HDRFILES := $(shell find $(PROJDIRS) -type f -name "*.h")
 ALLFILES := $(SRCFILES) $(HDRFILES)
 
+# boot d = boot from cdrom
+QEMU_MOUNTS := -cdrom $(OSNAME).iso -hdd ./fat.img -boot d 
+QEMU_MEM    := -m 4096M
+QEMU_FLAGS  := $(QEMU_MEM) $(QEMU_MOUNTS) -no-reboot -d cpu_reset -D cpu_reset_log.txt \
+	       -cpu host -device isa-debug-exit,iobase=0xF4,iosize=0x04
+
+ifeq ($(QEMU_USE_DEBUGCON), 1)
+	QEMU_FLAGS += -debugcon stdio
+else
+	QEMU_FLAGS += -serial stdio
+endif
+
+OVMF_SYS_PATH ?= /usr/share/edk2/x64
+OVMF_LOCAL_PATH ?= ovmf
+OVMF_CODE ?= OVMF_CODE.4m.fd
+OVMF_VARS ?= OVMF_VARS.4m.fd
+
+QEMU_UEFI := -drive if=pflash,format=raw,unit=0,file=$(OVMF_LOCAL_PATH)/$(OVMF_CODE),readonly=on \
+	     -drive if=pflash,format=raw,unit=1,file=$(OVMF_LOCAL_PATH)/$(OVMF_VARS) \
+	     -net none
+
+
 .PHONY: all libc helios clean qemu headers iso todolist limine userspace compile_commands tidy
 
 all: headers helios libc userspace
@@ -70,7 +92,7 @@ compile_commands:
 TIDY_FILES := $(shell git ls-files '*.c')
 
 tidy:
-	test -f compile_commands.json || (echo "error: compile_commands.json not found. Run 'make compile_commands' first."; exit 1)
+	@test -f compile_commands.json || (echo "error: compile_commands.json not found. Run 'make compile_commands' first."; exit 1)
 	@echo "Running clang-tidy on $(words $(TIDY_FILES)) files"
 	@echo "$(TIDY_FILES)" | xargs -n1 -P$$(nproc) clang-tidy -p . --quiet
 
@@ -89,9 +111,9 @@ limine/limine:
 iso: limine/limine initramfs
 	@echo "Creating bootable ISO..."
 	@mkdir -p $(SYSROOT)/boot/limine $(SYSROOT)/EFI/BOOT
-	@cp -v limine.conf limine/limine-bios.sys limine/limine-bios-cd.bin \
+	@cp limine.conf limine/limine-bios.sys limine/limine-bios-cd.bin \
 		  limine/limine-uefi-cd.bin $(SYSROOT)/boot/limine/
-	@cp -v limine/BOOTX64.EFI limine/BOOTIA32.EFI $(SYSROOT)/EFI/BOOT/
+	@cp limine/BOOTX64.EFI limine/BOOTIA32.EFI $(SYSROOT)/EFI/BOOT/
 	
 # Create the bootable ISO.
 	@xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \
@@ -102,35 +124,25 @@ iso: limine/limine initramfs
 # Install Limine stage 1 and 2 for legacy BIOS boot.
 	@./limine/limine bios-install $(OSNAME).iso
 
-qemu: iso
-	$(QEMU) -cdrom $(OSNAME).iso \
-		-m 4096M \
-		-hdd ./fat.img -boot d -s \
-		-d cpu_reset \
-		-D log.txt \
-		-no-reboot \
-		-enable-kvm \
-		-cpu host \
-		-serial stdio
-# -debugcon stdio
+ovmf:
+	@cp -r $(OVMF_SYS_PATH) $(OVMF_LOCAL_PATH)
+
+
+qemu: iso ovmf
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_UEFI) -enable-kvm
 
 gdbinit:
 	@echo "Generating .gdbinit..."
 	./scripts/gen_gdbinit.sh
 
-qemugdb: iso gdbinit
-	$(QEMU) -cdrom $(OSNAME).iso \
-		-m 4096M \
-		-hdd ./fat.img -boot d -s -S \
-		-d cpu_reset \
-		-D log.txt \
-		-serial stdio
-# -debugcon stdio
+qemugdb: iso gdbinit ovmf
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_UEFI) -s -S
 
 clean:
 	-@$(MAKE) -C ./libc clean
 	-@$(MAKE) -C ./helios clean
 	-@$(MAKE) -C ./limine clean
 	-@$(MAKE) -C ./userspace clean
-	-@rm -rf sysroot
+	-@rm -rf sysroot/
 	-@rm -rf *.iso
+	-@rm -rf ovmf/

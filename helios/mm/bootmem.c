@@ -63,8 +63,8 @@ static size_t total_page_count;
 // Number of elements in bitmap
 static size_t map_elems;
 static size_t bitmap_size;
-static uintptr_t boot_bitmap_phys;
-static uint64_t* boot_bitmap = nullptr;
+static uintptr_t boot_bitmap_phys = UINTPTR_MAX;
+static uint64_t* boot_bitmap = (uint64_t*)UINTPTR_MAX;
 
 static constexpr int BITSET_WIDTH = (sizeof(*boot_bitmap) * CHAR_BIT);
 
@@ -208,7 +208,8 @@ void bootmem_init()
 	}
 
 	// Ensure a valid location for the bitmap was found.
-	if (!boot_bitmap_phys || !boot_bitmap) {
+	if (boot_bitmap_phys == UINTPTR_MAX ||
+	    (uptr)boot_bitmap == UINTPTR_MAX) {
 		panic("Could not find valid location for memory bitmap");
 	}
 

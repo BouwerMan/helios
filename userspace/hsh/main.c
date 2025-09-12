@@ -189,7 +189,7 @@ int hsh_exit(char** args)
 int hsh_shutdown(char** args)
 {
 	(void)args;
-#ifdef SHUTDOWN
+#ifdef shutdown
 	shutdown();
 #endif
 	return 0;
@@ -356,6 +356,9 @@ int main(void)
 	printf("Terminal size: %sx%s\n",
 	       cols_str ? cols_str : "?",
 	       rows_str ? rows_str : "?");
+
+	// GDB BREAKPOINT
+	// hsh_shutdown(nullptr);
 
 	hsh_loop();
 

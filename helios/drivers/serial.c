@@ -116,6 +116,21 @@ void serial_tty_init()
 	register_tty(tty);
 }
 
+[[gnu::always_inline, gnu::used]]
+static inline void __write_char(char a)
+{
+	while (is_transmit_empty() == 0) {
+		__builtin_ia32_pause();
+	}
+	outb(COM1_PORT, (u8)a);
+}
+
+[[gnu::always_inline, gnu::used]]
+static inline void __write_debugcon(char a)
+{
+	outb(0xE9, (u8)a);
+}
+
 /**
  * @brief Writes a character to the serial port.
  *
@@ -126,11 +141,11 @@ void serial_tty_init()
  */
 void write_serial(char a)
 {
-	while (is_transmit_empty() == 0) {
-		__builtin_ia32_pause();
-	}
-	outb(COM1_PORT, (u8)a);
-	// outb(0xe9, (u8)a);
+#ifdef DEBUGCON
+	__write_debugcon(a);
+#else
+	__write_char(a);
+#endif /* DEBUGCON */
 }
 
 /**
@@ -144,10 +159,11 @@ void write_serial(char a)
 void write_serial_string(const char* s)
 {
 	while (*s) {
-		while (is_transmit_empty() == 0) {
-			__builtin_ia32_pause();
-		}
-		outb(COM1_PORT, (u8)(*s++));
+#ifdef DEBUGCON
+		__write_debugcon(*s++);
+#else
+		__write_char(*s++);
+#endif /* DEBUGCON */
 	}
 }
 

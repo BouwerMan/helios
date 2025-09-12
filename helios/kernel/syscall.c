@@ -334,11 +334,12 @@ void sys_shutdown(struct registers* r)
 	irq_log_flush();
 	console_flush();
 
-	log_warn("Shutting down in 1 second");
-	sleep(1000);
+	// log_warn("Shutting down in 1 second");
+	// sleep(1000);
 
 	// QEMU shutdown command
 	outword(0x604, 0x2000);
+	outb(0xF4, 0);
 }
 
 typedef void (*handler)(struct registers* r);

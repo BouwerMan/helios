@@ -15,6 +15,10 @@ K_CPPFLAGS := $(CPPFLAGS) \
 	      -D__KERNEL__ -DHELIOS_KERNEL \
 	      $(CPPFLAGS_DEBUG) $(CPPFLAGS_TESTS)
 
+ifeq ($(QEMU_USE_DEBUGCON), 1)
+	K_CPPFLAGS += -DDEBUGCON
+endif
+
 K_CFLAGS   := $(CFLAGS) $(KERNEL_ARCH_CFLAGS) -mcmodel=kernel -mno-red-zone
 
 # Linker: no libc, pull libgcc for compiler builtins if needed.

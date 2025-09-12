@@ -6,6 +6,8 @@ HELIOS_ROOT ?= $(shell git rev-parse --show-toplevel 2>/dev/null || echo $(CURDI
 
 OSNAME ?= HeliOS
 
+QEMU_USE_DEBUGCON ?= 1
+
 # Cross tools, can't be overridden otherwise normal linux tools will be used
 HOST_ARCH := x86_64
 HOST 	  := $(HOST_ARCH)-elf
