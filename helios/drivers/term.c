@@ -2,6 +2,7 @@
 #include "drivers/screen.h"
 #include "kernel/helios.h"
 #include "kernel/timer.h"
+#include "lib/log.h"
 #include "lib/string.h"
 #include "mm/kmalloc.h"
 #include "mm/page.h"

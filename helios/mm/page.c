@@ -1,6 +1,6 @@
 #include "mm/page.h"
-#include "kernel/panic.h"
-#include <arch/atomic.h>
+#include "arch/atomic.h"
+#include "kernel/assert.h"
 
 bool trylock_page(struct page* page)
 {
@@ -18,7 +18,7 @@ void lock_page(struct page* page)
 		waitqueue_commit_sleep(&page->wq);
 	}
 
-	kassert(flags_test_acquire(&page->flags, PG_LOCKED) &&
+	kassert(flags_test_acquire(&page->flags, PG_LOCKED),
 		"Failed to acquire page lock");
 }
 

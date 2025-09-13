@@ -29,13 +29,14 @@
 #include <lib/log.h>
 #undef FORCE_LOG_REDEF
 
-#include <kernel/bootinfo.h>
-#include <kernel/helios.h>
-#include <kernel/limine_requests.h>
-#include <kernel/panic.h>
-#include <limine.h>
-#include <mm/bootmem.h>
-#include <mm/page.h>
+#include "kernel/assert.h"
+#include "kernel/bootinfo.h"
+#include "kernel/helios.h"
+#include "kernel/limine_requests.h"
+#include "kernel/panic.h"
+#include "limine.h"
+#include "mm/bootmem.h"
+#include "mm/page.h"
 
 static constexpr size_t MAX_MEMMAP_ENTRIES_PER_PAGE =
 	PAGE_SIZE / sizeof(struct bootinfo_memmap_entry);
@@ -54,7 +55,7 @@ void bootinfo_init()
 		panic("Boot info missing a response");
 	}
 
-	kassert(mmap->entry_count <= MAX_MEMMAP_ENTRIES_PER_PAGE &&
+	kassert(mmap->entry_count <= MAX_MEMMAP_ENTRIES_PER_PAGE,
 		"Boot info memory map entry count exceeds maximum allowed entries per page");
 
 	struct bootinfo_memmap_entry* mmap_entries =

@@ -18,6 +18,7 @@
 enum LOG_MODE {
 	LOG_DIRECT,   // Output logs directly to screen/serial.
 	LOG_BUFFERED, // Buffer logs (e.g., for dmesg).
+	LOG_KLOG,
 };
 
 // ANSI Color Codes for Readability

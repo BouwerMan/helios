@@ -26,6 +26,7 @@
 #include "fs/vfs.h"
 #include "kernel/helios.h"
 #include "kernel/irq_log.h"
+#include "kernel/klog.h"
 #include "kernel/limine_requests.h"
 #include "kernel/panic.h"
 #include "kernel/syscall.h"
@@ -102,6 +103,12 @@ void kernel_main()
 	timer_init();
 	term_init();
 
+	log_init("Initializing klog");
+	struct klog_ring* ring = klog_init();
+	kernel.klog = ring;
+
+	set_log_mode(LOG_KLOG);
+
 	// list_devices();
 	// ctrl_init();
 	//
@@ -151,10 +158,10 @@ void kernel_main()
 
 	irq_log_init();
 	console_init();
-	attach_tty_to_console("ttyS0");
+	// attach_tty_to_console("ttyS0");
 	attach_tty_to_console("tty0");
 	keyboard_init();
-	kernel_console_init();
+	// kernel_console_init();
 
 	log_info("Successfully got out of bootstrapping hell");
 	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);

@@ -3,6 +3,7 @@
 #include "fs/imapping.h"
 #include "fs/vfs.h"
 #include "kernel/spinlock.h"
+#include "lib/log.h"
 #include "mm/page.h"
 
 /**

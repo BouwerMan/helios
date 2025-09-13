@@ -37,3 +37,5 @@ void write_serial_string(const char* s);
  * @tty: Pointer to the TTY device whose output buffer to drain
  */
 ssize_t serial_tty_write(struct tty* tty);
+
+void write_serial_n(const char* s, size_t len);

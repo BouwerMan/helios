@@ -59,9 +59,8 @@ struct inode_ops tty_device_ops = {
  *
  * Return: Number of bytes successfully copied to the ring buffer
  */
-static ssize_t tty_fill_buffer(struct ring_buffer* rb,
-			       const char* buffer,
-			       size_t count);
+static ssize_t
+tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_t count);
 
 /*******************************************************************************
  * Public Function Definitions
@@ -198,10 +197,8 @@ ssize_t __read_from_tty(struct tty* tty, char* buffer, size_t count)
 	return (ssize_t)bytes_read;
 }
 
-ssize_t tty_read(struct vfs_file* file,
-		 char* buffer,
-		 size_t count,
-		 off_t* offset)
+ssize_t
+tty_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
 {
 	(void)offset;
 	struct tty* tty = file->private_data;
@@ -271,9 +268,8 @@ void tty_drain_output_buffer(void* data)
  *
  * Return: Number of bytes successfully copied to the ring buffer
  */
-static ssize_t tty_fill_buffer(struct ring_buffer* rb,
-			       const char* buffer,
-			       size_t count)
+static ssize_t
+tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_t count)
 {
 	size_t i = 0;
 	unsigned long flags;

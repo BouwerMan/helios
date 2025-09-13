@@ -167,6 +167,20 @@ void write_serial_string(const char* s)
 	}
 }
 
+void write_serial_n(const char* s, size_t len)
+{
+	if (!s || len == 0) return;
+
+	const char* end = s + len;
+	while (s < end) {
+#ifdef DEBUGCON
+		__write_debugcon(*s++);
+#else
+		__write_char(*s++);
+#endif /* DEBUGCON */
+	}
+}
+
 /**
  * serial_tty_write - Drain the TTY output buffer to the serial port
  * @tty: Pointer to the TTY device whose output buffer to drain

@@ -19,22 +19,23 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <uapi/helios/errno.h>
+
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
 #include <lib/log.h>
 #undef FORCE_LOG_REDEF
 
-#include <arch/cache.h>
-#include <kernel/kmath.h>
-#include <kernel/panic.h>
-#include <kernel/spinlock.h>
-#include <lib/string.h>
-#include <mm/kmalloc.h>
-#include <mm/page.h>
-#include <mm/page_alloc.h>
-#include <mm/slab.h>
-#include <uapi/helios/errno.h>
+#include "arch/cache.h"
+#include "kernel/assert.h"
+#include "kernel/kmath.h"
+#include "kernel/spinlock.h"
+#include "lib/string.h"
+#include "mm/kmalloc.h"
+#include "mm/page.h"
+#include "mm/page_alloc.h"
+#include "mm/slab.h"
 
 /*******************************************************************************
 * Global Variable Definitions
@@ -594,8 +595,12 @@ void slab_test()
 	log_info(TESTING_HEADER, "Slab Allocator");
 
 	struct slab_cache test_cache = { 0 };
-	(void)slab_cache_init(
-		&test_cache, "Test cache", sizeof(uint64_t), 0, NULL, NULL);
+	(void)slab_cache_init(&test_cache,
+			      "Test cache",
+			      sizeof(uint64_t),
+			      0,
+			      NULL,
+			      NULL);
 	log_debug("Test cache slab size: %d pages", SLAB_SIZE_PAGES);
 
 	test_use_before_alloc(&test_cache);
@@ -946,7 +951,7 @@ static void test_use_before_alloc(struct slab_cache* cache)
 	// reinsert manually for test
 	slab_free(cache, obj);
 
-	kassert(slab->debug_error == true &&
+	kassert(slab->debug_error == true,
 		"Slab should be marked as corrupted after use-before-init");
 	log_info("Use-before-init test passed.");
 	slab->debug_error = false; // Reset for further tests
@@ -979,7 +984,7 @@ static void test_buffer_overflow(struct slab_cache* cache)
 
 	slab_free(cache, obj); // Should log "Overflow on freed object detected"
 
-	kassert(slab->debug_error == true &&
+	kassert(slab->debug_error == true,
 		"Slab should be marked as corrupted after overflow");
 	log_info("Buffer overflow test passed.");
 	slab->debug_error = false; // Reset for further tests
@@ -1013,7 +1018,7 @@ static void test_buffer_underflow(struct slab_cache* cache)
 	slab_free(cache,
 		  obj); // Should log "Underflow on freed object detected"
 
-	kassert(slab->debug_error == true &&
+	kassert(slab->debug_error == true,
 		"Slab should be marked as corrupted after underflow");
 	log_info("Buffer underflow test passed.");
 	slab->debug_error = false; // Reset for further tests
@@ -1043,7 +1048,7 @@ static void test_valid_usage(struct slab_cache* cache)
 	memset(obj, 0, cache->object_size); // Legal usage
 
 	slab_free(cache, obj); // Should not trigger any warnings or logs
-	kassert(slab->debug_error == false &&
+	kassert(slab->debug_error == false,
 		"Slab should not be marked as corrupted after valid usage");
 	log_info("Valid usage test passed.");
 }
@@ -1077,7 +1082,7 @@ static void test_object_alignment(struct slab_cache* cache)
 			log_error("Object at %p is not aligned to %lu",
 				  obj,
 				  cache->object_align);
-			kassert(false && "Slab object is not properly aligned");
+			kassert(false, "Slab object is not properly aligned");
 		}
 
 		slab_free(cache, obj);

@@ -26,6 +26,7 @@
 #include "drivers/serial.h"
 #include "kernel/bootinfo.h"
 #include "kernel/helios.h"
+#include "kernel/klog.h"
 #include "kernel/limine_requests.h"
 #include "lib/log.h"
 #include "limine.h"
@@ -60,47 +61,46 @@ void __arch_entry()
 
 	init_kernel_structure();
 
-	// Stage 1: Initialize logging and framebuffer
+	// Initialize logging and framebuffer
 
 	serial_port_init();
 	screen_init(COLOR_WHITE, COLOR_BLACK);
 
-	// Stage 2: Initialize descriptor tables
+	// Initialize descriptor tables
 
-	log_init("Init Stage 2: Initializing descriptor tables");
+	log_init("Initializing descriptor tables");
 
 	log_debug("Initializing GDT");
 	gdt_init();
 	log_debug("Initializing IDT");
 	idt_init();
 
-	// Stage 3: Initializing boot time memory management
+	// Initializing boot time memory management
 
-	log_init("Init Stage 3: Initializing boot time memory management");
+	log_init("Initializing boot time memory management");
 
 	bootmem_init();
 
 	bootinfo_init();
 
-	// Stage 4: Fully initialize memory management
+	// Fully initialize memory management
 
-	log_init("Init Stage 4: Fully initializing memory management");
+	log_init("Fully initializing memory management");
 
 	page_alloc_init();
 
-	// Stage 5: Initialize virtual memory management
+	// Initialize virtual memory management
 
-	log_init("Init Stage 5: Initializing virtual memory management");
+	log_init("Initializing virtual memory management");
 	vmm_init();
 
 	log_info(TESTING_HEADER, "VMM Pruning");
 	vmm_test_prune_single_mapping();
 	log_info(TESTING_FOOTER, "VMM Pruning");
 
-	// Stage 6: Initialize kernel stack and jump to kernel_main
+	// Initialize kernel stack and jump to kernel_main
 
-	log_init(
-		"Init Stage 6: Initializing kernel stack and jumping to kernel_main");
+	log_init("Initializing kernel stack and jumping to kernel_main");
 
 	// Bottom of stack
 	void* new_stack = get_free_pages(AF_KERNEL, STACK_SIZE_PAGES);

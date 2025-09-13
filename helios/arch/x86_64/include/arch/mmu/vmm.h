@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include <kernel/panic.h>
-#include <kernel/types.h>
-#include <mm/address_space.h>
-#include <mm/page.h>
-#include <mm/page_tables.h>
 #include <stdint.h>
+
+#include "kernel/assert.h"
+#include "kernel/types.h"
+#include "mm/address_space.h"
+#include "mm/page.h"
+#include "mm/page_tables.h"
 
 static constexpr int PML4_SIZE_PAGES = 1;
 static constexpr int PML4_ENTRIES = 512;
@@ -82,7 +83,7 @@ static inline uintptr_t vmm_read_cr3()
 static inline void vmm_load_cr3(uintptr_t pml4_phys_addr)
 {
 	// Ensure it's 4 KiB aligned
-	kassert((pml4_phys_addr & 0xFFF) == 0 &&
+	kassert((pml4_phys_addr & 0xFFF) == 0,
 		"CR3 address must be 4 KiB aligned");
 
 	__asm__ volatile("mov %0, %%cr3" ::"r"(pml4_phys_addr) : "memory");

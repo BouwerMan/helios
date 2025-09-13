@@ -39,7 +39,7 @@ ALLFILES := $(SRCFILES) $(HDRFILES)
 QEMU_MOUNTS := -cdrom $(OSNAME).iso -hdd ./fat.img -boot d 
 QEMU_MEM    := -m 4096M
 QEMU_FLAGS  := $(QEMU_MEM) $(QEMU_MOUNTS) -no-reboot -d cpu_reset -D cpu_reset_log.txt \
-	       -cpu host -device isa-debug-exit,iobase=0xF4,iosize=0x04
+	       -device isa-debug-exit,iobase=0xF4,iosize=0x04
 
 ifeq ($(QEMU_USE_DEBUGCON), 1)
 	QEMU_FLAGS += -debugcon stdio
@@ -129,7 +129,7 @@ ovmf:
 
 
 qemu: iso ovmf
-	$(QEMU) $(QEMU_FLAGS) $(QEMU_UEFI) -enable-kvm
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_UEFI) -enable-kvm -cpu host
 
 gdbinit:
 	@echo "Generating .gdbinit..."

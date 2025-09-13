@@ -26,9 +26,11 @@
  */
 #pragma once
 
-#include <kernel/container_of.h>
-#include <kernel/types.h>
 #include <stddef.h>
+
+#include "kernel/container_of.h"
+#include "kernel/rwonce.h"
+#include "kernel/types.h"
 
 static constexpr uptr LIST_POISON1 = 0x100;
 static constexpr uptr LIST_POISON2 = 0x122;
@@ -36,19 +38,6 @@ static constexpr uptr LIST_POISON2 = 0x122;
 // FIXME: I mix up the list and head orders a ton in this, standardize it or
 // I'll fight you
 // TODO: This will be the next big change, I'm going back to the linux way
-
-/**
- * __WRITE_ONCE - Ensures a value is written to a variable exactly once.
- * @x: The variable to write to.
- * @val: The value to write to the variable.
- *
- * This macro uses a volatile cast to prevent the compiler from optimizing
- * away the write operation, ensuring that the value is written exactly once.
- */
-#define __WRITE_ONCE(x, val)                        \
-	do {                                        \
-		*(volatile typeof(x)*)&(x) = (val); \
-	} while (0)
 
 #define LIST_HEAD_INIT(name) { &(name), &(name) }
 
@@ -63,14 +52,14 @@ static constexpr uptr LIST_POISON2 = 0x122;
  */
 static inline void INIT_LIST_HEAD(struct list_head* list)
 {
-	__WRITE_ONCE(list->next, list);
-	__WRITE_ONCE(list->prev, list);
+	WRITE_ONCE(list->next, list);
+	WRITE_ONCE(list->prev, list);
 }
 
 static inline void list_init(struct list_head* list)
 {
-	__WRITE_ONCE(list->next, list);
-	__WRITE_ONCE(list->prev, list);
+	WRITE_ONCE(list->next, list);
+	WRITE_ONCE(list->prev, list);
 }
 
 static inline bool list_empty(struct list_head* list)
@@ -157,7 +146,7 @@ static inline void __list_insert(struct list_head* new,
 	new->next = next;
 	new->prev = prev;
 
-	__WRITE_ONCE(prev->next, new);
+	WRITE_ONCE(prev->next, new);
 }
 
 /**
@@ -196,7 +185,7 @@ static inline void list_add_tail(struct list_head* head, struct list_head* new)
 static inline void __list_del(struct list_head* prev, struct list_head* next)
 {
 	next->prev = prev;
-	__WRITE_ONCE(prev->next, next);
+	WRITE_ONCE(prev->next, next);
 }
 
 /**
@@ -465,8 +454,8 @@ static inline void __hlist_del(struct hlist_node* n)
 	struct hlist_node* next = n->next;
 	struct hlist_node** pprev = n->pprev;
 
-	__WRITE_ONCE(*pprev, next);
-	if (next) __WRITE_ONCE(next->pprev, pprev);
+	WRITE_ONCE(*pprev, next);
+	if (next) WRITE_ONCE(next->pprev, pprev);
 }
 
 /**
@@ -479,8 +468,8 @@ static inline void __hlist_del(struct hlist_node* n)
 static inline void hlist_del(struct hlist_node* n)
 {
 	__hlist_del(n);
-	n->next = (void*)LIST_POISON1;
-	n->pprev = (void*)LIST_POISON2;
+	n->next = (struct hlist_node*)LIST_POISON1;
+	n->pprev = (struct hlist_node**)LIST_POISON2;
 }
 
 /**
@@ -569,8 +558,9 @@ static inline void hlist_add_behind(struct hlist_node* n,
 #define hlist_for_each_entry(pos, head, member)                             \
 	for (pos = hlist_entry_safe((head)->first, typeof(*(pos)), member); \
 	     pos;                                                           \
-	     pos = hlist_entry_safe(                                        \
-		     (pos)->member.next, typeof(*(pos)), member))
+	     pos = hlist_entry_safe((pos)->member.next,                     \
+				    typeof(*(pos)),                         \
+				    member))
 
 /**
  * hlist_count_nodes - count nodes in the hlist

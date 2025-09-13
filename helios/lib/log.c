@@ -25,6 +25,7 @@
 #include "drivers/term.h"
 #include "kernel/helios.h"
 #include "kernel/irq_log.h"
+#include "kernel/klog.h"
 
 static constexpr char interrupt_context_str[] = LOG_COLOR_MAGENTA
 	"[INT] " LOG_COLOR_RESET;
@@ -53,6 +54,13 @@ void log_output(const char* msg, int len)
 		} else {
 			vfs_file_write(g_kernel_console, msg, (size_t)len);
 		}
+		break;
+	case LOG_KLOG:
+		bool st = klog_try_write(kernel.klog,
+					 KLOG_ALERT,
+					 msg,
+					 (u32)len,
+					 nullptr);
 		break;
 	}
 }

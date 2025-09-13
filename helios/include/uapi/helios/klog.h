@@ -1,5 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-[[noreturn]]
-void panic(const char* message);
+/**
+ * Magic: 0x484C
+ * Version: 1
+ * hdr_len_8: 4
+ */

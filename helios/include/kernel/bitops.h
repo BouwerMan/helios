@@ -110,6 +110,9 @@
 		*_ptr = (*_ptr & ~_mask) | _val;                            \
 	} while (0)
 
+#define CHECK_ALIGN(POINTER, BYTE_COUNT) \
+	(((uintptr_t)(const void*)(POINTER)) % (BYTE_COUNT) == 0)
+
 /**
  * Count leading zeros (requires compiler builtin)
  */

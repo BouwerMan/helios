@@ -19,6 +19,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <uapi/helios/errno.h>
+
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
@@ -28,13 +30,13 @@
 #include "fs/devfs/devfs.h"
 #include "fs/ramfs/ramfs.h"
 #include "fs/vfs.h"
-#include <kernel/panic.h>
-#include <kernel/tasks/scheduler.h>
-#include <lib/hashtable.h>
-#include <lib/string.h>
-#include <mm/kmalloc.h>
-#include <mm/slab.h>
-#include <uapi/helios/errno.h>
+#include "kernel/assert.h"
+#include "kernel/panic.h"
+#include "kernel/tasks/scheduler.h"
+#include "lib/hashtable.h"
+#include "lib/string.h"
+#include "mm/kmalloc.h"
+#include "mm/slab.h"
 
 // TODO: Find a better way to handle some of these icky globals, also def need
 // some locks
@@ -1930,7 +1932,7 @@ int test_split_path()
 		 tests - fails,
 		 tests);
 
-	kassert(fails == 0 && "Some tests failed!");
+	kassert(fails == 0, "Some tests failed!");
 
 	log_info(TESTING_FOOTER, "Path Splitter");
 

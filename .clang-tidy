@@ -17,6 +17,7 @@ Checks: >
   -bugprone-reserved-identifier,
   -bugprone-easily-swappable-parameters,
   -bugprone-too-small-loop-variable,
+  -bugprone-sizeof-expression,
   -readability-implicit-bool-conversion,
   readability-misleading-indentation,
   linuxkernel-*

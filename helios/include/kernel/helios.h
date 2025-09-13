@@ -73,22 +73,39 @@
  */
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
+// -------- branch prediction helpers --------
 /**
  * @brief Macro to indicate that the given expression is unlikely to be true.
  * @param expr The expression to evaluate.
  */
+#ifndef unlikely
+#if __has_builtin(__builtin_expect) || defined(__GNUC__)
 #define unlikely(expr) __builtin_expect(!!(expr), 0)
+#else
+#define unlikely(expr) (!!(expr))
+#endif
+#endif
 
 /**
  * @brief Macro to indicate that the given expression is likely to be true.
  * @param expr The expression to evaluate.
  */
+#ifndef likely
+#if __has_builtin(__builtin_expect) || defined(__GNUC__)
 #define likely(expr) __builtin_expect(!!(expr), 1)
+#else
+#define likely(expr) (!!(expr))
+#endif
+#endif
 
 #define BOCHS_BREAKPOINT (asm volatile("xchgw %bx, %bx"))
 #define QEMU_BREAKPOINT	 (__asm__ volatile("jmp $"))
 
-#define QEMU_SHUTDOWN() outword(0x604, 0x2000)
+#define QEMU_SHUTDOWN()                 \
+	({                              \
+		outword(0x604, 0x2000); \
+		outb(0xF4, 0);          \
+	})
 
 #define TESTING_HEADER                                                                        \
 	"\n\n*****************************************************************************\n" \
@@ -121,6 +138,8 @@ struct kernel_context {
 	struct idtr* idtr;
 	struct scheduler_queue* squeue;
 	struct screen_info* screen;
+
+	struct klog_ring* klog;
 
 	struct bootinfo bootinfo;
 

@@ -100,17 +100,15 @@ ssize_t console_write(struct vfs_file* file,
 	return (ssize_t)count;
 }
 
-ssize_t console_read(struct vfs_file* file,
-		     char* buffer,
-		     size_t count,
-		     off_t* offset)
+ssize_t
+console_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
 {
 	(void)file;
 	(void)offset;
 
 	// TODO: Don't hardcode this
 	struct tty* tty = find_tty_by_name("tty0");
-	__read_from_tty(tty, buffer, count);
+	return __read_from_tty(tty, buffer, count);
 }
 
 /**
