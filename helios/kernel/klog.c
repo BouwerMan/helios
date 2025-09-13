@@ -30,9 +30,9 @@ static int klog_emit_serial(const struct klog_header* hdr,
 
 static void klog_callback(void* data)
 {
+	BENCHMARK_START(klog_callback);
 	struct klog_cursor* cur = data;
 
-	BENCHMARK_START(KLOG_DRAIN);
 	int res = klog_drain(&g_klog_ring, cur, klog_emit_serial, nullptr, 64);
 
 	u64 delay = 100;
@@ -44,7 +44,7 @@ static void klog_callback(void* data)
 	case KLOG_DRAIN_EMIT_BACKPRESSURE:   delay = 200; break;
 	}
 
-	BENCHMARK_END(KLOG_DRAIN);
+	BENCHMARK_END(klog_callback);
 	timer_reschedule(&cur->timer, delay);
 }
 
@@ -209,7 +209,7 @@ void klog_fill_and_publish(struct klog_ring* rb,
 	hdr->version = KLOG_VERSION;
 	hdr->hdr_len_8 = KLOG_HDR_LEN_8;
 	hdr->seq = seq;
-	hdr->tsc = rdtsc();
+	hdr->tsc = clock_now_ns();
 	// TODO: per cpu ID
 	hdr->id = klog_pack_id(level, 0, 0);
 

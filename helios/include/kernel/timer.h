@@ -2,7 +2,9 @@
 #pragma once
 
 #include "arch/regs.h"
+#include "arch/tsc.h"
 #include "kernel/spinlock.h"
+#include "kernel/time.h"
 #include "kernel/types.h"
 #include <stdint.h>
 
@@ -12,28 +14,13 @@ static inline unsigned long millis_to_ticks(unsigned long ms)
 	return (ms * TIMER_HERTZ + 999) / 1000;
 }
 
-#define BENCHMARK_START(label) uint64_t label##_start = rdtsc()
+#define BENCHMARK_START(label) uint64_t label##_start = clock_now_ns()
 
 #define BENCHMARK_END(label)                     \
-	uint64_t label##_end = rdtsc();          \
-	log_debug(#label ": %lu (%lx) cycles",   \
+	uint64_t label##_end = clock_now_ns();   \
+	log_debug(#label ": %lu (%lx) ns",       \
 		  (label##_end - label##_start), \
 		  (label##_end - label##_start))
-
-static inline uint64_t rdtsc(void)
-{
-	uint32_t lo, hi;
-
-	// Serialize previous instructions to prevent reordering
-	__asm__ __volatile__(
-		"lfence\n" // wait for all prior instructions to complete
-		"rdtsc\n"  // read time-stamp counter
-		: "=a"(lo), "=d"(hi)
-		:
-		: "memory");
-
-	return ((uint64_t)hi << 32) | lo;
-}
 
 void timer_init(void);
 void timer_poll(void);

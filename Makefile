@@ -129,14 +129,14 @@ ovmf:
 
 
 qemu: iso ovmf
-	$(QEMU) $(QEMU_FLAGS) $(QEMU_UEFI) -enable-kvm -cpu host
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_UEFI) -enable-kvm -cpu host,migratable=no,+invtsc,hv_time,hv_frequencies
 
 gdbinit:
 	@echo "Generating .gdbinit..."
 	./scripts/gen_gdbinit.sh
 
 qemugdb: iso gdbinit ovmf
-	$(QEMU) $(QEMU_FLAGS) $(QEMU_UEFI) -s -S
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_UEFI) -s -S -cpu qemu64,tsc-frequency=3609600000,+invtsc,vmware-cpuid-freq=on
 
 clean:
 	-@$(MAKE) -C ./libc clean

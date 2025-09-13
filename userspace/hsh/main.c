@@ -305,7 +305,6 @@ char* read_line()
 					buffer[--position] = '\0';
 				}
 				break;
-				// GDB BREAKPOINT
 			case '\x1b': handle_escape(); break;
 			}
 		}
@@ -357,7 +356,6 @@ int main(void)
 	       cols_str ? cols_str : "?",
 	       rows_str ? rows_str : "?");
 
-	// GDB BREAKPOINT
 	// hsh_shutdown(nullptr);
 
 	hsh_loop();

@@ -22,12 +22,14 @@
 #include "arch/gdt/gdt.h"
 #include "arch/idt.h"
 #include "arch/mmu/vmm.h"
+#include "arch/tsc.h"
 #include "drivers/screen.h"
 #include "drivers/serial.h"
 #include "kernel/bootinfo.h"
 #include "kernel/helios.h"
 #include "kernel/klog.h"
 #include "kernel/limine_requests.h"
+#include "kernel/time.h"
 #include "lib/log.h"
 #include "limine.h"
 #include "mm/bootmem.h"
@@ -74,6 +76,9 @@ void __arch_entry()
 	gdt_init();
 	log_debug("Initializing IDT");
 	idt_init();
+
+	tsc_init();
+	clock_init(__rdtsc, __tsc_hz);
 
 	// Initializing boot time memory management
 
