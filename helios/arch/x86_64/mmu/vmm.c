@@ -47,6 +47,7 @@
 #include "kernel/bootinfo.h"
 #include "kernel/helios.h"
 #include "kernel/irq_log.h"
+#include "kernel/klog.h"
 #include "kernel/panic.h"
 #include "kernel/tasks/scheduler.h"
 #include "lib/string.h"
@@ -153,6 +154,16 @@ static inline void* _alloc_page_table(aflags_t flags)
 static inline void _free_page_table(void* table)
 {
 	free_pages(table, PML4_SIZE_PAGES);
+}
+
+static inline flags_t flags_from_mr(struct memory_region* mr)
+{
+	flags_t flags = PAGE_PRESENT | PAGE_USER;
+	if (mr->prot & PROT_READ) flags |= PAGE_PRESENT;
+	if (mr->prot & PROT_WRITE) flags |= PAGE_WRITE;
+	if (!(mr->prot & PROT_EXEC)) flags |= PAGE_NO_EXECUTE;
+	// if (mr->flags & MAP_USER) flags |= PAGE_USER;
+	return flags;
 }
 
 /*******************************************************************************
@@ -476,6 +487,7 @@ clean:
 int vmm_fork_region(struct address_space* dest_vas,
 		    struct memory_region* src_mr)
 {
+	// TODO: Base sharing policy on src_mr
 	int err = 0;
 	vaddr_t v = 0;
 
@@ -489,15 +501,18 @@ int vmm_fork_region(struct address_space* dest_vas,
 		pte_t* src_pte = walk_page_table(src_vas->pml4, v, false, 0);
 		if (!src_pte || !(src_pte->pte & PAGE_PRESENT)) {
 			// Because of demand paging, this may not be an error
-			if (src_mr->flags & MAP_ANONYMOUS) {
-				err = -EFAULT;
-				log_error(
-					"Source page not present at vaddr 0x%lx",
-					v);
-				goto clean;
-			} else {
-				continue;
-			}
+			// if (src_mr->flags & MAP_ANONYMOUS) {
+			// 	err = -EFAULT;
+			// 	log_error(
+			// 		"Source page not present at vaddr 0x%lx",
+			// 		v);
+			// 	goto clean;
+			// } else {
+			// 	continue;
+			// }
+
+			// TODO: Rework cleaning because it kinda funky rn
+			continue;
 		}
 
 		paddr_t p = src_pte->pte & PAGE_FRAME_MASK;
@@ -568,6 +583,9 @@ clean:
  */
 int vmm_unmap_region(struct address_space* vas, struct memory_region* mr)
 {
+	// TODO: This shouldn't return err probably. If we do error that could
+	// just mean we are doing lazy alloc and didn't allocate a page. Which
+	// isn't a failure.
 	for (vaddr_t v = mr->start; v < mr->end; v += PAGE_SIZE) {
 		int err = vmm_unmap_page(vas->pml4, v);
 		if (err < 0) {
@@ -609,6 +627,207 @@ int vmm_protect_page(struct address_space* vas, vaddr_t vaddr, flags_t new_prot)
 	return 0;
 }
 
+int __vmm_populate_one_anon(struct address_space* vas,
+			    struct memory_region* mr,
+			    vaddr_t vaddr)
+{
+	if (!vas || !mr) return -EINVAL;
+
+	flags_t flags = flags_from_mr(mr);
+
+	vaddr_t va = vaddr & ~(PAGE_SIZE - 1);
+
+	struct page* page = alloc_zeroed_page(AF_NORMAL);
+	if (!page) {
+		log_error("OOM allocating anon page for vaddr=0x%lx",
+			  (unsigned long)vaddr);
+		return -ENOMEM;
+	}
+
+	paddr_t p = page_to_phys(page);
+
+	int err = vmm_map_page(vas->pml4, va, p, flags);
+	if (err < 0) {
+		log_error("Map anon vaddr=0x%lx paddr=0x%lx failed err=%d",
+			  (unsigned long)vaddr,
+			  (unsigned long)p,
+			  err);
+		__free_page(page);
+		return err;
+	}
+
+	log_debug("Mapped ANON page vaddr=0x%lx paddr=0x%lx prot_flags=0x%lx",
+		  (unsigned long)vaddr,
+		  (unsigned long)p,
+		  (unsigned long)flags);
+
+	return 0;
+}
+
+int __vmm_populate_one_file(struct address_space* vas,
+			    struct memory_region* mr,
+			    vaddr_t vaddr)
+{
+	flags_t flags = flags_from_mr(mr);
+
+	struct vfs_inode* inode = mr->file.inode;
+	struct inode_mapping* map = inode->mapping;
+
+	// Compute file geometry for this faulting page
+	size_t page_off = (size_t)(vaddr - mr->start); // offset within VMA
+	off_t file_off =
+		mr->file.file_lo + (off_t)page_off;    // absolute file offset
+	off_t init_left = mr->file.file_hi - file_off; // may be <= 0
+	size_t to_read = (size_t)CLAMP(init_left, 0, (off_t)PAGE_SIZE);
+
+	pgoff_t index = (pgoff_t)(file_off >> PAGE_SHIFT);
+	size_t tail = PAGE_SIZE - to_read;
+
+	log_debug(
+		"FILE: vaddr=0x%lx page_off=0x%zx file_off=0x%llx "
+		"file_lo=0x%llx file_hi=0x%llx index=%llu to_read=%zu tail_zero=%zu",
+		(unsigned long)vaddr,
+		page_off,
+		(unsigned long long)file_off,
+		(unsigned long long)mr->file.file_lo,
+		(unsigned long long)mr->file.file_hi,
+		(unsigned long long)index,
+		to_read,
+		tail);
+
+	struct page* page = imap_lookup_or_create(map, index);
+	if (!page) {
+		log_error("OOM creating cache page (index=%llu) for inode=%p",
+			  (unsigned long long)index,
+			  (void*)inode);
+		return -ENOMEM;
+	}
+
+	if (to_read == 0) {
+		// Entire page is beyond file_hi within the FILE-VMA → pure BSS page
+		void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
+		memset(kvaddr, 0, PAGE_SIZE);
+		log_debug("FILE: BSS page zeroed (index=%llu)",
+			  (unsigned long long)index);
+		page->flags |= PG_UPTODATE;
+
+	} else if (!(page->flags & PG_UPTODATE)) {
+		// Cache miss: populate front bytes from disk, then zero the tail
+		if (map->imops && map->imops->readpage) {
+			int res = map->imops->readpage(inode, page);
+			if (res < 0) {
+				log_error(
+					"Readpage failed (index=%llu, file_off=0x%llx) err=%d",
+					(unsigned long long)index,
+					(unsigned long long)file_off,
+					res);
+				imap_remove(map, page);
+				return -EIO;
+			}
+			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
+			memset((char*)kvaddr + to_read, 0, tail);
+			log_debug(
+				"FILE: readpage filled %zu bytes, zeroed %zu (index=%llu)",
+				to_read,
+				tail,
+				(unsigned long long)index);
+		} else {
+			// No readpage -> we must synthesize the page (rare)
+			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
+			memset(kvaddr, 0, PAGE_SIZE);
+			log_warn(
+				"FILE: no readpage op; zeroed whole page (index=%llu)",
+				(unsigned long long)index);
+		}
+		page->flags |= PG_UPTODATE;
+
+	} else {
+		// Cache hit. Defensively ensure the last page's tail is zero.
+		if (to_read < PAGE_SIZE) {
+			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
+			memset((char*)kvaddr + to_read, 0, tail);
+			log_debug(
+				"FILE: cache hit; ensured tail-zero %zu bytes (index=%llu)",
+				tail,
+				(unsigned long long)index);
+		} else {
+			log_debug(
+				"FILE: cache hit; full page content present (index=%llu)",
+				(unsigned long long)index);
+		}
+	}
+
+	// Map into the task's page tables
+	int err = vmm_map_page(vas->pml4, vaddr, page_to_phys(page), flags);
+	if (err < 0) {
+		log_error(
+			"PF: map FILE vaddr=0x%lx paddr=0x%lx prot_flags=0x%lx failed err=%d "
+			"(index=%llu file_off=0x%llx)",
+			(unsigned long)vaddr,
+			(unsigned long)page_to_phys(page),
+			(unsigned long)flags,
+			err,
+			(unsigned long long)index,
+			(unsigned long long)file_off);
+		imap_remove(map, page);
+		return err;
+	}
+
+	unlock_page(page);
+	log_debug("PF: done vaddr=0x%lx page.ref=%d",
+		  (unsigned long)vaddr,
+		  atomic_read(&page->ref_count));
+	return 0;
+}
+
+// Populate one page at 'vaddr' in 'vas' according to its VMA.
+// Returns 0 on success; <0 on error (e.g., no VMA, perms, OOM, I/O error).
+int vmm_populate_one(struct address_space* vas, vaddr_t vaddr)
+{
+	if (!vas) return -EINVAL;
+	if (!is_within_vas(vas, vaddr)) return -EFAULT;
+
+	vaddr_t va = vaddr & ~(PAGE_SIZE - 1);
+
+	paddr_t p = get_phys_addr(vas->pml4, va);
+	if (p) {
+		return 0; // Addr exists
+	}
+
+	struct memory_region* mr = get_region(vas, va);
+	if (!mr) {
+		log_error("No memory region for vaddr 0x%lx", vaddr);
+		return -EFAULT;
+	}
+
+	const char* kind = (mr->kind == MR_FILE) ? "FILE" :
+			   (mr->kind == MR_ANON) ? "ANON" :
+						   "DEVICE";
+	char prot_str[4] = { (mr->prot & PROT_READ) ? 'r' : '-',
+			     (mr->prot & PROT_WRITE) ? 'w' : '-',
+			     (mr->prot & PROT_EXEC) ? 'x' : '-',
+			     '\0' };
+	log_debug(
+		"VMA: [%016lx..%016lx) kind=%s prot=%s flags=0x%lx private=%d",
+		(unsigned long)mr->start,
+		(unsigned long)mr->end,
+		kind,
+		prot_str,
+		(unsigned long)mr->flags,
+		(int)mr->is_private);
+
+	if (mr->kind == MR_ANON) {
+		return __vmm_populate_one_anon(vas, mr, va);
+	} else if (mr->kind == MR_FILE) {
+		return __vmm_populate_one_file(vas, mr, va);
+	} else {
+		log_error("Unknown memory region kind %d", mr->kind);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 /**
  * vmm_write_region - Write data to a virtual memory region
  * @vas: Address space containing the target virtual memory
@@ -646,9 +865,19 @@ void vmm_write_region(struct address_space* vas,
 		paddr_t paddr = get_phys_addr(vas->pml4, vaddr);
 
 		if (paddr == 0) {
-			log_error("get_phys_addr failed for vaddr 0x%lx",
-				  vaddr);
-			return;
+			int rc = vmm_populate_one(vas, vaddr);
+			if (rc < 0) {
+				log_error(
+					"vmm_populate_one failed for vaddr 0x%lx: %d",
+					vaddr,
+					rc);
+				return;
+			}
+			paddr = get_phys_addr(vas->pml4, vaddr);
+			log_debug(
+				"Populated page for vaddr 0x%lx, got paddr 0x%lx",
+				vaddr,
+				paddr);
 		}
 
 		vaddr_t kernel_vaddr = PHYS_TO_HHDM(paddr);
@@ -927,150 +1156,7 @@ static int do_demand_paging(struct registers* r)
 		return -EACCES;
 	}
 
-	flags_t prot_flags = PAGE_PRESENT | PAGE_USER;
-	if (mr->prot & PROT_WRITE) prot_flags |= PAGE_WRITE;
-	if (!(mr->prot & PROT_EXEC)) prot_flags |= PAGE_NO_EXECUTE;
-
-	if (mr->kind == MR_ANON) {
-		// Case 1: Anonymous region
-		struct page* page = alloc_zeroed_page(AF_NORMAL);
-		if (!page) {
-			log_error("OOM allocating anon page for vaddr=0x%lx",
-				  (unsigned long)vaddr);
-			return -ENOMEM;
-		}
-		int err = vmm_map_page(vas->pml4,
-				       vaddr,
-				       page_to_phys(page),
-				       prot_flags);
-		if (err < 0) {
-			log_error(
-				"Map anon vaddr=0x%lx paddr=0x%lx failed err=%d",
-				(unsigned long)vaddr,
-				(unsigned long)page_to_phys(page),
-				err);
-			return err;
-		}
-
-		log_debug(
-			"Mapped ANON page vaddr=0x%lx paddr=0x%lx prot_flags=0x%lx",
-			(unsigned long)vaddr,
-			(unsigned long)page_to_phys(page),
-			(unsigned long)prot_flags);
-		return 0;
-	}
-
-	// Case 2: File-backed region
-
-	struct vfs_inode* inode = mr->file.inode;
-	struct inode_mapping* map = inode->mapping;
-
-	// Compute file geometry for this faulting page
-	size_t page_off = (size_t)(vaddr - mr->start); // offset within VMA
-	off_t file_off =
-		mr->file.file_lo + (off_t)page_off;    // absolute file offset
-	off_t init_left = mr->file.file_hi - file_off; // may be <= 0
-	size_t to_read = (size_t)CLAMP(init_left, 0, (off_t)PAGE_SIZE);
-
-	pgoff_t index = (pgoff_t)(file_off >> PAGE_SHIFT);
-	size_t tail = PAGE_SIZE - to_read;
-
-	log_debug(
-		"FILE: vaddr=0x%lx page_off=0x%zx file_off=0x%llx "
-		"file_lo=0x%llx file_hi=0x%llx index=%llu to_read=%zu tail_zero=%zu",
-		(unsigned long)vaddr,
-		page_off,
-		(unsigned long long)file_off,
-		(unsigned long long)mr->file.file_lo,
-		(unsigned long long)mr->file.file_hi,
-		(unsigned long long)index,
-		to_read,
-		tail);
-
-	struct page* page = imap_lookup_or_create(map, index);
-	if (!page) {
-		log_error("OOM creating cache page (index=%llu) for inode=%p",
-			  (unsigned long long)index,
-			  (void*)inode);
-		return -ENOMEM;
-	}
-
-	if (to_read == 0) {
-		// Entire page is beyond file_hi within the FILE-VMA → pure BSS page
-		void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
-		memset(kvaddr, 0, PAGE_SIZE);
-		log_debug("FILE: BSS page zeroed (index=%llu)",
-			  (unsigned long long)index);
-		page->flags |= PG_UPTODATE;
-
-	} else if (!(page->flags & PG_UPTODATE)) {
-		// Cache miss: populate front bytes from disk, then zero the tail
-		if (map->imops && map->imops->readpage) {
-			int res = map->imops->readpage(inode, page);
-			if (res < 0) {
-				log_error(
-					"Readpage failed (index=%llu, file_off=0x%llx) err=%d",
-					(unsigned long long)index,
-					(unsigned long long)file_off,
-					res);
-				imap_remove(map, page);
-				return -EIO;
-			}
-			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
-			memset((char*)kvaddr + to_read, 0, tail);
-			log_debug(
-				"FILE: readpage filled %zu bytes, zeroed %zu (index=%llu)",
-				to_read,
-				tail,
-				(unsigned long long)index);
-		} else {
-			// No readpage -> we must synthesize the page (rare)
-			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
-			memset(kvaddr, 0, PAGE_SIZE);
-			log_warn(
-				"FILE: no readpage op; zeroed whole page (index=%llu)",
-				(unsigned long long)index);
-		}
-		page->flags |= PG_UPTODATE;
-
-	} else {
-		// Cache hit. Defensively ensure the last page's tail is zero.
-		if (to_read < PAGE_SIZE) {
-			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
-			memset((char*)kvaddr + to_read, 0, tail);
-			log_debug(
-				"FILE: cache hit; ensured tail-zero %zu bytes (index=%llu)",
-				tail,
-				(unsigned long long)index);
-		} else {
-			log_debug(
-				"FILE: cache hit; full page content present (index=%llu)",
-				(unsigned long long)index);
-		}
-	}
-
-	// Map into the task's page tables
-	int err =
-		vmm_map_page(vas->pml4, vaddr, page_to_phys(page), prot_flags);
-	if (err < 0) {
-		log_error(
-			"PF: map FILE vaddr=0x%lx paddr=0x%lx prot_flags=0x%lx failed err=%d "
-			"(index=%llu file_off=0x%llx)",
-			(unsigned long)vaddr,
-			(unsigned long)page_to_phys(page),
-			(unsigned long)prot_flags,
-			err,
-			(unsigned long long)index,
-			(unsigned long long)file_off);
-		imap_remove(map, page);
-		return err;
-	}
-
-	unlock_page(page);
-	log_debug("PF: done vaddr=0x%lx page.ref=%d",
-		  (unsigned long)vaddr,
-		  atomic_read(&page->ref_count));
-	return 0;
+	return vmm_populate_one(vas, vaddr);
 }
 
 static void page_fault(struct registers* r)
@@ -1114,9 +1200,11 @@ static void page_fault(struct registers* r)
 	if (!is_present_fault) {
 		// This is not a CoW fault. It might be a real error (like a segfault)
 		// or something else like demand paging. For now, we'll treat it as a failure.
-		if (do_demand_paging(r) == 0) {
+		int dc = do_demand_paging(r);
+		if (dc == 0) {
 			goto pass;
 		}
+		log_error("Demand paging failed with err=%d", dc);
 		goto fail;
 	}
 	if (!is_write_fault) {
@@ -1193,6 +1281,7 @@ static void page_fault_fail(struct registers* r)
 	set_log_mode(LOG_DIRECT);
 	irq_log_flush();
 	console_flush();
+	klog_flush();
 
 	log_error("=== PAGE FAULT ===");
 
@@ -1201,9 +1290,9 @@ static void page_fault_fail(struct registers* r)
 
 	VAS_DUMP(task->vas);
 
-	void* return_address = (void*)(*(u64*)(r->rbp + 8));
-
-	log_error("Return address: %p", return_address);
+	// void* return_address = (void*)(*(u64*)(r->rbp + 8));
+	//
+	// log_error("Return address: %p", return_address);
 
 	log_error(
 		"PAGE FAULT! err %lu (p:%d,rw:%d,user:%d,res:%d,id:%d) at 0x%lx. Caused by 0x%lx in address space %lx",

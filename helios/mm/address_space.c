@@ -160,13 +160,6 @@ int map_region(struct address_space* vas,
 		// Anonymous mapping, not backed by a file
 		mr->kind = MR_ANON;
 		mr->anon.tag = 0;
-		// TODO: Don't map pages until accessed (lazy allocation)
-		// Move this to page fault handler
-		int err = vmm_map_anon_region(vas, mr);
-		vmm_write_region(vas, mr->start, nullptr, mr->end - mr->start);
-		if (err < 0) {
-			return err;
-		}
 	} else {
 		// File-backed mapping
 		if (!file.inode) {

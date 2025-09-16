@@ -30,7 +30,7 @@ static int klog_emit_serial(const struct klog_header* hdr,
 
 static void klog_callback(void* data)
 {
-	BENCHMARK_START(klog_callback);
+	// BENCHMARK_START(klog_callback);
 	struct klog_cursor* cur = data;
 
 	int res = klog_drain(&g_klog_ring, cur, klog_emit_serial, nullptr, 64);
@@ -44,7 +44,7 @@ static void klog_callback(void* data)
 	case KLOG_DRAIN_EMIT_BACKPRESSURE:   delay = 200; break;
 	}
 
-	BENCHMARK_END(klog_callback);
+	// BENCHMARK_END(klog_callback);
 	timer_reschedule(&cur->timer, delay);
 }
 
