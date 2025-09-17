@@ -30,6 +30,7 @@
 * We will have a mapping of the entire physical memory space at hhdm_offset.
 */
 
+#include "mm/kmalloc.h"
 #include <stdint.h>
 #include <uapi/helios/errno.h>
 #include <uapi/helios/mman.h>
@@ -461,66 +462,66 @@ clean:
 }
 
 /**
- * vmm_fork_region - Fork a memory region with copy-on-write semantics
- * @dest_vas: Destination address space to create the forked region in
- * @src_mr: Source memory region to fork from
+ * vmm_fork_region - Clone a VMA into a destination address space with COW
+ * @dest_vas: destination address space (child)
+ * @src_mr:   source memory region (parent)
  *
- * This function implements copy-on-write (COW) memory region forking for
- * process creation. Instead of copying physical pages immediately, both
- * parent and child processes share the same physical pages, with write
- * access removed to trigger page faults on modification attempts.
+ * Maps present pages from @src_mr into @dest_vas. For MAP_PRIVATE, clears
+ * PAGE_WRITE in parent and child to arm COW; for MAP_SHARED, preserves flags.
+ * Non-present pages are skipped and will populate via demand paging later.
  *
- * The forking process:
- * 1. Maps each present page from source region into destination address space
- * 2. Removes write permissions from both source and destination mappings
- * 3. Increments reference count on shared physical pages
- * 4. Preserves original page permissions for pages that were already read-only
+ * Return: 0 on success; -ENOTSUP for MR_DEVICE; -ENOMEM on temp alloc;
+ *         or a negative error from vmm_map_page()/vmm_protect_page().
  *
- * Return: 0 on success, negative error code on failure
- * Errors: -EINVAL if dest_vas or src_mr is NULL
- *         -EFAULT if source page is not present or accessible
- *         Other negative values from vmm_map_page() or vmm_protect_page()
- *
- * Note: On failure, all successfully mapped pages in destination are unmapped
- *       and source page protections are restored to prevent inconsistent state.
+ * Context: caller must keep VMA/PT state stable (e.g., hold relevant locks).
  */
 int vmm_fork_region(struct address_space* dest_vas,
 		    struct memory_region* src_mr)
 {
-	// TODO: Base sharing policy on src_mr
 	int err = 0;
+	int out_err = 0;
 	vaddr_t v = 0;
 
 	if (!dest_vas || !src_mr) {
 		return -EINVAL;
 	}
+	if (src_mr->kind == MR_DEVICE) {
+		return -ENOTSUP;
+	}
 
 	struct address_space* src_vas = src_mr->owner;
+	if (dest_vas == src_vas) {
+		return -EINVAL;
+	}
 
-	for (v = src_mr->start; v < src_mr->end; v += PAGE_SIZE) {
+	size_t num_pages = (src_mr->end - src_mr->start) >> PAGE_SHIFT;
+	// temporary guard: 4GB limit @ 4K pages
+	if (num_pages > (1UL << 20)) {
+		return -ENOMEM;
+	}
+
+	size_t prot_idx = 0;
+	bool* protected = kzalloc(num_pages);
+	if (!protected) {
+		return -ENOMEM;
+	}
+	memset(protected, 0, num_pages);
+
+	for (v = src_mr->start; v < src_mr->end; v += PAGE_SIZE, prot_idx++) {
 		pte_t* src_pte = walk_page_table(src_vas->pml4, v, false, 0);
 		if (!src_pte || !(src_pte->pte & PAGE_PRESENT)) {
-			// Because of demand paging, this may not be an error
-			// if (src_mr->flags & MAP_ANONYMOUS) {
-			// 	err = -EFAULT;
-			// 	log_error(
-			// 		"Source page not present at vaddr 0x%lx",
-			// 		v);
-			// 	goto clean;
-			// } else {
-			// 	continue;
-			// }
-
-			// TODO: Rework cleaning because it kinda funky rn
-			continue;
+			continue; // not an error under demand paging
 		}
 
+		bool priv = src_mr->is_private;
 		paddr_t p = src_pte->pte & PAGE_FRAME_MASK;
-		flags_t current_flags = (src_pte->pte & FLAGS_MASK);
-		flags_t new_flags = current_flags & ~PAGE_WRITE;
+		flags_t current_flags = src_pte->pte & FLAGS_MASK;
+		flags_t new_flags = priv ? (current_flags & ~PAGE_WRITE) :
+					   current_flags;
 
 		err = vmm_map_page(dest_vas->pml4, v, p, new_flags);
 		if (err < 0) {
+			out_err = err;
 			goto clean;
 		}
 
@@ -528,28 +529,32 @@ int vmm_fork_region(struct address_space* dest_vas,
 		get_page(page);
 
 		// Skip write protecting if page is already read only
-		if (!(current_flags & PAGE_WRITE)) continue;
-
-		err = vmm_protect_page(src_vas, v, new_flags);
-		if (err < 0) {
-			goto clean;
+		if (priv && (current_flags & PAGE_WRITE)) {
+			err = vmm_protect_page(src_vas, v, new_flags);
+			if (err < 0) {
+				out_err = err;
+				goto clean;
+			}
+			protected[prot_idx] = true;
 		}
 	}
 
+	kfree(protected);
 	return 0;
 
 clean:
-	log_error("Failed to fork region: %d", err);
+	log_error("Failed to fork region: %d", out_err);
 
 	vaddr_t cleanup_end = v; // Don't include the failed page
-	for (v = src_mr->start; v < cleanup_end; v += PAGE_SIZE) {
+	prot_idx = 0;
+	for (v = src_mr->start; v < cleanup_end; v += PAGE_SIZE, prot_idx++) {
 		// Find the original flags to restore them
 		pte_t* src_pte = walk_page_table(src_vas->pml4, v, false, 0);
 		if (src_pte && (src_pte->pte & PAGE_PRESENT)) {
 			flags_t original_flags = (src_pte->pte & FLAGS_MASK) |
 						 PAGE_WRITE;
-			// Restore parent's write access if it was a writable page
-			if (src_mr->prot & PROT_WRITE) {
+			// Restore parent write permissions if we removed them
+			if (protected[prot_idx]) {
 				vmm_protect_page(src_vas, v, original_flags);
 			}
 		}
@@ -560,6 +565,7 @@ clean:
 		}
 	}
 
+	kfree(protected);
 	return err;
 }
 
@@ -627,6 +633,20 @@ int vmm_protect_page(struct address_space* vas, vaddr_t vaddr, flags_t new_prot)
 	return 0;
 }
 
+/**
+ * __vmm_populate_one_anon - Populate one anonymous page in @vas
+ * @vas:   target address space
+ * @mr:    anonymous memory region covering @vaddr
+ * @vaddr: virtual address within the page to populate (any offset)
+ *
+ * Allocates and maps a zeroed page for the given anonymous VMA. PTE
+ * permissions are derived from the region’s @prot.
+ *
+ * Return: 0 on success; -EINVAL on bad args; -ENOMEM on OOM; <0 from
+ *         vmm_map_page() on map failure.
+ *
+ * Context: may sleep; no I/O; caller must keep VMA/PT state stable.
+ */
 int __vmm_populate_one_anon(struct address_space* vas,
 			    struct memory_region* mr,
 			    vaddr_t vaddr)
@@ -664,6 +684,22 @@ int __vmm_populate_one_anon(struct address_space* vas,
 	return 0;
 }
 
+/**
+ * __vmm_populate_one_file - Populate one file-backed page in @vas
+ * @vas:   target address space
+ * @mr:    file-backed memory region covering @vaddr
+ * @vaddr: virtual address within the page to populate (any offset)
+ *
+ * Ensures the page’s contents are available (via page cache and, if
+ * needed, filesystem I/O) and maps it into @vas. Bytes past the
+ * initialized file range are zeroed. PTE permissions derive from the
+ * region’s @prot (e.g., private mappings may clear WRITE to arm COW).
+ *
+ * Return: 0 on success; -ENOMEM on OOM; -EIO on read failure; <0 from
+ *         vmm_map_page() on map failure.
+ *
+ * Context: may sleep and block on I/O; caller must keep VMA/PT state stable.
+ */
 int __vmm_populate_one_file(struct address_space* vas,
 			    struct memory_region* mr,
 			    vaddr_t vaddr)
@@ -780,8 +816,21 @@ int __vmm_populate_one_file(struct address_space* vas,
 	return 0;
 }
 
-// Populate one page at 'vaddr' in 'vas' according to its VMA.
-// Returns 0 on success; <0 on error (e.g., no VMA, perms, OOM, I/O error).
+/**
+ * vmm_populate_one - Populate one page at @vaddr according to its VMA
+ * @vas:   target address space
+ * @vaddr: virtual address inside the page to populate
+ *
+ * No-ops if the page is already present; otherwise locates the covering
+ * VMA and populates the page using the region’s backing policy (anonymous
+ * or file). PTE permissions are taken from the VMA.
+ *
+ * Return: 0 on success or already present; -EINVAL on bad args; -EFAULT if
+ *         no VMA covers @vaddr; other negative errors from helpers.
+ *
+ * Context: may sleep; may perform I/O for file-backed regions; caller must
+ *          keep VMA/PT state stable.
+ */
 int vmm_populate_one(struct address_space* vas, vaddr_t vaddr)
 {
 	if (!vas) return -EINVAL;
@@ -1162,7 +1211,7 @@ static int do_demand_paging(struct registers* r)
 static void page_fault(struct registers* r)
 {
 	if (!is_scheduler_init()) {
-		goto fail;
+		page_fault_fail(r);
 	}
 
 	struct task* task = get_current_task();
@@ -1198,23 +1247,27 @@ static void page_fault(struct registers* r)
 	bool is_present_fault = r->err_code & 0x1;
 
 	if (!is_present_fault) {
-		// This is not a CoW fault. It might be a real error (like a segfault)
-		// or something else like demand paging. For now, we'll treat it as a failure.
+		// This is not a CoW fault.
 		int dc = do_demand_paging(r);
 		if (dc == 0) {
-			goto pass;
+			return;
 		}
 		log_error("Demand paging failed with err=%d", dc);
-		goto fail;
+		page_fault_fail(r); // TODO: SEGV
 	}
 	if (!is_write_fault) {
-		goto fail;
+		page_fault_fail(r);
 	}
 
 	vaddr_t page_aligned_addr = fault_addr & PAGE_FRAME_MASK;
 
 	if (vas->pml4_phys != cr3) {
-		goto fail;
+		page_fault_fail(r);
+	}
+
+	struct memory_region* mr = get_region(vas, page_aligned_addr);
+	if (!mr || !(mr->prot & PROT_WRITE)) {
+		page_fault_fail(r); // TODO: SEGV
 	}
 
 	log_debug("Faulted in address_space %lx", cr3);
@@ -1222,19 +1275,49 @@ static void page_fault(struct registers* r)
 
 	pte_t* pte = walk_page_table(vas->pml4, page_aligned_addr, false, 0);
 	if (!pte) {
-		goto fail;
+		page_fault_fail(r);
 	}
 
 	paddr_t shared_paddr = pte->pte & PAGE_FRAME_MASK;
 	struct page* shared_page = phys_to_page(shared_paddr);
 
-	if (atomic_read(&shared_page->ref_count) > 1) {
-		// Case 1: We must copy since this is shared
+	bool want_cow = false;
 
+	switch (mr->kind) {
+	case MR_FILE:
+		// Private file mappings must NEVER dirty the file: always CoW.
+		want_cow = mr->is_private;
+		break;
+
+	case MR_ANON:
+		if (mr->is_private) {
+			// Fork-style CoW only when physically shared
+			// TODO: Check for zero page
+			bool phys_shared =
+				atomic_read(&shared_page->ref_count) > 1;
+			want_cow = phys_shared;
+		} else {
+			// Shared anon/shmem: write-through, no CoW.
+			want_cow = false;
+		}
+		break;
+
+	default: // MR_DEVICE etc.
+		// Typically deny or special-case; don’t CoW MMIO.
+		page_fault_fail(r); // TODO: SEGV
+	}
+
+	if (want_cow) {
 		struct page* new_page = alloc_page(AF_NORMAL);
 		if (!new_page) {
 			log_error("OOM during CoW fault!");
-			goto fail;
+			page_fault_fail(r);
+		}
+
+		// If CoW came from a private FILE mapping, the new page is anonymous:
+		if (mr->kind == MR_FILE) {
+			new_page->mapping = nullptr;
+			new_page->flags &= ~PG_MAPPED;
 		}
 
 		paddr_t new_paddr = page_to_phys(new_page);
@@ -1249,18 +1332,10 @@ static void page_fault(struct registers* r)
 		vmm_unmap_page(vas->pml4, page_aligned_addr);
 		vmm_map_page(vas->pml4, page_aligned_addr, new_paddr, flags);
 	} else {
-		// Case 2: We are last user, therefore no need to copy.
-		// Just make it writeable
-
 		flags_t new_flags = (pte->pte & FLAGS_MASK) | PAGE_WRITE;
 		vmm_protect_page(vas, page_aligned_addr, new_flags);
+		shared_page->flags |= PG_DIRTY;
 	}
-
-pass:
-	return;
-
-fail:
-	page_fault_fail(r);
 }
 
 [[noreturn]]
