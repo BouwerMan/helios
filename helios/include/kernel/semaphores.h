@@ -21,3 +21,32 @@ typedef struct semaphore_s {
 void sem_init(semaphore_t* sem, int initial_count);
 void sem_wait(semaphore_t* sem);
 void sem_signal(semaphore_t* sem);
+
+/**
+ * Reader-writer semaphore structure
+ *
+ * Allows multiple readers or a single writer to access a shared resource.
+ * Provides priority to writers to prevent writer starvation.
+ */
+typedef struct rwsem {
+	spinlock_t guard;	  /**< Spinlock protecting semaphore state */
+	struct waitqueue readers; /**< Queue of waiting reader threads */
+	struct waitqueue writers; /**< Queue of waiting writer threads */
+	int reader_count;	  /**< Number of active readers */
+	int writer_count;	  /**< Number of waiting writers */
+	bool writer_active; /**< True if a writer currently holds the lock */
+} rwsem_t;
+
+void rwsem_init(rwsem_t* s);
+
+void down_read(rwsem_t* s);  // may sleep
+void up_read(rwsem_t* s);
+
+void down_write(rwsem_t* s); // may sleep
+void up_write(rwsem_t* s);
+
+// TODO:
+
+// void downgrade_write(rwsem_t* s); // writer → reader, no gap
+// bool try_down_read(rwsem_t* s);
+// bool try_down_write(rwsem_t* s);
