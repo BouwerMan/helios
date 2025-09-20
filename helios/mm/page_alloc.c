@@ -364,14 +364,16 @@ void __free_pages(struct page* page, size_t order)
 
 	for (size_t i = 0; i < (1UL << order); i++) {
 		struct page* cur_page = &page[i];
+
+		if (cur_page->flags & PG_MAPPED) {
+			imap_remove(cur_page->mapping, cur_page);
+		}
+
 		if (atomic_read(&cur_page->ref_count) != 0) {
 			log_error("Page at %p has non-zero ref count: %d",
 				  (void*)cur_page,
 				  atomic_read(&cur_page->ref_count));
 			return;
-		}
-		if (cur_page->flags & PG_MAPPED) {
-			imap_remove(cur_page->mapping, cur_page);
 		}
 	}
 
@@ -647,6 +649,11 @@ static void free_pages_core(struct buddy_allocator* allocator,
 			    struct page* page,
 			    size_t order)
 {
+	if (page->flags & PG_BUDDY) {
+		log_error("Tried to free a page already marked as buddy");
+		return;
+	}
+
 	spinlock_acquire(&allocator->lock);
 
 	combine_blocks(allocator, page, order);

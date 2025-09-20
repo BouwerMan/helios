@@ -85,9 +85,14 @@ struct page* imap_lookup_or_create(struct inode_mapping* mapping, pgoff_t index)
 	page->flags &= ~PG_UPTODATE;
 	page->flags &= ~PG_DIRTY;
 
+	// Hash gets ref to page, this is different from the lookup ref we
+	// pass to the caller
 	get_page(page);
 	page->flags |= PG_MAPPED;
 	hash_add(mapping->page_cache, &page->map_node, page->index);
+
+	// This the lookup ref we return to the caller
+	get_page(page);
 
 ret_page:
 	spin_unlock_irqrestore(&mapping->lock, flags);
@@ -128,6 +133,8 @@ void imap_remove(struct inode_mapping* mapping, struct page* page)
 	spin_lock_irqsave(&mapping->lock, &flags);
 
 	hash_del(&page->map_node);
+	page->flags &= ~PG_MAPPED;
+
 	put_page(page);
 
 	spin_unlock_irqrestore(&mapping->lock, flags);

@@ -43,8 +43,17 @@ enum BLOCK_STATE {
 // TODO: Should do funky union shit so that I save space since this struct will serve as metadata for allocators
 struct page {
 	struct list_head list;
-	atomic_t ref_count;  // Reference count for the page
+
+	/* Generic liveness. If it hits 0 the buddy allocator will recycle the frame */
+	atomic_t ref_count;
+
+	/* Number of pte mappings across all address spaces */
+	atomic_t mapcount;
+
+	// TODO: present_entries count for pt pruning
+
 	flags_t flags;	     // Flags for the page (e.g., dirty, accessed)
+
 	struct waitqueue wq; // Waitqueue for those waiting on PG_DIRTY
 
 	union {
@@ -146,6 +155,18 @@ static inline bool page_buddy(struct page* pg)
 static inline struct page* get_page(struct page* pg)
 {
 	if (pg) atomic_inc(&pg->ref_count);
+	return pg;
+}
+
+static inline struct page* map_page(struct page* pg)
+{
+	if (pg) atomic_inc(&pg->mapcount);
+	return pg;
+}
+
+static inline struct page* unmap_page(struct page* pg)
+{
+	if (pg) atomic_dec(&pg->mapcount);
 	return pg;
 }
 

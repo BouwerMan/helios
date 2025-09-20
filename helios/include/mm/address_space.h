@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
+#include "kernel/semaphores.h"
 #include "kernel/types.h"
 #include "lib/list.h"
 #include "mm/page.h"
@@ -16,6 +17,8 @@
 struct address_space {
 	uptr pml4_phys;		  /* Physical address of the PML4 table. */
 	pgd_t* pml4;		  /* Has to go second for switch.asm */
+	rwsem_t vma_lock;	  /* Lock for mr_list */
+	spinlock_t pgt_lock;	  /* Lock for page table modifications */
 	struct list_head mr_list; /* List of memory regions (VMAs). */
 };
 
@@ -120,6 +123,12 @@ static inline bool is_within_vas(struct address_space* vas, vaddr_t vaddr)
 	return res;
 }
 
+int check_access(struct address_space* vas,
+		 vaddr_t vaddr,
+		 bool need_read,
+		 bool need_write,
+		 bool need_exec);
+
 struct memory_region* get_region(struct address_space* vas, vaddr_t vaddr);
 
 /**
@@ -149,10 +158,8 @@ void address_space_init();
  *
  * Return: A pointer to the new memory_region, or NULL on failure.
  */
-struct memory_region* alloc_mem_region(uptr start,
-				       uptr end,
-				       unsigned long prot,
-				       unsigned long flags);
+struct memory_region*
+alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags);
 
 /**
  * destroy_mem_region - Destroys and deallocates a memory_region.

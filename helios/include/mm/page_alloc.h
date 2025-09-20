@@ -58,6 +58,10 @@ void* get_free_pages(aflags_t flags, size_t pages);
  * @param order Number of pages to allocate as a power of two (2^order).
  *
  * @return a pointer to the first page in the allocated block, or NULL on failure.
+ *
+ * When working with pages directly, callers should be aware of the build ref
+ * that is added to each page in the block. They are responsible for
+ * that ref, and should use put_page() or put_pages() when done.
  */
 [[nodiscard]]
 struct page* alloc_pages(aflags_t flags, size_t order);
@@ -161,6 +165,8 @@ static inline void free_page(void* addr)
  * @brief Frees a single page.
  *
  * @page: Pointer to the page to be freed.
+ *
+ * Does not decrement ref count, just frees the page.
  */
 [[gnu::always_inline]]
 static inline void __free_page(struct page* page)

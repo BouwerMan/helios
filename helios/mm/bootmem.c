@@ -452,7 +452,7 @@ void bootmem_free_all(void)
 
 		atomic_set(&page->ref_count, 0);
 		clear_page_reserved(page);
-		set_page_buddy(page);
+		// set_page_buddy(page);
 		page->state = BLOCK_FREE;
 
 		__free_page(page);
@@ -469,7 +469,7 @@ void bootmem_free_all(void)
 
 		atomic_set(&page->ref_count, 0);
 		clear_page_reserved(page);
-		set_page_buddy(page);
+		// set_page_buddy(page);
 		page->state = BLOCK_FREE;
 
 		__free_page(page);

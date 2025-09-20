@@ -106,6 +106,69 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
 	return 0;
 }
 
+int check_access(struct address_space* vas,
+		 vaddr_t vaddr,
+		 bool need_read,
+		 bool need_write,
+		 bool need_exec)
+{
+	if (!vas) {
+		return -EINVAL;
+	}
+
+	int err = 0;
+
+	down_read(&vas->vma_lock);
+	struct memory_region* mr = get_region(vas, vaddr);
+	if (!mr) {
+		log_error("No VMA covers vaddr=0x%lx", (unsigned long)vaddr);
+		err = -EFAULT;
+		goto out;
+	}
+
+	const char* kind = (mr->kind == MR_FILE) ? "FILE" :
+			   (mr->kind == MR_ANON) ? "ANON" :
+						   "DEVICE";
+	char prot_str[4] = { (mr->prot & PROT_READ) ? 'r' : '-',
+			     (mr->prot & PROT_WRITE) ? 'w' : '-',
+			     (mr->prot & PROT_EXEC) ? 'x' : '-',
+			     '\0' };
+	log_debug(
+		"VMA: [%016lx..%016lx) kind=%s prot=%s flags=0x%lx private=%d",
+		(unsigned long)mr->start,
+		(unsigned long)mr->end,
+		kind,
+		prot_str,
+		(unsigned long)mr->flags,
+		(int)mr->is_private);
+
+	if (need_exec && !(mr->prot & PROT_EXEC)) {
+		log_error("NX violation at vaddr=0x%lx in %s VMA",
+			  (unsigned long)vaddr,
+			  kind);
+		err = -EACCES;
+		goto out;
+	}
+	if (need_write && !(mr->prot & PROT_WRITE)) {
+		log_error("Write disallowed at vaddr=0x%lx in %s VMA",
+			  (unsigned long)vaddr,
+			  kind);
+		err = -EACCES;
+		goto out;
+	}
+	if (need_read && !(mr->prot & PROT_READ)) {
+		log_error("Read disallowed at vaddr=0x%lx in %s VMA",
+			  (unsigned long)vaddr,
+			  kind);
+		err = -EACCES;
+		goto out;
+	}
+
+out:
+	up_read(&vas->vma_lock);
+	return err;
+}
+
 void add_region(struct address_space* vas, struct memory_region* mr)
 {
 	mr->owner = vas;
@@ -201,6 +264,9 @@ void address_space_destroy(struct address_space* vas)
 	}
 }
 
+/**
+ * Expects vma_lock to be held
+ */
 struct memory_region* get_region(struct address_space* vas, vaddr_t vaddr)
 {
 	struct memory_region* pos = nullptr;
