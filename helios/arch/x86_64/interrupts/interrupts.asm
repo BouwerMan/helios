@@ -3,10 +3,15 @@
 ; asmsyntax=nasm
 [bits 64]
 
+
+extern g_pending_bits
 extern g_interrupt_nesting_level
+extern need_reschedule
+
 extern interrupt_handler
 extern schedule
 extern syscall_handler
+extern try_softirq
 
 %define INT_OFF 144
 
@@ -122,62 +127,87 @@ __set_idt:
 %%skip:
 %endmacro
 
+;
+; Entry point for all interrupts
+;
 interrupt_common_stub:
-	;swapgs_if_necessary
-
+	; Prologue and ABI
 	PUSHALL
-
-	mov rdi, rsp ; this points to the struct registers
-	mov r15, rsp ; save rsp in r15
-	
-	; ABI requirements
-	and rsp, -16 ; align stack to 16 bytes
+	mov	r15, rsp	; save rsp in r15
+	and	rsp, -16	; SysV: 16-byte alignment for calls
 	cld
-	
-	; Check if this is a syscall (interrupt 128)
-	cmp dword [rdi + INT_OFF], 128
-	je .syscall_path
-	; Check if this is a yield syscall (interrupt 48)
-	cmp dword [rdi + INT_OFF], 48
-	je .schedule_and_return
 
-.interrupt_path:
-	inc dword [rel g_interrupt_nesting_level]
-	call interrupt_handler
-	dec dword [rel g_interrupt_nesting_level]
-	jmp .schedule_and_return
+;
+; Decode interrupt vector. If it is a syscall, call syscall_handler.
+; If it is a yield syscall, call schedule_and_return.
+;
+decode_vector:
+	mov	rax, [r15 + INT_OFF]
+	cmp	rax, 0x80	; int 0x80 / syscall (trap gate 0xEF)
+	je	handle_syscall
+	cmp	rax, 48		; yield trap (sets need_reschedule)
+	je	handle_schedule	; We always want to reschedule with yield
 
-.syscall_path:
-	sti ; We want to allow interrupts during syscalls
-	call syscall_handler
-	; Fall through to schedule_and_return
+;
+; Real IRQ path. This is the only place that touches nesting
+;
+handle_irq_top:
+	inc	dword [rel g_interrupt_nesting_level]
+	mov	rdi, r15		; interrupt_handler expects rdi = regs
+	call	interrupt_handler	; must send APIC EOI inside
+	dec	dword [rel g_interrupt_nesting_level]
 
-.schedule_and_return:
-	inc dword [rel g_interrupt_nesting_level]
-	mov rdi, r15 ; restore rdi to point to the struct registers
-	cld
-	call schedule
-	mov rdi, r15 ; rdi gets clobered by schedule
-	dec dword [rel g_interrupt_nesting_level]
-	; Fall through to interrupt_return
-	
+;
+; Common epilogue for IRQs and syscalls
+;
+outermost_exit:
+	; Only run softirqs/scheduler at the outermost level.
+	cmp	dword [rel g_interrupt_nesting_level], 0
+	jne	return_from_interrupt
+
+	; If no softirqs pending, skip bottom half
+	cmp	qword [rel g_pending_bits], 0
+	jne	handle_softirq
+
+	; If we don't need to reschedule, just return
+	cmp	byte [rel need_reschedule], 0
+	jne	handle_schedule
+
+; Setup for return from our interrupt context
+return_from_interrupt:
+	mov	rdi, r15	; interrupt_return expects rdi = regs	
+
 ; rdi: struct registers to pop from
 global interrupt_return
 interrupt_return:
-	mov rsp, rdi ; put struct registers into rsp then we can POPALL and iretq
-
-	; Only decrement nesting level for actual interrupts (not syscalls)
-	cmp dword [rdi + INT_OFF], 128
-	je .return_from_interrupt
-	cmp dword [rdi + INT_OFF], 48
-	je .return_from_interrupt
-	dec dword [rel g_interrupt_nesting_level]
-
-.return_from_interrupt:
+	mov	rsp, rdi	; put struct registers into rsp then we can POPALL and iretq
 	POPALL
-	;swapgs_if_necessary
-	sti
 	iretq
+
+;
+; Cold paths
+;
+
+; Softirq “bottom-half”: runs with IF=1, must not sleep, budgeted.
+handle_softirq:
+	sti
+	call	try_softirq
+	; Recheck scheduling after softirq (may have set need_reschedule)
+	cmp	byte [rel need_reschedule], 0
+	je	return_from_interrupt
+	; Fall through to scheduling
+
+handle_schedule:
+	cli			; scheduler policy: run with IF=0
+	mov	rdi, r15	; Schedule wants rdi = regs
+	call	schedule	; may long-jump to interrupt_return
+	jmp	return_from_interrupt
+
+; Syscall path: IF preserved by trap gate (0xEF). No nesting changes.
+handle_syscall:
+	mov	rdi, r15	; Handler expects rdi = regs
+	call	syscall_handler
+	jmp	outermost_exit
 
 ; We don't get information about which interrupt was caller
 ; when the handler is run, so we will need to have a different handler
@@ -243,7 +273,6 @@ global isr128
 
 %macro ISR_NOERR 1
 isr%1:
-	cli
 	push 0
 	push %1
 	jmp interrupt_common_stub
@@ -251,14 +280,12 @@ isr%1:
 
 %macro ISR_ERR 1
 isr%1:
-	cli
 	push %1
 	jmp interrupt_common_stub
 %endmacro
 
 %macro IRQ 1
 irq%1:
-	cli
 	push 0
 	push (%1 + 32)
 	jmp interrupt_common_stub

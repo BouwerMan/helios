@@ -90,7 +90,7 @@ void tsc_init(void)
 		log_error("TSC is not invariant");
 		// TODO: Determine TSC frequency with HPET or PMTMR
 		log_warn(
-			"Falling back to hardcoded value (we are probably in GDB");
+			"Falling back to hardcoded value (we are probably in GDB)");
 		__tsc_hz = 3609600000;
 		return;
 	}
