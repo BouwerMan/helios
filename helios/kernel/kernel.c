@@ -29,6 +29,7 @@
 #include "kernel/klog.h"
 #include "kernel/limine_requests.h"
 #include "kernel/panic.h"
+#include "kernel/softirq.h"
 #include "kernel/syscall.h"
 #include "kernel/tasks/scheduler.h"
 #include "kernel/timer.h"
@@ -98,6 +99,7 @@ void kernel_main()
 	vfs_init();
 
 	scheduler_init();
+	softirq_init();
 	syscall_init();
 	work_queue_init();
 	timer_init();

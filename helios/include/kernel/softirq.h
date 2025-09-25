@@ -3,13 +3,25 @@
 
 #include "kernel/types.h"
 
-enum _SOFTIRQ_IDS {
+typedef enum SOFTIRQ_RET {
+	SOFTIRQ_DONE = 0,
+	SOFTIRQ_MORE,
+	SOFTIRQ_PUNT,
+} softirq_ret_t;
+
+enum SOFTIRQ_IDS {
 	SOFTIRQ_TIMER,
 	SOFTIRQ_KLOG,
+	NUM_SOFTIRQS,
 };
 
 // TODO: Return bool or just void?
-typedef bool (*softirq_fn)(size_t item_budget, u64 ns_budget);
+typedef softirq_ret_t (*softirq_fn)(size_t item_budget, u64 ns_budget);
+
+struct softirq {
+	const char* name;
+	softirq_fn fn;
+};
 
 void softirq_init(void);
 

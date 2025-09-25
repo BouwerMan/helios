@@ -6,6 +6,7 @@
 #include "kernel/bitops.h"
 #include "kernel/klog.h"
 #include "kernel/kmath.h"
+#include "kernel/softirq.h"
 #include "kernel/timer.h"
 #include "kernel/types.h"
 #include "mm/page_alloc.h"
@@ -16,6 +17,13 @@ static atomic64_t klog_dropped_records = ATOMIC64_INIT(0);
 
 struct klog_ring g_klog_ring = { 0 };
 struct klog_cursor g_klog_cursor = { 0 };
+
+static bool klog_is_empty(const struct klog_ring* rb,
+			  const struct klog_cursor* cur)
+{
+	u64 head = (u64)atomic64_load_acquire(&rb->head_bytes);
+	return cur->bytes == head;
+}
 
 static int klog_emit_serial(const struct klog_header* hdr,
 			    const u8* payload,
@@ -28,24 +36,77 @@ static int klog_emit_serial(const struct klog_header* hdr,
 	return 0;
 }
 
-static void klog_callback(void* data)
+static softirq_ret_t klog_softirq_action(size_t item_budget, u64 ns_budget)
 {
-	// BENCHMARK_START(klog_callback);
-	struct klog_cursor* cur = data;
+	static constexpr size_t CHUNK_MIN = 1;
+	static constexpr size_t CHUNK_MAX = 64;
+	size_t chunk = 16;
+	u64 deadline = clock_now_ns() + ns_budget;
 
-	int res = klog_drain(&g_klog_ring, cur, klog_emit_serial, nullptr, 64);
+	while (item_budget > 0) {
+		u64 now = clock_now_ns();
+		if (now >= deadline) {
+			// Out of time
+			return klog_is_empty(&g_klog_ring, &g_klog_cursor) ?
+				       SOFTIRQ_DONE :
+				       SOFTIRQ_MORE;
+		}
 
-	u64 delay = 100;
-	switch ((enum KLOG_DRAIN_STATUS)res) {
-	case KLOG_DRAIN_OK:
-	case KLOG_DRAIN_STOPPED_UNCOMMITTED: delay = 40; break;
-	case KLOG_DRAIN_RESYNCED:	     delay = 10; break;
-	case KLOG_DRAIN_BUDGET_EXHAUSTED:    delay = 5; break;
-	case KLOG_DRAIN_EMIT_BACKPRESSURE:   delay = 200; break;
+		size_t n = item_budget < chunk ? item_budget : chunk;
+
+		int res = klog_drain(&g_klog_ring,
+				     &g_klog_cursor,
+				     klog_emit_serial,
+				     nullptr,
+				     (u32)n);
+
+		switch ((enum KLOG_DRAIN_STATUS)res) {
+		case KLOG_DRAIN_BUDGET_EXHAUSTED:
+			// Emitted 'n' records
+			item_budget -= n;
+			break;
+
+		case KLOG_DRAIN_OK:
+			// Drained to current head snapshot. If empty now, we're done.
+			if (klog_is_empty(&g_klog_ring, &g_klog_cursor)) {
+				return SOFTIRQ_DONE;
+			}
+			// New records arrived; don't charge full chunk since we don't know how many.
+			if (item_budget) {
+				item_budget--; // conservative accounting
+			}
+			continue;
+
+		case KLOG_DRAIN_RESYNCED:
+			// Nothing to flush after resync
+			return SOFTIRQ_DONE;
+
+		case KLOG_DRAIN_STOPPED_UNCOMMITTED:
+			// We hit an in-flight record: stop this pass, try again later
+			return SOFTIRQ_MORE;
+
+		case KLOG_DRAIN_EMIT_BACKPRESSURE:
+			// TODO:This will matter one day, it should depend on
+			// how a sink becomes "ready". For now, UART literally
+			// never exerts backpressure.
+			kassert(false, "Unexpected backpressure");
+			__builtin_unreachable();
+		}
+
+		// adapt chunk by how close we are to the deadline
+		now = clock_now_ns();
+		if (deadline - now <= ns_budget / 8) {
+			// in the last ~12.5% of time: drain in singles
+			chunk = CHUNK_MIN;
+		} else if (chunk < CHUNK_MAX) {
+			// plenty of time: ramp up a bit for throughput
+			chunk *= 2;
+			if (chunk > CHUNK_MAX) chunk = CHUNK_MAX;
+		}
 	}
 
-	// BENCHMARK_END(klog_callback);
-	timer_reschedule(&cur->timer, delay);
+	return klog_is_empty(&g_klog_ring, &g_klog_cursor) ? SOFTIRQ_DONE :
+							     SOFTIRQ_MORE;
 }
 
 struct klog_ring* klog_init()
@@ -61,8 +122,7 @@ struct klog_ring* klog_init()
 	g_klog_cursor.last_seq =
 		(u64)atomic64_load_relaxed(&g_klog_ring.next_seq);
 
-	list_init(&g_klog_cursor.timer.list);
-	timer_schedule(&g_klog_cursor.timer, 100, klog_callback, &g_klog_cursor);
+	softirq_register(SOFTIRQ_KLOG, "klog", klog_softirq_action);
 
 	return &g_klog_ring;
 }
@@ -252,6 +312,8 @@ bool klog_try_write(struct klog_ring* rb,
 
 	klog_fill_and_publish(rb, off, total, level, msg, msg_len, seq);
 	if (out_seq) *out_seq = seq;
+
+	softirq_raise(SOFTIRQ_KLOG);
 
 	return true;
 }

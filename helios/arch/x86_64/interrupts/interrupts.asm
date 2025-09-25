@@ -11,7 +11,7 @@ extern need_reschedule
 extern interrupt_handler
 extern schedule
 extern syscall_handler
-extern try_softirq
+extern do_softirq
 
 %define INT_OFF 144
 
@@ -191,7 +191,9 @@ interrupt_return:
 ; Softirq “bottom-half”: runs with IF=1, must not sleep, budgeted.
 handle_softirq:
 	sti
-	call	try_softirq
+	mov	rdi, 64		; Item budget of 64
+	mov	rsi, 250000	; Max time budget of 250000 ns
+	call	do_softirq
 	; Recheck scheduling after softirq (may have set need_reschedule)
 	cmp	byte [rel need_reschedule], 0
 	je	return_from_interrupt
