@@ -1,6 +1,6 @@
 # HeliOS
 
-A small, educational 64‑bit operating system for x86‑64. HeliOS boots via the Limine bootloader, runs as a freestanding C23 kernel, and includes a tiny libc and a couple of userspace samples to make the whole stack feel real.
+A small, educational 64‑bit operating system for x86‑64. HeliOS boots via the Limine bootloader, runs as a freestanding C23 kernel, and includes a tiny libc and a couple of userspace samples.
 
 > **Branches**
 >
