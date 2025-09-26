@@ -21,6 +21,7 @@ Checks: >
   -readability-implicit-bool-conversion,
   readability-misleading-indentation,
   linuxkernel-*
+  -bugprone-assignment-in-if-condition
 
 # Promote/style knobs you can uncomment later if you want a stricter gate:
 # WarningsAsErrors: >

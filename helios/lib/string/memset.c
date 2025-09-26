@@ -1,81 +1,36 @@
-#include <lib/string.h>
 #include <stdint.h>
 
-// TODO: rework all of this to use mainly rep stosb
-//
-// These will be aliased in memset.c
-void* memset64(uint64_t* s, uint64_t v, size_t n);
-void* memset32(uint32_t* s, uint32_t v, size_t n);
-void* memset16(uint16_t* s, uint16_t v, size_t n);
-void* memset8(uint8_t* s, uint8_t v, size_t n);
+#include "kernel/compiler_attributes.h"
+#include "lib/string.h"
 
-#define __HAVE_ARCH_MEMSET8
-static inline void* __arch_memset8(uint8_t* s, uint8_t v, size_t n)
-{
-	uint8_t* s0 = s;
-	__asm__ volatile("rep stosb" : "+D"(s), "+c"(n) : "a"(v) : "memory");
-	return s0;
-}
-
-#define __HAVE_ARCH_MEMSET16
-static inline void* __arch_memset16(uint16_t* s, uint16_t v, size_t n)
-{
-	uint16_t* s0 = s;
-	__asm__ volatile("rep stosw" : "+D"(s), "+c"(n) : "a"(v) : "memory");
-	return s0;
-}
-
-#define __HAVE_ARCH_MEMSET32
-static inline void* __arch_memset32(uint32_t* s, uint32_t v, size_t n)
-{
-	uint32_t* s0 = s;
-	__asm__ volatile("rep stosl" : "+D"(s), "+c"(n) : "a"(v) : "memory");
-	return s0;
-}
-
-#define __HAVE_ARCH_MEMSET64
-static inline void* __arch_memset64(uint64_t* s, uint64_t v, size_t n)
-{
-	uint64_t* s0 = s;
-	__asm__ volatile("rep stosq" : "+D"(s), "+c"(n) : "a"(v) : "memory");
-	return s0;
-}
-
-[[maybe_unused]]
-static uint64_t* __memset64(uint64_t* restrict dst,
-			    uint64_t value,
-			    size_t count)
+u64* __default_memset64(u64* dst, u64 value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;
 	}
 	return dst;
 }
+__weak_alias(__default_memset64, __memset64);
 
-[[maybe_unused]]
-static uint32_t* __memset32(uint32_t* restrict dst,
-			    uint32_t value,
-			    size_t count)
+u32* __default_memset32(u32* dst, u32 value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;
 	}
 	return dst;
 }
+__weak_alias(__default_memset32, __memset32);
 
-[[maybe_unused]]
-static uint16_t* __memset16(uint16_t* restrict dst,
-			    uint16_t value,
-			    size_t count)
+u16* __default_memset16(uint16_t* dst, uint16_t value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;
 	}
 	return dst;
 }
+__weak_alias(__default_memset16, __memset16);
 
-[[maybe_unused]]
-static uint8_t* __memset8(uint8_t* restrict dst, uint8_t value, size_t count)
+u8* __memset8(u8* dst, u8 value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;
@@ -112,11 +67,11 @@ static void* small_memset(void* restrict dest, int ch, size_t count)
 		return memset16(dest, val, count / sizeof(uint16_t));
 	} else {
 		unsigned char val = c;
-		return memset8(dest, val, count);
+		return __memset8(dest, val, count);
 	}
 }
 
-void* memset(void* restrict dest, int ch, size_t count)
+void* __default_memset(void* dest, int ch, size_t count)
 {
 	if (count <= SMALL_MOVE_THRESHOLD) {
 		// I've found that my old memset works way better for small sizes
@@ -162,35 +117,4 @@ void* memset(void* restrict dest, int ch, size_t count)
 
 	return dest;
 }
-
-#ifdef __HAVE_ARCH_MEMSET8
-extern void* memset8(uint8_t* s, uint8_t v, size_t n)
-	__attribute__((alias("__arch_memset8")));
-#else
-extern void* memset8(uint8_t* s, uint8_t v, size_t n)
-	__attribute__((alias("__memset8")));
-#endif
-
-#ifdef __HAVE_ARCH_MEMSET16
-extern void* memset16(uint16_t* s, uint16_t v, size_t n)
-	__attribute__((alias("__arch_memset16")));
-#else
-extern void* memset16(uint16_t* s, uint16_t v, size_t n)
-	__attribute__((alias("__memset16")));
-#endif
-
-#ifdef __HAVE_ARCH_MEMSET32
-extern void* memset32(uint32_t* s, uint32_t v, size_t n)
-	__attribute__((alias("__arch_memset32")));
-#else
-extern void* memset32(uint32_t* s, uint32_t v, size_t n)
-	__attribute__((alias("__memset32")));
-#endif
-
-#ifdef __HAVE_ARCH_MEMSET64
-extern void* memset64(uint64_t* s, uint64_t v, size_t n)
-	__attribute__((alias("__arch_memset64")));
-#else
-extern void* memset64(uint64_t* s, uint64_t v, size_t n)
-	__attribute__((alias("__memset64")));
-#endif
+__weak_alias(__default_memset, __memset);

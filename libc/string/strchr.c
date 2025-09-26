@@ -19,7 +19,7 @@ char* strchr(const char* str, int character)
 		str++;
 	}
 	// Check for character == '\0' explicitly
-	return (character == '\0') ? (char*)str : NULL;
+	return (character == '\0') ? (char*)str : nullptr;
 }
 
 /**

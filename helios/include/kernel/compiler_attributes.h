@@ -62,3 +62,9 @@
 #ifndef __packed
 #define __packed __attribute__((packed))
 #endif
+
+#define __weak_alias(old, new) \
+	extern __typeof(old) new __attribute__((__weak__, __alias__(#old)))
+
+#define __strong_alias(old, new) \
+	extern __typeof(old) new __attribute__((__alias__(#old)))

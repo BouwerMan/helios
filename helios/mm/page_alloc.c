@@ -189,7 +189,8 @@ void page_alloc_init()
 void buddy_dump_free_lists()
 {
 	struct buddy_allocator* allocator = &norm_alr;
-	spinlock_acquire(&allocator->lock);
+	unsigned long flags;
+	spin_lock_irqsave(&allocator->lock, &flags);
 
 	for (size_t order = allocator->min_order; order <= allocator->max_order;
 	     order++) {
@@ -209,7 +210,7 @@ void buddy_dump_free_lists()
 		}
 	}
 
-	spinlock_release(&allocator->lock);
+	spin_unlock_irqrestore(&allocator->lock, flags);
 }
 
 /**
@@ -276,10 +277,7 @@ struct page* alloc_pages(aflags_t flags, size_t order)
 struct page* alloc_zeroed_page(aflags_t flags)
 {
 	struct page* pg = alloc_page(flags);
-	if (pg) {
-		void* vaddr = (void*)PHYS_TO_HHDM(page_to_phys(pg));
-		memset(vaddr, 0, PAGE_SIZE);
-	}
+	__page_clear(pg);
 	return pg;
 }
 
@@ -333,8 +331,7 @@ void* get_free_pages(aflags_t flags, size_t pages)
 	void* page_virt = __get_free_pages(flags, order);
 	if (!page_virt) return 0;
 
-	size_t region_size = PAGE_SIZE << order;
-	memset64((uint64_t*)page_virt, 0, region_size / sizeof(uint64_t));
+	pages_clear(page_virt, rounded_size);
 
 	return page_virt;
 }
@@ -423,8 +420,9 @@ void free_pages(void* addr, size_t pages)
 
 static void allocator_init(struct buddy_allocator* allocator)
 {
-	spinlock_init(&allocator->lock);
-	spinlock_acquire(&allocator->lock);
+	spin_init(&allocator->lock);
+	unsigned long flags;
+	spin_lock_irqsave(&allocator->lock, &flags);
 
 	for (size_t order = 0; order <= MAX_ORDER; order++) {
 		list_init(&allocator->free_lists[order]);
@@ -432,7 +430,7 @@ static void allocator_init(struct buddy_allocator* allocator)
 	allocator->max_order = MAX_ORDER;
 	allocator->min_order = 0;
 
-	spinlock_release(&allocator->lock);
+	spin_unlock_irqrestore(&allocator->lock, flags);
 }
 
 /**
@@ -486,7 +484,7 @@ static struct page* split_until_order(struct buddy_allocator* allocator,
 	right->order = (uint8_t)(current_order - 1);
 
 	// Add the right child to the free list
-	list_append(&allocator->free_lists[right->order], &right->list);
+	list_add_tail(&allocator->free_lists[right->order], &right->list);
 
 	log_debug(
 		"Split block pfn: %zu -> left pfn: %zu (%lx), right pfn: %zu (%lx)",
@@ -547,7 +545,7 @@ static struct page* alloc_pages_core(struct buddy_allocator* allocator,
 					i,
 					pg->order,
 					pg->state);
-				list_remove(&pg->list);
+				list_del(&pg->list);
 			}
 		}
 
@@ -559,7 +557,7 @@ static struct page* alloc_pages_core(struct buddy_allocator* allocator,
 			  pg->order);
 
 		// Remove it from the list
-		list_remove(&pg->list);
+		list_del(&pg->list);
 
 		// Now we split recursively until we reach the desired order
 		struct page* split_block =
@@ -607,7 +605,7 @@ static void combine_blocks(struct buddy_allocator* allocator,
 	page->state = BLOCK_FREE;
 
 	// Add the block to the free list
-	list_append(&allocator->free_lists[order], &page->list);
+	list_add_tail(&allocator->free_lists[order], &page->list);
 
 	// If we are already at the highest order we have freed everything
 	// NOTE: This HAS to come after the freeing above
@@ -622,8 +620,8 @@ static void combine_blocks(struct buddy_allocator* allocator,
 	// Check if coalescing is possible
 	if (buddy->state == BLOCK_FREE && buddy->order == page->order) {
 		// Remove both blocks from the free lists and mark them as invalid
-		list_remove(&page->list);
-		list_remove(&buddy->list);
+		list_del(&page->list);
+		list_del(&buddy->list);
 		page->state = BLOCK_INVALID;
 		buddy->state = BLOCK_INVALID;
 
@@ -654,9 +652,10 @@ static void free_pages_core(struct buddy_allocator* allocator,
 		return;
 	}
 
-	spinlock_acquire(&allocator->lock);
+	unsigned long flags;
+	spin_lock_irqsave(&allocator->lock, &flags);
 
 	combine_blocks(allocator, page, order);
 
-	spinlock_release(&allocator->lock);
+	spin_unlock_irqrestore(&allocator->lock, flags);
 }

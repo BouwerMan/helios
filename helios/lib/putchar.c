@@ -11,4 +11,7 @@ int putchar(int ic)
 }
 
 // Needed for printf lib
-void putchar_(char c) __attribute__((alias("putchar")));
+void putchar_(char c)
+{
+	putchar((int)c);
+}

@@ -4,9 +4,11 @@
 #include <stddef.h>
 
 #include "arch/atomic.h"
+#include "kernel/assert.h"
 #include "kernel/bitops.h"
 #include "kernel/tasks/scheduler.h"
 #include "kernel/types.h"
+#include "lib/string.h"
 
 static constexpr int PAGE_SHIFT = 12;
 static constexpr size_t PAGE_SIZE = (1UL << PAGE_SHIFT);
@@ -177,6 +179,62 @@ static inline void put_page(struct page* pg)
 	if (atomic_sub_and_test(1, &pg->ref_count)) {
 		__free_page(pg);
 	}
+}
+
+/**
+ * pages_clear - Zero-fill a run of pages by virtual address
+ * @start: Page-aligned start VA
+ * @num_pages: Number of pages (>0)
+ * Return: @start
+ * Context: Does not sleep. IRQ-safe. Caller must ensure mapping writable.
+ */
+static inline void* pages_clear(void* start, size_t num_pages)
+{
+	kassert(is_page_aligned((uintptr_t)start),
+		"pages_clear: pages not aligned");
+	kassert(num_pages > 0, "pages_clear: num_pages must be > 0");
+	if (!start) return start;
+	return __memset(start, 0, num_pages << PAGE_SHIFT);
+}
+
+/**
+ * page_clear - Zero-fill a single page by virtual address
+ * @page: Page-aligned VA
+ * Return: @page
+ * Context: Does not sleep. IRQ-safe. Caller must ensure mapping writable.
+ */
+static inline void* page_clear(void* page)
+{
+	kassert(is_page_aligned((uintptr_t)page),
+		"page_clear: page not aligned");
+	if (!page) return page;
+	return __memset(page, 0, PAGE_SIZE);
+}
+
+/**
+ * __page_clear - Zero-fill a single physical page via HHDM
+ * @page: Page descriptor
+ * Return: none
+ * Context: Does not sleep. IRQ-safe. Requires HHDM mapping of @page.
+ */
+static inline void __page_clear(struct page* page)
+{
+	if (!page) return;
+	page_clear((void*)PHYS_TO_HHDM(page_to_phys(page)));
+}
+
+/**
+ * __pages_clear - Zero-fill a run of physical pages via HHDM
+ * @page: First page descriptor in the run
+ * @num_pages: Number of pages (>0)
+ * Return: none
+ * Context: Does not sleep. IRQ-safe. Requires HHDM mapping of pages.
+ */
+static inline void __pages_clear(struct page* page, size_t num_pages)
+{
+	kassert(num_pages > 0, "__pages_clear: num_pages must be > 0");
+	if (!page) return;
+	pages_clear((void*)PHYS_TO_HHDM(page_to_phys(page)), num_pages);
 }
 
 bool trylock_page(struct page* page);

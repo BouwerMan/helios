@@ -2,9 +2,8 @@
 #include <string.h>
 
 [[maybe_unused]]
-static uint64_t* __memset64(uint64_t* restrict dst,
-			    uint64_t value,
-			    size_t count)
+static uint64_t*
+__memset64(uint64_t* restrict dst, uint64_t value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;
@@ -13,9 +12,8 @@ static uint64_t* __memset64(uint64_t* restrict dst,
 }
 
 [[maybe_unused]]
-static uint32_t* __memset32(uint32_t* restrict dst,
-			    uint32_t value,
-			    size_t count)
+static uint32_t*
+__memset32(uint32_t* restrict dst, uint32_t value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;
@@ -24,9 +22,8 @@ static uint32_t* __memset32(uint32_t* restrict dst,
 }
 
 [[maybe_unused]]
-static uint16_t* __memset16(uint16_t* restrict dst,
-			    uint16_t value,
-			    size_t count)
+static uint16_t*
+__memset16(uint16_t* restrict dst, uint16_t value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;

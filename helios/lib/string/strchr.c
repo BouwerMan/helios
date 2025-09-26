@@ -1,4 +1,4 @@
-#include <lib/string.h>
+#include "lib/string.h"
 
 /**
  * @brief Locates the first occurrence of a character in a string.
@@ -16,7 +16,7 @@ char* strchr(const char* str, int character)
 		str++;
 	}
 	// Check for character == '\0' explicitly
-	return (character == '\0') ? (char*)str : NULL;
+	return (character == '\0') ? (char*)str : nullptr;
 }
 
 /**

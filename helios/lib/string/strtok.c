@@ -1,5 +1,6 @@
-#include <lib/string.h>
 #include <stdbool.h>
+
+#include "lib/string.h"
 
 /**
  * @brief Splits a string into tokens using specified delimiters.
@@ -30,20 +31,21 @@
  */
 char* strtok(char* str, const char* delimiters)
 {
-	static char* trunc;  // String to truncate
+	static char* trunc; // String to truncate
+
+	// if string exists, we set trunc, otherwise we use previous trunc value
 	if (str) {
-		trunc = str; // if string exists, we set trunc, otherwise we use
-			     // previous trunc value
-	} else if (trunc == NULL) {
-		return NULL;
+		trunc = str;
+	} else if (trunc == nullptr) {
+		return nullptr;
 	}
 
-	char* token_start = NULL;
+	char* token_start = nullptr;
 	// Skip initial delimiters
 	while (*trunc && strchr(delimiters, *trunc))
 		trunc++;
 
-	if (*trunc == '\0') return NULL;
+	if (*trunc == '\0') return nullptr;
 	token_start = trunc;
 	while (*trunc) {
 		if (strchr(delimiters, *trunc)) {
@@ -53,9 +55,9 @@ char* strtok(char* str, const char* delimiters)
 		trunc++;
 	}
 	if (*trunc == '\0') {
-		trunc = NULL;
+		trunc = nullptr;
 		return token_start;
 	}
 
-	return NULL;
+	return nullptr;
 }
