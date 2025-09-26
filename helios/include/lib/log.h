@@ -16,8 +16,7 @@
 #define LOG_LEVEL_ERROR 3
 
 enum LOG_MODE {
-	LOG_DIRECT,   // Output logs directly to screen/serial.
-	LOG_BUFFERED, // Buffer logs (e.g., for dmesg).
+	LOG_DIRECT, // Output logs directly to screen/serial.
 	LOG_KLOG,
 };
 
@@ -76,8 +75,7 @@ enum LOG_MODE {
 
 #define _LOG_UNUSED(fmt, ...)                                               \
 	do {                                                                \
-		(void)fmt;                                                  \
-		(void)(0 __VA_OPT__(, __VA_ARGS__));                        \
+		(void)sizeof(fmt);                                          \
 		if (0) {                                                    \
 			/* compile-time format checking, no runtime cost */ \
 			(void)snprintf((char*)0,                            \

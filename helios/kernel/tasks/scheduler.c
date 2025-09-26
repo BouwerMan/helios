@@ -48,6 +48,8 @@
 * Global Variable Definitions
 *******************************************************************************/
 
+extern void* g_entry_new_stack;
+
 volatile bool need_reschedule = false;
 // If > 0, preempt is disabled
 static bool g_preempt_enabled = false;
@@ -897,7 +899,6 @@ static void setup_first_kernel_task()
 	kernel_task->cwd = dget(vfs_lookup("/"));
 
 	// Set kernel_stack to stack we set from __arch_entry
-	extern void* g_entry_new_stack;
 	kernel_task->kernel_stack = (uptr)g_entry_new_stack;
 
 	vas_set_pml4(kernel_task->vas, (pgd_t*)PHYS_TO_HHDM(vmm_read_cr3()));

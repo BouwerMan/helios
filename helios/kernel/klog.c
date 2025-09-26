@@ -7,11 +7,11 @@
 #include "kernel/klog.h"
 #include "kernel/kmath.h"
 #include "kernel/softirq.h"
-#include "kernel/timer.h"
 #include "kernel/types.h"
 #include "mm/page_alloc.h"
 
 // TODO: Implement backlog tracking that effects delay
+// TODO: Make sure my u64->long casts are safe on x86_64
 
 static atomic64_t klog_dropped_records = ATOMIC64_INIT(0);
 
@@ -43,7 +43,7 @@ static softirq_ret_t klog_softirq_action(size_t* item_budget, u64 ns_budget)
 	size_t chunk = 16;
 	u64 deadline = clock_now_ns() + ns_budget;
 
-	while (item_budget > 0) {
+	while (*item_budget > 0) {
 		u64 now = clock_now_ns();
 		if (now >= deadline) {
 			// Out of time
@@ -72,7 +72,7 @@ static softirq_ret_t klog_softirq_action(size_t* item_budget, u64 ns_budget)
 				return SOFTIRQ_DONE;
 			}
 			// New records arrived; don't charge full chunk since we don't know how many.
-			if (item_budget) {
+			if (*item_budget) {
 				(*item_budget)--; // conservative accounting
 			}
 			continue;
@@ -234,7 +234,7 @@ bool klog_reserve_bytes(struct klog_ring* rb, u32 len, u64* start, u32* off)
 		if (tail > 0) {
 			if (a64_cas_relaxed(&rb->head_bytes,
 					    &head,
-					    head + tail)) {
+					    head + (long)tail)) {
 				emit_padding(rb, (u32)pos, (u32)tail);
 
 				// Now try to reserve real record
@@ -370,7 +370,7 @@ int klog_drain(struct klog_ring* rb,
 			}
 		}
 
-		u32 off = cur->bytes & rb->mask;
+		u32 off = (u32)cur->bytes & rb->mask;
 		struct klog_header* hdr = (struct klog_header*)&rb->buf[off];
 
 		u32 sf = smp_load_acquire_u32(&hdr->size_flags);

@@ -33,7 +33,6 @@
 #include "mm/kmalloc.h"
 #include "mm/page.h"
 #include "mm/page_alloc.h"
-#include "mm/slab.h"
 
 #include <uapi/helios/errno.h>
 
@@ -309,10 +308,8 @@ int ramfs_close(struct vfs_inode* inode, struct vfs_file* file)
 	return VFS_OK;
 }
 
-ssize_t ramfs_read(struct vfs_file* file,
-		   char* buffer,
-		   size_t count,
-		   off_t* offset)
+ssize_t
+ramfs_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
 {
 	struct ramfs_file* rf = file->private_data;
 
@@ -324,7 +321,7 @@ ssize_t ramfs_read(struct vfs_file* file,
 	size_t to_read = MIN(rf->size - (size_t)(*offset), count);
 	memcpy(buffer, rf->data + *offset, to_read);
 
-	*offset += to_read;
+	*offset += (off_t)to_read;
 
 	return (ssize_t)to_read;
 }
@@ -405,7 +402,7 @@ ssize_t ramfs_write(struct vfs_file* file,
 	// Write data and update file position and size
 	memcpy(rf->data + (*offset), buffer, count);
 	rf->size = MAX(rf->size, (size_t)(*offset) + count);
-	*offset += count;
+	*offset += (off_t)count;
 	file->dentry->inode->f_size = rf->size;
 
 	return (ssize_t)count;
@@ -494,8 +491,9 @@ int ramfs_create(struct vfs_inode* dir,
 	register_child(dentry->parent, dentry);
 
 	log_debug("Created file '%s' (inode %zu)", dentry->name, inode->id);
-	log_debug(
-		"fs_data: %p, rfile: %p", (void*)inode->fs_data, (void*)rfile);
+	log_debug("fs_data: %p, rfile: %p",
+		  (void*)inode->fs_data,
+		  (void*)rfile);
 
 	return 0;
 }
@@ -676,6 +674,7 @@ void ramfs_test()
  * Private Function Definitions
  *******************************************************************************/
 
+[[gnu::unused]]
 static struct vfs_dentry* find_child(struct vfs_dentry* parent,
 				     const char* name)
 {

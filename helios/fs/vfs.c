@@ -80,15 +80,6 @@ struct path_component {
  * Private Function Prototypes
  *******************************************************************************/
 
-/**
- * trim_trailing - Remove trailing occurrences of a character from a string.
- * @s: Mutable, NUL-terminated C string buffer to trim (modified in-place).
- * @c: Character to remove from the end of @s.
- *
- * Scans backward from the end of @s and truncates all trailing @c by
- * writing a terminating NUL at the first non-@c position.
- */
-static void trim_trailing(char* s, char c);
 static const char* path_next_token(struct path_tokenizer* tok, size_t* out_len);
 static struct vfs_fs_type* find_filesystem(const char* fs_type);
 static void register_mount(struct vfs_mount* mnt);
@@ -2083,28 +2074,6 @@ static struct vfs_fs_type* find_filesystem(const char* fs_type)
 		p = p->next;
 	}
 	return nullptr;
-}
-
-/**
- * trim_trailing - Remove trailing occurrences of a character from a string.
- * @s: Mutable, NUL-terminated C string buffer to trim (modified in-place).
- * @c: Character to remove from the end of @s.
- *
- * Scans backward from the end of @s and truncates all trailing @c by
- * writing a terminating NUL at the first non-@c position.
- */
-static void trim_trailing(char* s, char c)
-{
-	if (!s || !*s) {
-		return; // Nothing to trim
-	}
-
-	ssize_t i = (ssize_t)strlen(s);
-	while (i >= 0 && s[i - 1] == c) {
-		i--;
-	}
-
-	s[i] = '\0';
 }
 
 // TODO: Make this use path_component struct

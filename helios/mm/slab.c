@@ -238,7 +238,7 @@ int slab_cache_init(struct slab_cache* cache,
 	 * This guarantees that each allocated region has enough space to
 	 * accommodate both redzones and a properly aligned object.
 	 */
-	cache->data_size = object_size + 2 * REDZONE_SIZE + object_align;
+	cache->data_size = object_size + 2UL * REDZONE_SIZE + object_align;
 
 	cache->object_align = object_align;
 	cache->header_size = ALIGN_UP(sizeof(struct slab), object_align);
@@ -682,7 +682,7 @@ static void slab_destroy(struct slab* slab)
 	}
 
 	list_del(&slab->link);
-	kfree(slab->free_stack);
+	kfree((void*)slab->free_stack);
 	_slab_free_pages(base, SLAB_SIZE_PAGES);
 
 	cache->total_slabs--;
@@ -711,7 +711,8 @@ static int slab_grow(struct slab_cache* cache)
 	struct slab* new_slab = (struct slab*)base;
 	memset(new_slab, 0, sizeof(struct slab)); // Zero out the slab metadata
 	new_slab->parent = cache;
-	new_slab->free_stack = kmalloc(cache->objects_per_slab * sizeof(void*));
+	new_slab->free_stack =
+		(void**)kmalloc(cache->objects_per_slab * sizeof(void*));
 	if (!new_slab->free_stack) {
 		log_error("OOM growing slab for cache %s", cache->name);
 		_slab_free_pages(base, SLAB_SIZE_PAGES);

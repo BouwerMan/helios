@@ -2,7 +2,9 @@
 ; Thank you :)
 ; asmsyntax=nasm
 [bits 64]
+[default rel]
 
+section .text
 
 extern g_pending_bits
 extern g_interrupt_nesting_level

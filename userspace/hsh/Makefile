@@ -20,19 +20,19 @@ all: $(APP_ELF)
 
 $(BUILDDIR)/%.o: %.c
 	@mkdir -p $(@D)
-	$(CC) -MD -c $< -o $@ $(US_CFLAGS) $(US_CPPFLAGS)
+	@$(CC) -MD -c $< -o $@ $(US_CFLAGS) $(US_CPPFLAGS)
 
 $(BUILDDIR)/%.o: %.S
 	@mkdir -p $(@D)
-	$(CC) -MD -c $< -o $@ $(US_CFLAGS) $(US_CPPFLAGS)
+	@$(CC) -MD -c $< -o $@ $(US_CFLAGS) $(US_CPPFLAGS)
 
 $(BUILDDIR)/%.o: %.asm
 	@mkdir -p $(@D)
-	$(NASM) $(NASMFLAGS) $< -o $@
+	@$(NASM) $(NASMFLAGS) $< -o $@
 
 # Link order: CRT prologue, objects, libs, CRT epilogue
 $(APP_ELF): $(OBJS) $(LIBC_DEPS)
-	$(CC) $(US_LDFLAGS) $(CRT0) $(CRTI) $(OBJS) -o $@ $(US_LDLIBS) $(APP_LDLIBS) $(CRTN)
+	@$(CC) $(US_LDFLAGS) $(CRT0) $(CRTI) $(OBJS) -o $@ $(US_LDLIBS) $(APP_LDLIBS) $(CRTN)
 
 install: $(APP_ELF)
 	@mkdir -p $(SYSROOT)/usr/bin

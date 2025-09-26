@@ -214,19 +214,6 @@ void sys_getppid(struct registers* r)
 
 #include <kernel/limine_requests.h>
 
-// This function will find the requested module from the boot info
-static struct limine_file* find_module(const char* name)
-{
-	struct limine_module_response* mod_resp = mod_request.response;
-
-	for (size_t i = 0; i < mod_resp->module_count; i++) {
-		if (strcmp(mod_resp->modules[i]->path, name) == 0) {
-			return mod_resp->modules[i];
-		}
-	}
-	return NULL;
-}
-
 /**
  * @rdi: file name (const char*)
  * @rsi: argv (char**)

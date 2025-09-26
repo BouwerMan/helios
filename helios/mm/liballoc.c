@@ -9,7 +9,9 @@
 
 #include <kernel/types.h>
 #include <mm/kmalloc.h>
-#define NULL	     ((void*)0)
+#ifndef NULL
+#define NULL ((void*)0)
+#endif
 #define PREFIX(func) k##func
 
 /**  Durand's Amazing Super Duper Memory functions.  */

@@ -31,7 +31,7 @@ void* mmap_sys(void* addr,
 
 	struct address_space* vas = get_current_task()->vas;
 	while (is_within_vas(vas, (vaddr_t)addr)) {
-		addr += PAGE_SIZE;
+		addr = (void*)((uptr)addr + PAGE_SIZE);
 	}
 
 	int res = map_region(get_current_task()->vas,
@@ -63,5 +63,7 @@ void* mmap_sys(void* addr,
 
 int munmap(void* addr, size_t length)
 {
+	(void)addr;
+	(void)length;
 	return 0;
 }

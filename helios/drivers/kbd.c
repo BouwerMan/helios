@@ -86,6 +86,7 @@ static bool is_ctrl_pressed = false;
 static bool is_alt_pressed = false;
 static bool caps_lock_on = false;
 
+[[maybe_unused]]
 static key_result_t res_none = { .type = KEY_NONE,
 				 .character = 0,
 				 .sequence = nullptr };
@@ -149,14 +150,13 @@ static key_result_t handle_special_keys(unsigned char scancode)
 key_result_t process_scancode()
 {
 	unsigned char scancode = inb(0x60);
-	static key_result_t res = { 0 };
 
 	if (handle_modifier_keys(scancode)) {
 		return make_no_result();
 	}
 
 	if (scancode & SC_RELEASE_MASK) {
-		handle_key_release(scancode & ~SC_RELEASE_MASK);
+		handle_key_release(scancode & ~((unsigned int)SC_RELEASE_MASK));
 		return make_no_result();
 	}
 

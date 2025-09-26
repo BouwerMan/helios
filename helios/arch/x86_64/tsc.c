@@ -9,11 +9,12 @@ static constexpr u32 HV_X64_MSR_TSC_FREQUENCY = 0x40000022;
 
 u64 __tsc_hz = 0;
 
+// TODO: Make separate cpuid file
 // TODO: Move these
 bool cpu_has_msr()
 {
 	static constexpr u32 CPUID_FLAG_MSR = 1 << 5;
-	unsigned int eax, ebx, ecx, edx;
+	unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
 	__get_cpuid(0x1, &eax, &ebx, &ecx, &edx);
 	return CHECK_BIT(edx, CPUID_FLAG_MSR);
 }
@@ -25,20 +26,15 @@ void cpu_rdmsr(u32 msr, u32* lo, u32* hi)
 
 bool tsc_is_invariant(void)
 {
-	unsigned int edx, unused;
+	unsigned int edx = 0, unused = 0;
 	__get_cpuid(0x80000007, &unused, &unused, &unused, &edx);
 	return CHECK_BIT(edx, 8);
 }
 
 bool tsc_try_cpuid15(u64* out_hz)
 {
-	unsigned int eax, ebx, ecx, edx;
+	unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
 	int res = __get_cpuid(0x15, &eax, &ebx, &ecx, &edx);
-	log_debug("CPUID(0x15): eax=%u, ebx=%u, ecx=%u, edx=%u",
-		  eax,
-		  ebx,
-		  ecx,
-		  edx);
 	if (eax == 0 || ebx == 0 || ecx == 0)
 		return false; // ratio/crystal missing
 	*out_hz = (u64)((unsigned __int128)ecx * ebx / eax); // Hz
@@ -48,7 +44,7 @@ bool tsc_try_cpuid15(u64* out_hz)
 
 bool sys_hypervisor()
 {
-	unsigned int eax, ebx, ecx, edx;
+	unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
 	__get_cpuid(0x1, &eax, &ebx, &ecx, &edx);
 	return CHECK_BIT(ecx, 31);
 }
@@ -67,7 +63,7 @@ bool tsc_try_hv(u64* out_hz)
 	*out_hz = ((u64)hi << 32) | lo;
 
 	if (!*out_hz) {
-		unsigned int eax, ebx, ecx, edx;
+		unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
 		__get_cpuid(0x40000010, &eax, &ebx, &ecx, &edx);
 		if (eax) {
 			*out_hz = (u64)eax * 1000;

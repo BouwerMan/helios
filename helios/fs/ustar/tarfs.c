@@ -41,8 +41,9 @@ void unpack_tarfs(void* archive_address)
 			   header->typeflag == '\0') {
 			int fd = vfs_open(header->name, O_CREAT | O_WRONLY);
 			if (fd >= 0) {
-				vfs_write(
-					fd, (const char*)file_data, file_size);
+				vfs_write(fd,
+					  (const char*)file_data,
+					  file_size);
 				vfs_close(fd);
 			} else {
 				log_error("tarfs: Failed to create file %s",
@@ -52,7 +53,7 @@ void unpack_tarfs(void* archive_address)
 
 		// Advance the pointer to the next header.
 		// The file data is padded to a 512-byte boundary.
-		size_t data_size_padded = CEIL_DIV(file_size, 512) * 512;
+		size_t data_size_padded = CEIL_DIV(file_size, 512UL) * 512UL;
 		ptr += 512 + data_size_padded;
 	}
 	log_info("Initramfs unpacked into rootfs");

@@ -44,6 +44,8 @@ struct kernel_context kernel = { 0 };
 
 struct vfs_file* g_kernel_console = nullptr;
 
+extern void* g_entry_new_stack;
+
 /**
  * init_kernel_structure - Initialize core kernel data structures
  */
@@ -52,43 +54,8 @@ void init_kernel_structure()
 	list_init(&kernel.slab_caches);
 }
 
-/**
- * kernel_console_init - Initialize the kernel console for logging
- *
- * Sets up the kernel console by opening /dev/console and configuring
- * it as the primary output destination for kernel messages. This enables
- * kernel logging to be displayed on the system console.
- *
- * The function:
- * - Looks up the /dev/console device node in the VFS
- * - Allocates and initializes a file structure for the console
- * - Calls the TTY's open function to prepare the device
- * - Switches logging to buffered mode
- */
-void kernel_console_init()
-{
-	struct vfs_dentry* dentry = vfs_lookup("/dev/ttyS0");
-	if (dentry && dentry->inode) {
-		log_debug("Found /dev/console, setting up kernel console");
-		g_kernel_console = kzalloc(sizeof(struct vfs_file));
-		g_kernel_console->dentry = dget(dentry);
-		g_kernel_console->fops = dentry->inode->fops;
-		g_kernel_console->ref_count++;
-
-		// Call the TTY's open function
-		if (g_kernel_console->fops->open) {
-			g_kernel_console->fops->open(dentry->inode,
-						     g_kernel_console);
-		}
-		set_log_mode(LOG_BUFFERED);
-	} else {
-		log_error("Could not find /dev/ttyS0 for kernel console!");
-	}
-}
-
 void kernel_main()
 {
-	extern void* g_entry_new_stack;
 	log_debug("Successfully jumped to stack: %p", g_entry_new_stack);
 	// FIXME: Once we get module loading working I will uncomment this
 	// bootmem_reclaim_bootloader();
@@ -123,10 +90,6 @@ void kernel_main()
 	unpack_tarfs(mod_request.response->modules[0]->address);
 
 	int fd = vfs_open("/", O_RDONLY);
-	struct vfs_file* f = get_file(fd);
-	// vfs_dump_child(f->dentry);
-
-	// goto loop;
 
 	log_info("Mounting /dev");
 	vfs_mkdir("/dev", VFS_PERM_ALL);
@@ -140,7 +103,6 @@ void kernel_main()
 	int fd2 = vfs_open("/usr/", O_RDONLY);
 	struct vfs_file* f2 = get_file(fd2);
 	struct dirent* dirent = kzalloc(sizeof(struct dirent));
-	off_t offset = 0;
 	while (vfs_readdir(f2, dirent, DIRENT_GET_NEXT)) {
 		log_debug(
 			"Found entry: %s, d_ino: %lu, d_off: %lu, d_reclen: %d, d_type: %d",
@@ -163,7 +125,6 @@ void kernel_main()
 	// attach_tty_to_console("ttyS0");
 	attach_tty_to_console("tty0");
 	keyboard_init();
-	// kernel_console_init();
 
 	log_info("Successfully got out of bootstrapping hell");
 	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
@@ -184,7 +145,6 @@ void kernel_main()
 	console_flush();
 	outword(0x604, 0x2000);
 #endif
-loop:
 	yield_blocked();
 	log_info("Entering idle loop");
 	for (;;) {

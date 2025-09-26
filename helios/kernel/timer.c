@@ -19,6 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "kernel/assert.h"
 #include "kernel/spinlock.h"
 #include "lib/list.h"
 #include "mm/kmalloc.h"
@@ -90,14 +91,22 @@ void timer_schedule(struct timer* timer,
 	spin_unlock_irqrestore(&ts.lock, flags);
 }
 
-void timer_cancel(struct timer* timer);
+void timer_cancel(struct timer* timer)
+{
+	(void)timer;
+	kassert(false, "Not implemented");
+}
 
 void timer_reschedule(struct timer* timer, u64 new_delay_ms)
 {
 	timer_schedule(timer, new_delay_ms, timer->callback, timer->data);
 }
 
-void timer_destroy(struct timer* timer);
+void timer_destroy(struct timer* timer)
+{
+	(void)timer;
+	kassert(false, "Not implemented");
+}
 
 void timer_tick()
 {

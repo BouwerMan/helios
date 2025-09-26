@@ -350,8 +350,6 @@ int main(void)
 	printf("Welcome to hsh! Type 'help' for a list of commands.\n");
 	char* cols_str = getenv("COLUMNS");
 	char* rows_str = getenv("ROWS");
-	int cols = atoi(cols_str);
-	int rows = atoi(rows_str);
 
 	printf("Terminal size: %sx%s\n",
 	       cols_str ? cols_str : "?",

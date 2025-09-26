@@ -66,7 +66,6 @@ install: install-libs
 install-headers:
 	@echo "Installing Libc headers..."
 	@mkdir -p $(DESTDIR)/$(INCLUDEDIR)
-	# @cp -R --preserve=timestamps include/. $(DESTDIR)/$(INCLUDEDIR)/.
 	@rsync -a --exclude='internal/' include/. $(DESTDIR)/$(INCLUDEDIR)/.
 
 install-libs: $(BINARIES)

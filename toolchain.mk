@@ -38,7 +38,7 @@ COMMON_CFLAGS := -std=gnu23 -ggdb -pipe -ffreestanding \
 		 -mgeneral-regs-only -mno-mmx -mno-sse -mno-sse3
 
 ARFLAGS   := rcsD
-NASMFLAGS := -f elf64 -g -F dwarf -Wall -w+orphan-labels
+NASMFLAGS := -f elf64 -g -F dwarf -Wall -w+orphan-labels -w-reloc-rel-dword
 
 LDFLAGS := -nostdlib -no-pie
 LDLIBS := -lgcc
@@ -51,7 +51,6 @@ CRTN := $(SYSROOT)/$(LIBDIR)/crtn.o
 OPT ?= -Og
 PIC ?=
 
-# CPPFLAGS := --sysroot=$(SYSROOT) -isystem$(INCLUDEDIR)
 CFLAGS   := $(OPT) $(COMMON_CFLAGS) $(COMMON_WARN)
 CPPFLAGS := -MMD -MP
 

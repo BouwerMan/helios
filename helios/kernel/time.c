@@ -35,7 +35,3 @@ u64 clock_now_ms(void)
 {
 	return clock_now_ns() / 1000000ULL;
 }
-
-// helpers
-u64 cycles_to_ns(u64 cycles);
-u64 ns_to_deadline_cycles(u64 delta_ns); // for timers later
