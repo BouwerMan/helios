@@ -118,6 +118,7 @@ int copy_thread_state(struct task* child, struct registers* parent_regs);
 int launch_init();
 
 int kthread_run(struct task* task);
+[[nodiscard]]
 struct task* kthread_create(const char* name, entry_func entry);
 void kthread_destroy(struct task* task);
 struct task* new_task(const char* name, entry_func entry);

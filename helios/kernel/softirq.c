@@ -17,16 +17,12 @@ static void ksoftirqd_entry();
 
 void softirq_init(void)
 {
-	// TODO: Use ksoftirqd
-
-	// kthread_create("ksoftirqd", ksoftirqd_entry);
-	// kthread_run(ksoftirqd);
+	ksoftirqd = kthread_create("ksoftirqd", ksoftirqd_entry);
+	kthread_run(ksoftirqd);
 }
 
 void do_softirq(size_t item_budget, u64 ns_budget)
 {
-	// TODO: item_budget is currently ignored
-	// it never gets decreased in the loop below
 	if (in_progress) {
 		// Prevent re-entrancy
 		return;
@@ -48,14 +44,14 @@ void do_softirq(size_t item_budget, u64 ns_budget)
 			if (!g_softirqs[i].fn) continue;
 
 			softirq_ret_t res =
-				g_softirqs[i].fn(item_budget, ns_budget);
+				g_softirqs[i].fn(&item_budget, ns_budget);
 
 			switch (res) {
 			case SOFTIRQ_DONE: break;
 			case SOFTIRQ_MORE: SET_BIT(requeue, i); break;
 			case SOFTIRQ_PUNT:
-				// TODO: wake softirqd
 				SET_BIT(requeue, i);
+				task_wake(ksoftirqd);
 				break;
 			}
 		}
@@ -96,8 +92,9 @@ int softirq_register(int id, const char* name, softirq_fn fn)
 static void ksoftirqd_entry()
 {
 	log_debug("ksoftirqd started");
+	yield_blocked(); // Yield once to let init finish
 	while (true) {
-
-		yield();
+		do_softirq(1024, 10UL * 1000UL * 1000UL); // 10ms
+		yield_blocked();
 	}
 }

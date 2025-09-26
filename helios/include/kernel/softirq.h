@@ -16,7 +16,7 @@ enum SOFTIRQ_IDS {
 };
 
 // TODO: Return bool or just void?
-typedef softirq_ret_t (*softirq_fn)(size_t item_budget, u64 ns_budget);
+typedef softirq_ret_t (*softirq_fn)(size_t* item_budget, u64 ns_budget);
 
 struct softirq {
 	const char* name;

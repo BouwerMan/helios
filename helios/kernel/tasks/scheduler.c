@@ -251,6 +251,7 @@ bool is_scheduler_init()
  *
  * Return: Task that was created, nullptr if error
  */
+[[nodiscard]]
 struct task* kthread_create(const char* name, entry_func entry)
 {
 	disable_preemption();
@@ -307,9 +308,9 @@ void kthread_destroy(struct task* task)
  */
 int kthread_run(struct task* task)
 {
-	if (!task->regs->rip) {
+	if (!task || !task->regs || !task->regs->rip) {
 		log_error("Could not run kthread: no entry was specified");
-		return -1;
+		return -EINVAL;
 	}
 
 	disable_preemption();
@@ -790,8 +791,9 @@ static struct task* pick_next()
 		return squeue.current_task;
 	} else if (squeue.current_task == idle_task) {
 		// If we were the idle task and there is a ready task, pick it
-		struct task* next = list_first_entry(
-			&squeue.ready_list, struct task, sched_list);
+		struct task* next = list_first_entry(&squeue.ready_list,
+						     struct task,
+						     sched_list);
 		squeue.current_task = next;
 		return next;
 	}
@@ -810,11 +812,13 @@ static struct task* pick_next()
 	// ready list is READY. So we don't have to do any looping for a simple
 	// round-robin scheduler. (This still sucks though)
 	if (current->state != READY) {
-		next = list_first_entry(
-			&squeue.ready_list, struct task, sched_list);
+		next = list_first_entry(&squeue.ready_list,
+					struct task,
+					sched_list);
 	} else {
-		next = list_next_entry_circular(
-			current, &squeue.ready_list, sched_list);
+		next = list_next_entry_circular(current,
+						&squeue.ready_list,
+						sched_list);
 	}
 
 	squeue.current_task = next;

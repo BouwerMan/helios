@@ -36,7 +36,7 @@ static int klog_emit_serial(const struct klog_header* hdr,
 	return 0;
 }
 
-static softirq_ret_t klog_softirq_action(size_t item_budget, u64 ns_budget)
+static softirq_ret_t klog_softirq_action(size_t* item_budget, u64 ns_budget)
 {
 	static constexpr size_t CHUNK_MIN = 1;
 	static constexpr size_t CHUNK_MAX = 64;
@@ -52,7 +52,7 @@ static softirq_ret_t klog_softirq_action(size_t item_budget, u64 ns_budget)
 				       SOFTIRQ_MORE;
 		}
 
-		size_t n = item_budget < chunk ? item_budget : chunk;
+		size_t n = *item_budget < chunk ? *item_budget : chunk;
 
 		int res = klog_drain(&g_klog_ring,
 				     &g_klog_cursor,
@@ -63,7 +63,7 @@ static softirq_ret_t klog_softirq_action(size_t item_budget, u64 ns_budget)
 		switch ((enum KLOG_DRAIN_STATUS)res) {
 		case KLOG_DRAIN_BUDGET_EXHAUSTED:
 			// Emitted 'n' records
-			item_budget -= n;
+			*item_budget -= n;
 			break;
 
 		case KLOG_DRAIN_OK:
@@ -73,7 +73,7 @@ static softirq_ret_t klog_softirq_action(size_t item_budget, u64 ns_budget)
 			}
 			// New records arrived; don't charge full chunk since we don't know how many.
 			if (item_budget) {
-				item_budget--; // conservative accounting
+				(*item_budget)--; // conservative accounting
 			}
 			continue;
 
