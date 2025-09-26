@@ -58,12 +58,3 @@ void bootmem_free_page(void* addr);
  * @param count The number of contiguous pages to free. Must be greater than 0.
  */
 void bootmem_free_contiguous(void* addr, size_t count);
-
-/**
- * @brief Checks if a physical page is marked as used in the boot allocator bitmap.
- *
- * @param phys_addr Physical address of the page to check.
- *
- * @returns true if the page is marked as used, false otherwise.
- */
-bool bootmem_page_is_used(uintptr_t phys_addr);

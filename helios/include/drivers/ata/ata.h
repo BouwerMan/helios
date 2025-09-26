@@ -17,4 +17,4 @@
  * @param secCount number of sectors
  * @return true on success
  */
-bool ata_read_write(sATADevice* device, uint16_t op, void* buffer, uint32_t lba, size_t sec_size, size_t sec_count);
+bool ata_read_write(sATADevice* device, u16 op, void* buffer, u32 lba, size_t sec_size, size_t sec_count);

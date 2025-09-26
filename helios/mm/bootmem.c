@@ -34,21 +34,24 @@
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
-#include <util/log.h>
+#include <lib/log.h>
 #undef FORCE_LOG_REDEF
-
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
 
 #include <kernel/atomic.h>
 #include <kernel/helios.h>
 #include <kernel/limine_requests.h>
 #include <kernel/panic.h>
+#include <lib/string.h>
 #include <limine.h>
+#include <limits.h>
 #include <mm/bootmem.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
+#include <stdint.h>
+
+/*******************************************************************************
+* Global Variable Definitions
+*******************************************************************************/
 
 struct page* mem_map;
 
@@ -60,9 +63,23 @@ static size_t total_page_count;
 // Number of elements in bitmap
 static size_t map_elems;
 static size_t bitmap_size;
-static uintptr_t boot_bitmap_phys;
-uint64_t* boot_bitmap = NULL;
-#define BITSET_WIDTH (sizeof(uint64_t) * UINT8_WIDTH)
+static uintptr_t boot_bitmap_phys = UINTPTR_MAX;
+static uint64_t* boot_bitmap = (uint64_t*)UINTPTR_MAX;
+
+static constexpr int BITSET_WIDTH = (sizeof(*boot_bitmap) * CHAR_BIT);
+
+/*******************************************************************************
+* Private Function Prototypes
+*******************************************************************************/
+
+/**
+ * @brief Checks if a physical page is marked as used in the boot allocator bitmap.
+ *
+ * @param phys_addr Physical address of the page to check.
+ *
+ * @returns true if the page is marked as used, false otherwise.
+ */
+static bool is_page_used(uintptr_t phys_addr);
 
 /**
  * @brief Calculates the physical address from word and bit offsets.
@@ -117,6 +134,10 @@ static inline size_t get_bit_offset(uintptr_t phys_addr)
 	return get_page_index(phys_addr) % BITSET_WIDTH;
 }
 
+/*******************************************************************************
+* Public Function Definitions
+*******************************************************************************/
+
 /**
  * @brief Initializes the bootmem memmory manager and mem_map.
  *
@@ -138,7 +159,11 @@ void bootmem_init()
 	// First pass: Calculate the highest address and total usable memory length.
 	for (size_t i = 0; i < mmap->entry_count; i++) {
 		struct limine_memmap_entry* entry = mmap->entries[i];
-		log_debug("%zu. Start Addr: %lx | Length: %lx | Type: %lu", i, entry->base, entry->length, entry->type);
+		log_debug("%zu. Start Addr: %lx | Length: %lx | Type: %lu",
+			  i,
+			  entry->base,
+			  entry->length,
+			  entry->type);
 		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
 
 		/**
@@ -151,11 +176,17 @@ void bootmem_init()
 		total_len += entry->length;
 		max_pfn = (end - PAGE_SIZE) >> PAGE_SHIFT;
 	}
-	log_debug("Highest address: 0x%lx, Total memory length: %zx", pfn_to_phys(max_pfn + 1), total_len);
+	log_debug("Highest address: 0x%lx, Total memory length: %zx",
+		  pfn_to_phys(max_pfn + 1),
+		  total_len);
 
 	bitmap_size = CEIL_DIV(max_pfn - min_pfn, (pfn_t)8);
 	map_elems = bitmap_size / sizeof(boot_bitmap[0]);
-	log_debug("min_pfn: %lu, max_pfn: %lu, mapsize: %zu, map_elems: %zu", min_pfn, max_pfn, bitmap_size, map_elems);
+	log_debug("min_pfn: %lu, max_pfn: %lu, mapsize: %zu, map_elems: %zu",
+		  min_pfn,
+		  max_pfn,
+		  bitmap_size,
+		  map_elems);
 
 	// Second pass: Find a suitable location for the bitmap.
 	for (size_t i = 0; i < mmap->entry_count; i++) {
@@ -164,8 +195,11 @@ void bootmem_init()
 
 		// Check if the memory region is large enough to hold the bitmap.
 		if (!(entry->length > bitmap_size)) continue;
-		log_debug("Found valid location for bitmap at mmap entry: %zu, base: 0x%lx, length: %lu", i,
-			  entry->base, entry->length);
+		log_debug(
+			"Found valid location for bitmap at mmap entry: %zu, base: 0x%lx, length: %lu",
+			i,
+			entry->base,
+			entry->length);
 
 		boot_bitmap_phys = entry->base;
 		// Map to virtual memory.
@@ -174,11 +208,13 @@ void bootmem_init()
 	}
 
 	// Ensure a valid location for the bitmap was found.
-	if (!boot_bitmap_phys || !boot_bitmap) {
+	if (boot_bitmap_phys == UINTPTR_MAX ||
+	    (uptr)boot_bitmap == UINTPTR_MAX) {
 		panic("Could not find valid location for memory bitmap");
 	}
 
-	log_debug("Located valid PMM bitmap location at: 0x%lx", boot_bitmap_phys);
+	log_debug("Located valid PMM bitmap location at: 0x%lx",
+		  boot_bitmap_phys);
 	log_debug("Mapped bitmap to virtual memory at: %p", (void*)boot_bitmap);
 
 	// Initialize the bitmap: Mark all pages as allocated.
@@ -196,7 +232,9 @@ void bootmem_init()
 
 		for (uint64_t addr = start; addr < end; addr += PAGE_SIZE) {
 			// Skip pages that overlap with the bitmap itself.
-			if (addr >= boot_bitmap_phys && addr < (boot_bitmap_phys + bitmap_size)) continue;
+			if (addr >= boot_bitmap_phys &&
+			    addr < (boot_bitmap_phys + bitmap_size))
+				continue;
 			uint64_t word_index = get_word_offset(addr);
 			uint64_t bit_offset = get_bit_offset(addr);
 
@@ -225,7 +263,8 @@ void bootmem_init()
 		uintptr_t paddr = pfn_to_phys(pfn);
 		struct page* pg = &mem_map[pfn];
 		pg->flags = 0;
-		if (bootmem_page_is_used(paddr)) {
+		waitqueue_init(&pg->wq);
+		if (is_page_used(paddr)) {
 			set_page_reserved(pg);
 			atomic_set(&pg->ref_count, 1);
 		} else { /* Page is free */
@@ -247,7 +286,8 @@ void bootmem_init()
 void* bootmem_alloc_page(void)
 {
 	if (!boot_bitmap) {
-		log_error("boot_bitmap is not initialized or has already been decommissioned");
+		log_error(
+			"boot_bitmap is not initialized or has already been decommissioned");
 		return NULL;
 	}
 
@@ -279,7 +319,8 @@ void* bootmem_alloc_page(void)
 void bootmem_free_page(void* addr)
 {
 	if (!boot_bitmap) {
-		log_error("boot_bitmap is not initialized or has already been decommissioned");
+		log_error(
+			"boot_bitmap is not initialized or has already been decommissioned");
 		return;
 	}
 
@@ -307,7 +348,8 @@ void bootmem_free_page(void* addr)
 void* bootmem_alloc_contiguous(size_t count)
 {
 	if (!boot_bitmap) {
-		log_error("boot_bitmap is not initialized or has already been decommissioned");
+		log_error(
+			"boot_bitmap is not initialized or has already been decommissioned");
 		return NULL;
 	}
 
@@ -359,13 +401,15 @@ allocate_page:
 void bootmem_free_contiguous(void* addr, size_t count)
 {
 	if (!boot_bitmap) {
-		log_error("boot_bitmap is not initialized or has already been decommissioned");
+		log_error(
+			"boot_bitmap is not initialized or has already been decommissioned");
 		return;
 	}
 
 	uint64_t page_index = (uint64_t)addr / PAGE_SIZE;
 	if (page_index >= total_page_count) {
-		log_error("Attempted to free page out of bounds: %lu", page_index);
+		log_error("Attempted to free page out of bounds: %lu",
+			  page_index);
 		return;
 	}
 	uint64_t end_index = page_index + count;
@@ -375,30 +419,6 @@ void bootmem_free_contiguous(void* addr, size_t count)
 		boot_bitmap[word_offset] &= ~(1ULL << bit_offset);
 	}
 	free_page_count += count;
-}
-
-/**
- * @brief Checks if a physical page is marked as used in the boot allocator bitmap.
- *
- * @param phys_addr Physical address of the page to check.
- *
- * This function determines whether a physical page is marked as used by inspecting
- * the corresponding bit in the boot allocator bitmap. The bitmap tracks the allocation
- * state of physical pages during the boot process.
- *
- * @returns true if the page is marked as used, false otherwise.
- */
-bool bootmem_page_is_used(uintptr_t phys_addr)
-{
-	if (!boot_bitmap) {
-		log_error("boot_bitmap is not initialized or has already been decommissioned");
-		return true;
-	}
-
-	uintptr_t word_offset = get_word_offset(phys_addr);
-	uintptr_t bit_offset = get_bit_offset(phys_addr);
-
-	return ((boot_bitmap[word_offset] & (1ULL << bit_offset)) != 0);
 }
 
 /**
@@ -417,7 +437,8 @@ bool bootmem_page_is_used(uintptr_t phys_addr)
 void bootmem_free_all(void)
 {
 	if (!boot_bitmap) {
-		log_error("boot_bitmap is not initialized or has already been decommissioned");
+		log_error(
+			"boot_bitmap is not initialized or has already been decommissioned");
 		return;
 	}
 
@@ -426,11 +447,12 @@ void bootmem_free_all(void)
 	// Free all pages not marked as used in the boot allocator bitmap.
 	for (pfn_t pfn = min_pfn; pfn < max_pfn + min_pfn; pfn++) {
 		uintptr_t page_phys = pfn_to_phys(pfn);
-		if (bootmem_page_is_used(page_phys)) continue;
+		if (is_page_used(page_phys)) continue;
 		struct page* page = &mem_map[pfn];
 
+		atomic_set(&page->ref_count, 0);
 		clear_page_reserved(page);
-		set_page_buddy(page);
+		// set_page_buddy(page);
 		page->state = BLOCK_FREE;
 
 		__free_page(page);
@@ -439,12 +461,15 @@ void bootmem_free_all(void)
 	log_debug("Freed all old allocator memory, freeing bootmem bitmap");
 
 	// Free the memory used by the boot allocator bitmap.
-	for (uintptr_t phys = boot_bitmap_phys; phys < boot_bitmap_phys + bitmap_size; phys += PAGE_SIZE) {
+	for (uintptr_t phys = boot_bitmap_phys;
+	     phys < boot_bitmap_phys + bitmap_size;
+	     phys += PAGE_SIZE) {
 		pfn_t pfn = phys_to_pfn(phys);
 		struct page* page = &mem_map[pfn];
 
+		atomic_set(&page->ref_count, 0);
 		clear_page_reserved(page);
-		set_page_buddy(page);
+		// set_page_buddy(page);
 		page->state = BLOCK_FREE;
 
 		__free_page(page);
@@ -476,11 +501,14 @@ void bootmem_reclaim_bootloader()
 
 	for (size_t i = 0; i < bootinfo->memmap_entry_count; i++) {
 		struct bootinfo_memmap_entry* entry = &bootinfo->memmap[i];
-		if (entry->type != LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE) continue;
+		if (entry->type != LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE)
+			continue;
 
 		uintptr_t start = entry->base;
 		uintptr_t end = entry->base + entry->length;
-		log_debug("Reclaimable range: start=0x%lx, end=0x%lx", start, end);
+		log_debug("Reclaimable range: start=0x%lx, end=0x%lx",
+			  start,
+			  end);
 		for (size_t phys = start; phys < end; phys += PAGE_SIZE) {
 			struct page* page = phys_to_page(phys);
 
@@ -494,5 +522,25 @@ void bootmem_reclaim_bootloader()
 		}
 	}
 
-	log_info("Reclaimed %zu KiB (%zu bytes) from the bootloader", total_reclaimed / 1024, total_reclaimed);
+	log_info("Reclaimed %zu KiB (%zu bytes) from the bootloader",
+		 total_reclaimed / 1024,
+		 total_reclaimed);
+}
+
+/*******************************************************************************
+* Private Function Definitions
+*******************************************************************************/
+
+static bool is_page_used(uintptr_t phys_addr)
+{
+	if (!boot_bitmap) {
+		log_error(
+			"boot_bitmap is not initialized or has already been decommissioned");
+		return true;
+	}
+
+	uintptr_t word_offset = get_word_offset(phys_addr);
+	uintptr_t bit_offset = get_bit_offset(phys_addr);
+
+	return ((boot_bitmap[word_offset] & (1ULL << bit_offset)) != 0);
 }

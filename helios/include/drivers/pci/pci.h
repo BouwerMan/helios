@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
-#include <stddef.h>
+#include <kernel/types.h>
 #include <stdint.h>
 
 enum {
@@ -31,14 +31,14 @@ enum PCI_OFFSETS {
 	PCI_TYPE = 0x0E,
 };
 
-#define VENDOR_INVALID 0xFFFF
+static constexpr u16 VENDOR_INVALID = 0xFFFF;
 
-#define BAR0 0x10
-#define BAR1 0x14
-#define BAR2 0x18
-#define BAR3 0x1C
-#define BAR4 0x20
-#define BAR5 0x24
+static constexpr u16 BAR0 = 0x10;
+static constexpr u16 BAR1 = 0x14;
+static constexpr u16 BAR2 = 0x18;
+static constexpr u16 BAR3 = 0x1C;
+static constexpr u16 BAR4 = 0x20;
+static constexpr u16 BAR5 = 0x24;
 
 typedef struct {
 	uint8_t bus;
@@ -58,6 +58,11 @@ typedef struct {
 const pci_device_t* get_device_by_index(uint8_t index);
 const pci_device_t* get_device_by_id(uint16_t device_id);
 const pci_device_t* get_device_by_class(uint8_t base_class, uint8_t sub_class);
-uint32_t pci_config_read_dword(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset);
-void pci_config_write_dword(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, uint32_t value);
+uint32_t
+pci_config_read_dword(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset);
+void pci_config_write_dword(uint8_t bus,
+			    uint8_t slot,
+			    uint8_t func,
+			    uint8_t offset,
+			    uint32_t value);
 void list_devices();

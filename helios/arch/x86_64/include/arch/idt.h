@@ -5,19 +5,23 @@
 #include <stdint.h>
 
 #include <arch/regs.h>
+#include <kernel/types.h>
 
-#define KERNEL_CS   0x08
-#define IDT_ENTRIES 256
+static constexpr int IDT_ENTRIES = 256;
 
-#define PIC1_COMMAND 0x20
-#define PIC1_DATA    0x21
-#define PIC2_COMMAND 0xA0
-#define PIC2_DATA    0xA1
-#define PIC_EOI	     0x20
+static constexpr u16 PIC1_COMMAND = 0x20;
+static constexpr u16 PIC1_DATA = 0x21;
+static constexpr u16 PIC2_COMMAND = 0xA0;
+static constexpr u16 PIC2_DATA = 0xA1;
+static constexpr u16 PIC_EOI = 0x20;
 
-#define ICW1_INIT 0x10
-#define ICW1_ICW4 0x01
-#define ICW4_8086 0x01
+static constexpr u16 ICW1_INIT = 0x10;
+static constexpr u16 ICW1_ICW4 = 0x01;
+static constexpr u16 ICW4_8086 = 0x01;
+
+enum ISRn {
+	PAGE_FAULT = 14,
+};
 
 enum IRQn {
 	IRQ0 = 32,
@@ -41,11 +45,11 @@ enum IRQn {
 typedef struct {
 	uint16_t isr_low;   // The lower 16 bits of the ISR's address
 	uint16_t kernel_cs; // The GDT segment selector that the CPU will load into CS before calling the ISR
-	uint8_t ist;	    // The IST in the TSS that the CPU will load into RSP; set to zero for now
+	uint8_t ist; // The IST in the TSS that the CPU will load into RSP; set to zero for now
 	uint8_t attributes; // Type and attributes; see the IDT page
-	uint16_t isr_mid;   // The higher 16 bits of the lower 32 bits of the ISR's address
-	uint32_t isr_high;  // The higher 32 bits of the ISR's address
-	uint32_t reserved;  // Set to zero
+	uint16_t isr_mid; // The higher 16 bits of the lower 32 bits of the ISR's address
+	uint32_t isr_high; // The higher 32 bits of the ISR's address
+	uint32_t reserved; // Set to zero
 } __attribute__((packed)) idt_entry_t;
 
 typedef struct idtr {
@@ -59,21 +63,21 @@ struct xmm_reg {
 };
 
 // IDT
-void idt_set_descriptor(uint8_t vector, uint64_t isr, uint8_t flags);
 void idt_init(void);
 
 // ISR
 void isr_init();
-void install_isr_handler(int isr, void (*handler)(struct registers* r));
-void uninstall_isr_handler(int isr);
+void isr_install_handler(int isr, void (*handler)(struct registers* r));
+void isr_uninstall_handler(int isr);
 void isr_handler(struct registers* r);
 
 // IRQ
 void irq_init(void);
 void irq_handler(struct registers* r);
+void irq_set_mask(uint8_t IRQline);
+void irq_clear_mask(uint8_t IRQline);
 
-void IRQ_set_mask(uint8_t IRQline);
-void IRQ_clear_mask(uint8_t IRQline);
+bool is_in_interrupt_context();
 
 extern void __set_idt(idtr_t* idtr);
 /* ISR definitions */
@@ -109,7 +113,8 @@ extern void isr28();
 extern void isr29();
 extern void isr30();
 extern void isr31();
-extern void isr48(); //yield
+extern void isr48();  //yield
+extern void isr128(); // syscall
 
 /* IRQ definitions */
 extern void irq0();
@@ -128,6 +133,3 @@ extern void irq12();
 extern void irq13();
 extern void irq14();
 extern void irq15();
-
-/* syscall handler */
-extern void isr128();

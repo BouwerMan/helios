@@ -4,17 +4,24 @@
 #pragma once
 
 #include <features.h>
+#include <stdint.h>
 
 #define __need_NULL
 #define __need_size_t
 #include <stddef.h>
 
 #if defined(__x86_64__) || defined(_M_X64)
-#include <private/string_64.h>
+// These will be aliased in memset.c
+extern void* memset64(uint64_t* s, uint64_t v, size_t n);
+extern void* memset32(uint32_t* s, uint32_t v, size_t n);
+extern void* memset16(uint16_t* s, uint16_t v, size_t n);
+extern void* memset8(uint8_t* s, uint8_t v, size_t n);
 #endif
 
-/// Checks the alignment of dest and src while making sure num can be evenly divisible
-#define __STRING_H_CHECK_ALIGN(num, dest, src, size) ((num % size == 0) && (dest % size == 0) && (src % size == 0))
+/// Checks the alignment of dest and src while making sure num can be evenly
+/// divisible
+#define __STRING_H_CHECK_ALIGN(num, dest, src, size) \
+	((num % size == 0) && (dest % size == 0) && (src % size == 0))
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,21 +38,22 @@ char* strndup(const char* s, size_t n);
 char* strcat(char* restrict s1, const char* restrict s2);
 char* strncat(char* restrict s1, const char* restrict s2, size_t n);
 
-extern int memcmp(const void* s1, const void* s2, size_t n);
+int memcmp(const void* s1, const void* s2, size_t n);
 
-extern int strcmp(const char* s1, const char* s2);
+int strcmp(const char* s1, const char* s2);
 
 // FIXME: Unimplemented
 int strcoll(const char* s1, const char* s2);
 
-extern int strncmp(const char* s1, const char* s2, size_t n);
+int strncmp(const char* s1, const char* s2, size_t n);
 
 // FIXME: Unimplemented
 size_t strxfrm(char* restrict s1, const char* restrict s2, size_t n);
 // FIXME: Unimplemented
 void* memchr(const void* s, int c, size_t n);
-// FIXME: Unimplemented
-extern char* __pure strchr(const char* s, int c);
+
+char* __pure strchr(const char* s, int c);
+char* strrchr(const char* s, int c);
 
 // FIXME: Unimplemented
 size_t strcspn(const char* s1, const char* s2);
@@ -55,19 +63,22 @@ char* strpbrk(const char* s1, const char* s2);
 size_t strspn(const char* s1, const char* s2);
 // FIXME: Unimplemented
 char* strstr(const char* s1, const char* s2);
+
 char* strtok(char* restrict s1, const char* restrict s2);
+
 // FIXME: Unimplemented
 void* memset_explicit(void* s, int c, size_t n);
+
 // FIXME: Unimplemented
-char* strerror(int errnum);
+const char* strerror(int errnum);
 size_t strlen(const char*);
 
 extern void* memset(void* s, int c, size_t n);
 
-#ifdef __STDC_WANT_LIB_EXT1__
+// #ifdef __STDC_WANT_LIB_EXT1__
 size_t strnlen_s(const char* s, size_t n);
 size_t strnlen(const char* s, size_t n);
-#endif
+// #endif
 
 #ifdef __cplusplus
 }

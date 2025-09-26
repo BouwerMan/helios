@@ -19,19 +19,23 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <kernel/dmesg.h>
-#include <kernel/panic.h>
-#include <kernel/screen.h>
-
-#include <util/log.h>
+#include "kernel/panic.h"
+#include "drivers/console.h"
+#include "drivers/screen.h"
+#include "kernel/helios.h"
+#include "kernel/klog.h"
+#include "lib/log.h"
 
 // Very rudimentary panic, still relies on libc and stuff.
 void panic(const char* message)
 {
 	__asm__ volatile("cli");
-	dmesg_flush_raw();
+	console_flush();
+	klog_flush();
+	set_log_mode(LOG_DIRECT);
 	set_color(COLOR_RED, COLOR_BLACK);
 	log_error("KERNEL PANIC!\n%s", message);
+	QEMU_SHUTDOWN();
 	for (;;)
 		__asm__ volatile("hlt");
 }

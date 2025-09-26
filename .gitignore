@@ -8,14 +8,16 @@ sysroot/
 *.iso
 mnt/
 limine/
-*.o
 *.txt
 
+*.elf
 *.o
 *.d
 *.kernel
 build/
-tools/
 .gdbinit
+tools/
 .cache/
 compile_commands.json
+
+ovmf/

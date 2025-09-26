@@ -1,20 +1,22 @@
-#include <stdio.h>
+#include "internal/features.h"
+#include "internal/stdio.h"
 
-#if defined(__is_libk)
-#include <kernel/screen.h>
-#ifdef __KDEBUG__
-#include <drivers/serial.h>
-#endif
-
-int puts(const char* string)
+int __puts(const char* s)
 {
-	screen_putstring(string);
-	screen_putchar('\n');
+	if (__fputs(s, stdout) < 0 || __fputc('\n', stdout) < 0) {
+		return -1;
+	}
 	return 0;
 }
-#else
-// TODO: Proper libc puts
-int puts(const char* string)
+weak_alias(__puts, puts);
+
+int __fputs(const char* __restrict s, FILE* __restrict stream)
 {
+	for (const char* p = s; *p; p++) {
+		if (__fputc(*p, stream) < 0) {
+			return -1;
+		}
+	}
+	return 0;
 }
-#endif
+weak_alias(__fputs, fputs);

@@ -10,27 +10,33 @@ ObjCBlockIndentWidth: 8
 ConstructorInitializerIndentWidth: 8
 ContinuationIndentWidth: 8
 UseTab: Always
-ColumnLimit: 120
+ColumnLimit: 80
 AlignConsecutiveMacros: Consecutive
-AlignTrailingComments: true
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 2
 AlignAfterOpenBracket: Align
 PointerAlignment: Left
+CommentPragmas: '^ IWYU pragma:'
 
 AlignConsecutiveAssignments: false
 AlignConsecutiveDeclarations: false
 AlignEscapedNewlines: Left
 AlignOperands: true
+AllowAllArgumentsOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortBlocksOnASingleLine: false
-AllowShortCaseLabelsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: true
+AlignConsecutiveShortCaseStatements:
+  Enabled: true
 AllowShortFunctionsOnASingleLine: None
 AllowShortLoopsOnASingleLine: false
 AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: false
-BinPackParameters: true
-BinPackArguments: true
+BinPackParameters: false
+BinPackArguments: false
 
 BreakBeforeBinaryOperators: None
 BreakBeforeInheritanceComma: false
@@ -48,3 +54,15 @@ PenaltyBreakFirstLessLess: 0
 PenaltyBreakString: 10
 PenaltyExcessCharacter: 100
 PenaltyReturnTypeOnItsOwnLine: 60
+
+ForEachMacros:
+- 'hlist_for_each'
+- 'hlist_for_each_entry'
+- 'list_for_each'
+- 'list_for_each_entry'
+- 'list_for_each_continue'
+- 'list_for_each_entry_continue'
+- 'hash_for_each'
+- 'hash_for_each_possible'
+
+SpaceAfterCStyleCast: false

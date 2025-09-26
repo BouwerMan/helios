@@ -2,7 +2,8 @@
 #include <string.h>
 
 [[maybe_unused]]
-static uint64_t* __memset64(uint64_t* restrict dst, uint64_t value, size_t count)
+static uint64_t*
+__memset64(uint64_t* restrict dst, uint64_t value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;
@@ -11,7 +12,8 @@ static uint64_t* __memset64(uint64_t* restrict dst, uint64_t value, size_t count
 }
 
 [[maybe_unused]]
-static uint32_t* __memset32(uint32_t* restrict dst, uint32_t value, size_t count)
+static uint32_t*
+__memset32(uint32_t* restrict dst, uint32_t value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;
@@ -20,7 +22,8 @@ static uint32_t* __memset32(uint32_t* restrict dst, uint32_t value, size_t count
 }
 
 [[maybe_unused]]
-static uint16_t* __memset16(uint16_t* restrict dst, uint16_t value, size_t count)
+static uint16_t*
+__memset16(uint16_t* restrict dst, uint16_t value, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		dst[i] = value;
@@ -84,7 +87,8 @@ void* memset(void* restrict dest, int ch, size_t count)
 	size_t head_bytes = ((uintptr_t)b) & 7;
 	if (head_bytes) {
 		size_t bytes_to_fill = 8 - head_bytes;
-		size_t head_fill = (bytes_to_fill < count) ? (bytes_to_fill) : count;
+		size_t head_fill = (bytes_to_fill < count) ? (bytes_to_fill) :
+							     count;
 		for (size_t i = 0; i < head_fill; i++) {
 			b[i] = c;
 		}
@@ -97,38 +101,30 @@ void* memset(void* restrict dest, int ch, size_t count)
 		// prepare registers for inline asm
 		register uint64_t* d64 __asm__("rdi") = (uint64_t*)b;
 		register size_t cnt64 __asm__("rcx") = count / 8;
-		register uint64_t pattern __asm__("rax") = 0x0101010101010101ULL * c;
+		register uint64_t pattern __asm__("rax") =
+			0x0101010101010101ULL * c;
 
-		__asm__ volatile("rep stosq" : "+D"(d64), "+c"(cnt64) : "a"(pattern) : "memory");
+		__asm__ volatile("rep stosq"
+				 : "+D"(d64), "+c"(cnt64)
+				 : "a"(pattern)
+				 : "memory");
 
 		// leftover bytes
 		register size_t cnt8 __asm__("rcx") = count & 7;
-		__asm__ volatile("rep stosb" : "+D"(d64), "+c"(cnt8) : : "memory");
+		__asm__ volatile("rep stosb"
+				 : "+D"(d64), "+c"(cnt8)
+				 :
+				 : "memory");
 	}
 
 	return dest;
 }
 
-#ifdef __HAVE_ARCH_MEMSET8
-extern void* memset8(uint8_t* s, uint8_t v, size_t n) __attribute__((alias("__arch_memset8")));
-#else
-extern void* memset8(uint8_t* s, uint8_t v, size_t n) __attribute__((alias("__memset8")));
-#endif
-
-#ifdef __HAVE_ARCH_MEMSET16
-extern void* memset16(uint16_t* s, uint16_t v, size_t n) __attribute__((alias("__arch_memset16")));
-#else
-extern void* memset16(uint16_t* s, uint16_t v, size_t n) __attribute__((alias("__memset16")));
-#endif
-
-#ifdef __HAVE_ARCH_MEMSET32
-extern void* memset32(uint32_t* s, uint32_t v, size_t n) __attribute__((alias("__arch_memset32")));
-#else
-extern void* memset32(uint32_t* s, uint32_t v, size_t n) __attribute__((alias("__memset32")));
-#endif
-
-#ifdef __HAVE_ARCH_MEMSET64
-extern void* memset64(uint64_t* s, uint64_t v, size_t n) __attribute__((alias("__arch_memset64")));
-#else
-extern void* memset64(uint64_t* s, uint64_t v, size_t n) __attribute__((alias("__memset64")));
-#endif
+extern void* memset8(uint8_t* s, uint8_t v, size_t n)
+	__attribute__((alias("__memset8")));
+extern void* memset16(uint16_t* s, uint16_t v, size_t n)
+	__attribute__((alias("__memset16")));
+extern void* memset32(uint32_t* s, uint32_t v, size_t n)
+	__attribute__((alias("__memset32")));
+extern void* memset64(uint64_t* s, uint64_t v, size_t n)
+	__attribute__((alias("__memset64")));

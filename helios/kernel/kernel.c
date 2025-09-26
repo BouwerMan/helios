@@ -18,37 +18,37 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <drivers/ata/controller.h>
-#include <drivers/fs/vfs.h>
-#include <drivers/pci/pci.h>
-#include <drivers/serial.h>
-#include <kernel/dmesg.h>
-#include <kernel/helios.h>
-#include <kernel/liballoc.h>
-#include <kernel/mmu/vmm.h>
-#include <kernel/panic.h>
-#include <kernel/screen.h>
-#include <kernel/tasks/scheduler.h>
-#include <kernel/timer.h>
-#include <limine.h>
-#include <mm/bootmem.h>
-#include <mm/page.h>
-#include <mm/page_alloc.h>
-#include <mm/slab.h>
-#include <util/log.h>
-
-#define __STDC_WANT_LIB_EXT1__
-#include <string.h>
-
-[[noreturn]]
-extern void __switch_to_new_stack(void* new_stack_top, void (*entrypoint)(void));
+#include "drivers/console.h"
+#include "drivers/kbd.h"
+#include "drivers/term.h"
+#include "drivers/tty.h"
+#include "fs/ustar/tar.h"
+#include "fs/vfs.h"
+#include "kernel/helios.h"
+#include "kernel/irq_log.h"
+#include "kernel/klog.h"
+#include "kernel/limine_requests.h"
+#include "kernel/panic.h"
+#include "kernel/softirq.h"
+#include "kernel/syscall.h"
+#include "kernel/tasks/scheduler.h"
+#include "kernel/timer.h"
+#include "kernel/work_queue.h"
+#include "lib/log.h"
+#include "limine.h"
+#include "mm/kmalloc.h"
 
 struct limine_framebuffer* framebuffer;
 
 struct kernel_context kernel = { 0 };
 
-/// Initializes the lists in the kernel_context struct
-/// A lot of the entries actually get inited by other functions
+struct vfs_file* g_kernel_console = nullptr;
+
+extern void* g_entry_new_stack;
+
+/**
+ * init_kernel_structure - Initialize core kernel data structures
+ */
 void init_kernel_structure()
 {
 	list_init(&kernel.slab_caches);
@@ -56,95 +56,98 @@ void init_kernel_structure()
 
 void kernel_main()
 {
-	log_info("Successfully got out of bootstrapping hell");
-	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
-	bootmem_reclaim_bootloader();
+	log_debug("Successfully jumped to stack: %p", g_entry_new_stack);
+	// FIXME: Once we get module loading working I will uncomment this
+	// bootmem_reclaim_bootloader();
 
 	liballoc_init(); // Just initializes the liballoc spinlock
-	int* test = kmalloc(141);
-	*test = 513;
 
-	log_debug("kmalloc returned %p, stored %d in it", (void*)test, *test);
+	log_info("Initializing VFS and mounting root ramfs");
+	vfs_init();
 
-	init_scheduler();
-	log_info("Initializing dmesg");
-	dmesg_init();
-
-	// GDB BREAKPOINT
-	log_info("Initializing Timer");
+	scheduler_init();
+	softirq_init();
+	syscall_init();
+	work_queue_init();
 	timer_init();
+	term_init();
 
-#if 1
-	list_devices();
-	ctrl_init();
-	vfs_init(64);
+	log_init("Initializing klog");
+	struct klog_ring* ring = klog_init();
+	kernel.klog = ring;
 
-	sATADevice* fat_device = ctrl_get_device(3);
-	mount("/", fat_device, &fat_device->part_table[0], FAT16);
+	set_log_mode(LOG_KLOG);
 
-	struct vfs_file f = { 0 };
-	int res2 = vfs_open("/dir/test2.txt", &f);
-	if (res2 < 0) {
-		log_error("oh no");
-	} else {
-		// log_info("%s", f.read_ptr);
+	// list_devices();
+	// ctrl_init();
+	//
+	// sATADevice* fat_device = ctrl_get_device(3);
+	// mount("/", fat_device, &fat_device->part_table[0], FAT16);
+
+	test_split_path();
+
+	log_info("Mounting initial root filesystem");
+	unpack_tarfs(mod_request.response->modules[0]->address);
+
+	int fd = vfs_open("/", O_RDONLY);
+
+	log_info("Mounting /dev");
+	vfs_mkdir("/dev", VFS_PERM_ALL);
+	int res = vfs_mount(nullptr, "/dev", "devfs", 0);
+	if (res < 0) {
+		log_error("Could not mount /dev: %d", res);
+		panic("Could not mount /dev");
 	}
-	log_info("open 2");
-	struct vfs_file f2 = { 0 };
-	res2 = vfs_open("/test2.txt", &f2);
-	if (res2 < 0) {
-		log_error("oh no");
-	} else {
-		log_info("f_size: %zu, at %lx", f2.file_size, (uint64_t)f2.read_ptr);
-		// log_debug_long(f2.read_ptr);
+
+	log_info("Opening directory for reading");
+	int fd2 = vfs_open("/usr/", O_RDONLY);
+	struct vfs_file* f2 = get_file(fd2);
+	struct dirent* dirent = kzalloc(sizeof(struct dirent));
+	while (vfs_readdir(f2, dirent, DIRENT_GET_NEXT)) {
+		log_debug(
+			"Found entry: %s, d_ino: %lu, d_off: %lu, d_reclen: %d, d_type: %d",
+			dirent->d_name,
+			dirent->d_ino,
+			dirent->d_off,
+			dirent->d_reclen,
+			dirent->d_type);
 	}
-	log_debug("Closing");
-	vfs_close(&f);
-	vfs_close(&f2);
-#endif
 
-	log_info(TESTING_HEADER, "Slab Allocator");
+	vfs_close(fd);
+	vfs_close(fd2);
 
-	struct slab_cache test_cache = { 0 };
-	(void)slab_cache_init(&test_cache, "Test cache", sizeof(uint64_t), 0, NULL, NULL);
-	log_debug("Test cache slab size: %d pages", SLAB_SIZE_PAGES);
+	// ramfs_test();
 
-	test_use_before_alloc(&test_cache);
-	test_buffer_overflow(&test_cache);
-	test_buffer_underflow(&test_cache);
-	test_valid_usage(&test_cache);
-	test_object_alignment(&test_cache);
+	tty_init();
 
-	slab_cache_purge_corrupt(&test_cache);
+	irq_log_init();
+	console_init();
+	// attach_tty_to_console("ttyS0");
+	attach_tty_to_console("tty0");
+	keyboard_init();
 
-	uint64_t* data = slab_alloc(&test_cache);
-	*data = 12345;
-	log_info("Got data at %p, set value to %lu", (void*)data, *data);
-	uint64_t* data2 = slab_alloc(&test_cache);
-	*data2 = 54321;
-	log_info("Got data2 at %p, set value to %lu", (void*)data2, *data2);
-	size_t slab_bytes = SLAB_SIZE_PAGES * PAGE_SIZE;
-	size_t mask = ~(slab_bytes - 1);
-	log_debug("Slab base for data: %lx", (uintptr_t)data & mask);
-	slab_dump_stats(&test_cache);
-	slab_free(&test_cache, data2);
+	log_info("Successfully got out of bootstrapping hell");
+	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
 
-	slab_cache_destroy(&test_cache);
-	(void)slab_alloc(&test_cache);
-	slab_dump_stats(&test_cache);
+	int init_res = launch_init();
+	if (init_res < 0) {
+		log_error("Init error code: %d", init_res);
+		panic("Could not launch init!");
+	}
 
-	log_info(TESTING_FOOTER, "Slab Allocator");
+	scheduler_dump();
 
-	// We're done, just hang...
-	log_warn("Shutting down in 3 seconds");
-	sleep(1000);
-	log_warn("Shutting down in 2 seconds");
-	sleep(1000);
+#if 0
 	log_warn("Shutting down in 1 second");
 	sleep(1000);
 
 	// QEMU shutdown command
+	console_flush();
 	outword(0x604, 0x2000);
-	for (;;)
-		halt();
+#endif
+	yield_blocked();
+	log_info("Entering idle loop");
+	for (;;) {
+		yield();
+	}
 }

@@ -9,39 +9,39 @@
 #include <drivers/pci/pci.h>
 
 enum {
-	DEVICE_PRIMARY = 0,
+	DEVICE_PRIMARY	 = 0,
 	DEVICE_SECONDARY = 1,
 };
 
 /* device-identifier */
 enum {
 	DEVICE_PRIM_MASTER = 0,
-	DEVICE_PRIM_SLAVE = 1,
-	DEVICE_SEC_MASTER = 2,
-	DEVICE_SEC_SLAVE = 3,
+	DEVICE_PRIM_SLAVE  = 1,
+	DEVICE_SEC_MASTER  = 2,
+	DEVICE_SEC_SLAVE   = 3,
 };
 
 enum {
 	BMR_REG_COMMAND = 0x0,
-	BMR_REG_STATUS = 0x2,
-	BMR_REG_PRDT = 0x4,
+	BMR_REG_STATUS	= 0x2,
+	BMR_REG_PRDT	= 0x4,
 };
 
 enum {
-	BMR_STATUS_IRQ = 0x4,
+	BMR_STATUS_IRQ	 = 0x4,
 	BMR_STATUS_ERROR = 0x2,
-	BMR_STATUS_DMA = 0x1,
+	BMR_STATUS_DMA	 = 0x1,
 };
 
 enum {
 	BMR_CMD_START = 0x1,
-	BMR_CMD_READ = 0x8,
+	BMR_CMD_READ  = 0x8,
 };
 
-#define IO_PORTBASE_PRIMARY   ((uint16_t)0x3F6)
-#define IO_PORTBASE_SECONDARY ((uint16_t)0x376)
-#define PRDT_EOT	      (1 << 15)
-#define CTRL_IRQ_BASE	      14
+static constexpr u16 IO_PORTBASE_PRIMARY   = 0x3F6;
+static constexpr u16 IO_PORTBASE_SECONDARY = 0x376;
+static constexpr u16 PRDT_EOT		   = 1 << 15;
+static constexpr int CTRL_IRQ_BASE	   = 14;
 
 typedef struct sATAController sATAController;
 typedef struct sATADevice sATADevice;

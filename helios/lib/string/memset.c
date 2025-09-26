@@ -1,0 +1,120 @@
+#include <stdint.h>
+
+#include "kernel/compiler_attributes.h"
+#include "lib/string.h"
+
+u64* __default_memset64(u64* dst, u64 value, size_t count)
+{
+	for (size_t i = 0; i < count; i++) {
+		dst[i] = value;
+	}
+	return dst;
+}
+__weak_alias(__default_memset64, __memset64);
+
+u32* __default_memset32(u32* dst, u32 value, size_t count)
+{
+	for (size_t i = 0; i < count; i++) {
+		dst[i] = value;
+	}
+	return dst;
+}
+__weak_alias(__default_memset32, __memset32);
+
+u16* __default_memset16(uint16_t* dst, uint16_t value, size_t count)
+{
+	for (size_t i = 0; i < count; i++) {
+		dst[i] = value;
+	}
+	return dst;
+}
+__weak_alias(__default_memset16, __memset16);
+
+u8* __memset8(u8* dst, u8 value, size_t count)
+{
+	for (size_t i = 0; i < count; i++) {
+		dst[i] = value;
+	}
+	return dst;
+}
+
+#if defined(__x86_64__) || defined(_M_X64)
+// Ensures n can be divided by size, on x86_64 we can just eat the performance degradation from misaligned pointers.
+#define CHECK_ALIGN(d, n, size) ((void)(d), ((n) % (size) == 0))
+#else
+// On other architectures, unaligned pointer access might not be allowed
+#define CHECK_ALIGN(d, n, size) ((d % size == 0) && (n % size == 0))
+#endif
+
+#define SMALL_MOVE_THRESHOLD 1024
+
+static void* small_memset(void* restrict dest, int ch, size_t count)
+{
+	unsigned char c = (unsigned char)ch;
+	uintptr_t d = (uintptr_t)dest;
+
+	// If count is small we just use memset 8 and call it a day
+	if (count < 128) return __memset8(dest, c, count);
+
+	if (CHECK_ALIGN(d, count, sizeof(uint64_t))) {
+		uint64_t val = 0x0101010101010101ULL * c;
+		return memset64(dest, val, count / sizeof(uint64_t));
+	} else if (CHECK_ALIGN(d, count, sizeof(uint32_t))) {
+		uint32_t val = 0x01010101UL * c;
+		return memset32(dest, val, count / sizeof(uint32_t));
+	} else if (CHECK_ALIGN(d, count, sizeof(uint16_t))) {
+		uint16_t val = 0x0101U * c;
+		return memset16(dest, val, count / sizeof(uint16_t));
+	} else {
+		unsigned char val = c;
+		return __memset8(dest, val, count);
+	}
+}
+
+void* __default_memset(void* dest, int ch, size_t count)
+{
+	if (count <= SMALL_MOVE_THRESHOLD) {
+		// I've found that my old memset works way better for small sizes
+		return small_memset(dest, ch, count);
+	}
+
+	uint8_t* b = dest;
+	unsigned char c = (unsigned char)ch;
+
+	// Phase 1: Align to 8-byte boundary
+	size_t head_bytes = ((uintptr_t)b) & 7;
+	if (head_bytes) {
+		size_t bytes_to_fill = 8 - head_bytes;
+		size_t head_fill = (bytes_to_fill < count) ? (bytes_to_fill) :
+							     count;
+		for (size_t i = 0; i < head_fill; i++) {
+			b[i] = c;
+		}
+		b += head_fill;
+		count -= head_fill;
+	}
+
+	// phase 2: rep stosq / stosb
+	{
+		// prepare registers for inline asm
+		register uint64_t* d64 __asm__("rdi") = (uint64_t*)b;
+		register size_t cnt64 __asm__("rcx") = count / 8;
+		register uint64_t pattern __asm__("rax") =
+			0x0101010101010101ULL * c;
+
+		__asm__ volatile("rep stosq"
+				 : "+D"(d64), "+c"(cnt64)
+				 : "a"(pattern)
+				 : "memory");
+
+		// leftover bytes
+		register size_t cnt8 __asm__("rcx") = count & 7;
+		__asm__ volatile("rep stosb"
+				 : "+D"(d64), "+c"(cnt8)
+				 :
+				 : "memory");
+	}
+
+	return dest;
+}
+__weak_alias(__default_memset, __memset);

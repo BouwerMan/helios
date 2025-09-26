@@ -9,18 +9,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <kernel/helios.h>
-#include <kernel/spinlock.h>
-#include <mm/page.h>
-#include <mm/page_alloc_flags.h>
-#include <mm/zones.h>
-#include <util/list.h>
+#include "kernel/helios.h"
+#include "kernel/spinlock.h"
+#include "lib/list.h"
+#include "lib/string.h"
+#include "mm/page_alloc_flags.h"
+#include "mm/zones.h"
 
-#define MAX_ORDER 10 // 2^10 pages (1024 pages), or 4MiB blocks
+static constexpr int MAX_ORDER = 10; // 2^10 pages (1024 pages), or 4MiB blocks
 
 struct buddy_allocator {
-	struct list free_lists[MAX_ORDER + 1]; // One for each order
-	size_t size;			       // Total size in bytes
+	struct list_head free_lists[MAX_ORDER + 1]; // One for each order
+	size_t size;				    // Total size in bytes
 	size_t min_order;
 	size_t max_order;
 	spinlock_t lock;
@@ -48,8 +48,8 @@ void buddy_dump_free_lists();
  *
  * @return The virtual address of the first zeroed page, or 0 on failure.
  */
-[[nodiscard]]
-uintptr_t get_free_pages(aflags_t flags, size_t pages);
+[[gnu::malloc, nodiscard]]
+void* get_free_pages(aflags_t flags, size_t pages);
 
 /**
  * @brief Allocates a contiguous block of pages.
@@ -58,6 +58,10 @@ uintptr_t get_free_pages(aflags_t flags, size_t pages);
  * @param order Number of pages to allocate as a power of two (2^order).
  *
  * @return a pointer to the first page in the allocated block, or NULL on failure.
+ *
+ * When working with pages directly, callers should be aware of the build ref
+ * that is added to each page in the block. They are responsible for
+ * that ref, and should use put_page() or put_pages() when done.
  */
 [[nodiscard]]
 struct page* alloc_pages(aflags_t flags, size_t order);
@@ -69,8 +73,8 @@ struct page* alloc_pages(aflags_t flags, size_t order);
  *
  * @return the virtual address of the zeroed page, or 0 on failure.
  */
-[[nodiscard, gnu::always_inline]]
-static inline uintptr_t get_free_page(aflags_t flags)
+[[gnu::malloc, nodiscard, gnu::always_inline]]
+static inline void* get_free_page(aflags_t flags)
 {
 	return get_free_pages(flags, 1);
 }
@@ -88,6 +92,8 @@ static inline struct page* alloc_page(aflags_t flags)
 	return alloc_pages(flags, 0);
 }
 
+struct page* alloc_zeroed_page(aflags_t flags);
+
 /**
  * @brief Allocates a contiguous block of pages and returns their virtual address.
  *
@@ -100,8 +106,8 @@ static inline struct page* alloc_page(aflags_t flags)
  * @return The virtual address of the first page in the allocated block, or 0
  *         if the allocation fails.
  */
-[[nodiscard]]
-uintptr_t __get_free_pages(aflags_t flags, size_t order);
+[[gnu::malloc, nodiscard]]
+void* __get_free_pages(aflags_t flags, size_t order);
 
 /**
  * @brief Allocates a single page and returns its virtual address.
@@ -112,8 +118,8 @@ uintptr_t __get_free_pages(aflags_t flags, size_t order);
  *
  * @return the virtual address of the page, or 0 on failure.
  */
-[[nodiscard, gnu::always_inline]]
-static inline uintptr_t __get_free_page(aflags_t flags)
+[[gnu::malloc, nodiscard, gnu::always_inline]]
+static inline void* __get_free_page(aflags_t flags)
 {
 	return __get_free_pages(flags, 0);
 }
@@ -159,6 +165,8 @@ static inline void free_page(void* addr)
  * @brief Frees a single page.
  *
  * @page: Pointer to the page to be freed.
+ *
+ * Does not decrement ref count, just frees the page.
  */
 [[gnu::always_inline]]
 static inline void __free_page(struct page* page)
