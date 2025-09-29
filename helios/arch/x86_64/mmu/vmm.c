@@ -32,12 +32,13 @@
 
 #include "kernel/spinlock.h"
 #include "mm/kmalloc.h"
+#include <stddef.h>
 #include <stdint.h>
 #include <uapi/helios/errno.h>
 #include <uapi/helios/mman.h>
 
 #undef LOG_LEVEL
-#define LOG_LEVEL 0
+#define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
 #include <lib/log.h>
 #undef FORCE_LOG_REDEF
@@ -58,6 +59,8 @@
 #include "mm/page.h"
 #include "mm/page_alloc.h"
 
+extern char __kernel_start[], __kernel_end[];
+
 /*******************************************************************************
 * Private Function Prototypes
 *******************************************************************************/
@@ -73,7 +76,9 @@ walk_page_table(pgd_t* pml4, vaddr_t vaddr, bool create, flags_t flags);
 
 static void map_memmap_entry(pgd_t* pml4,
 			     struct bootinfo_memmap_entry* entry,
-			     vaddr_t exe_virt_base);
+			     uptr k_vstart,
+			     uptr k_pstart,
+			     size_t k_size);
 
 static void log_page_table_walk(u64* pml4, vaddr_t vaddr);
 
@@ -192,13 +197,25 @@ void vmm_init()
 	struct bootinfo* bootinfo = &kernel.bootinfo;
 	if (!bootinfo->valid) panic("bootinfo marked not valid");
 
+	uptr k_vstart = align_down_page((uptr)&__kernel_start);
+	uptr k_vend = align_up_page((uptr)&__kernel_end);
+	size_t kernel_size = k_vend - k_vstart;
+
+	if (k_vstart != bootinfo->executable.virtual_base) {
+		panic("Kernel address range does not match bootinfo");
+	}
+
+	uptr k_pstart = bootinfo->executable.physical_base;
+
 	kernel.pml4 = _alloc_page_table(AF_KERNEL);
 	log_debug("Current PML4: %p", (void*)kernel.pml4);
 	for (size_t i = 0; i < bootinfo->memmap_entry_count; i++) {
 		struct bootinfo_memmap_entry* entry = &bootinfo->memmap[i];
 		map_memmap_entry((pgd_t*)kernel.pml4,
 				 entry,
-				 bootinfo->executable.virtual_base);
+				 k_vstart,
+				 k_pstart,
+				 kernel_size);
 	}
 
 	vmm_load_cr3(HHDM_TO_PHYS(kernel.pml4));
@@ -304,8 +321,18 @@ int vmm_map_frame_alias(pgd_t* pml4,
 				     true,
 				     walk_flags | PAGE_PRESENT | PAGE_WRITE);
 
-	if (!pte || pte->pte & PAGE_PRESENT) {
-		log_warn("Could not find pte or pte is already present");
+	if (!pte) {
+		log_warn("Could not find pte, vaddr: %lx, paddr: %lx",
+			 vaddr,
+			 paddr);
+		return -EFAULT;
+	}
+	if (pte->pte & PAGE_PRESENT) {
+		log_warn(
+			"PTE already present, vaddr: %lx, paddr: %lx, pte: %lx",
+			vaddr,
+			paddr,
+			pte->pte);
 		return -EFAULT;
 	}
 
@@ -1214,18 +1241,23 @@ walk_page_table(pgd_t* pml4, uptr vaddr, bool create, flags_t flags)
  * map_memmap_entry - Map a bootloader memmap span into kernel space
  * @pml4:          Top-level page table
  * @entry:         Boot info memory-map entry to mirror
- * @exe_virt_base: Base VA for executable/module aliases
+ * @k_vstart:     Kernel virtual start
+ * @k_pstart:     Kernel physical start
+ * @k_size:       Kernel size
  * Context: Early boot mapping helper; assumes single-CPU init. No locks.
  * Notes: Maps the span into HHDM; for EXECUTABLE/MODULES also maps an
  *        executable alias at @exe_virt_base + offset.
  */
 static void map_memmap_entry(pgd_t* pml4,
 			     struct bootinfo_memmap_entry* entry,
-			     uintptr_t exe_virt_base)
+			     uptr k_vstart,
+			     uptr k_pstart,
+			     size_t k_size)
 {
 	flags_t flags;
 	switch (entry->type) {
 	case LIMINE_MEMMAP_USABLE:
+	case LIMINE_MEMMAP_EXECUTABLE_AND_MODULES:
 	case LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE:
 		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK |
 			PAGE_NO_EXECUTE;
@@ -1233,9 +1265,6 @@ static void map_memmap_entry(pgd_t* pml4,
 	case LIMINE_MEMMAP_FRAMEBUFFER:
 		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_COMBINING |
 			PAGE_NO_EXECUTE;
-		break;
-	case LIMINE_MEMMAP_EXECUTABLE_AND_MODULES:
-		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK;
 		break;
 	default: return;
 	}
@@ -1245,15 +1274,23 @@ static void map_memmap_entry(pgd_t* pml4,
 	log_debug("Mapping [%lx-%lx), type: %lu", start, end, entry->type);
 	for (size_t phys = start; phys < end; phys += PAGE_SIZE) {
 		vmm_map_frame_alias(pml4, PHYS_TO_HHDM(phys), phys, flags);
+	}
 
-		// Manually map executable areas
-		if (entry->type != LIMINE_MEMMAP_EXECUTABLE_AND_MODULES)
-			continue;
-		uintptr_t exe_virt = (phys - start) + exe_virt_base;
-		vmm_map_frame_alias(pml4,
-				    exe_virt,
-				    phys,
-				    flags & ~PAGE_NO_EXECUTE);
+	// Skip exe alias if entry is not an executable
+	if (entry->type != LIMINE_MEMMAP_EXECUTABLE_AND_MODULES) {
+		return;
+	}
+
+	// Now we map the executable alias
+	uptr phys_lo = MAX(start, k_pstart);
+	uptr phys_hi = MIN(end, k_pstart + k_size);
+	if (phys_lo >= phys_hi) {
+		return;
+	}
+
+	for (uptr phys = phys_lo; phys < phys_hi; phys += PAGE_SIZE) {
+		uptr v = k_vstart + (phys - k_pstart);
+		vmm_map_frame_alias(pml4, v, phys, flags & ~PAGE_NO_EXECUTE);
 	}
 }
 
