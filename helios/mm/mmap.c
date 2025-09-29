@@ -1,8 +1,22 @@
+#include "fs/vfs.h"
 #include <arch/mmu/vmm.h>
 #include <kernel/helios.h>
 #include <kernel/tasks/scheduler.h>
 #include <mm/mmap.h>
 #include <mm/page_alloc.h>
+
+static inline void* choose_base_addr(void* addr)
+{
+	if (!addr) {
+		addr = DEF_ADDR;
+	}
+
+	struct address_space* vas = get_current_task()->vas;
+	while (is_within_vas(vas, (vaddr_t)addr)) {
+		addr = (void*)((uptr)addr + PAGE_SIZE);
+	}
+	return addr;
+}
 
 void* mmap_sys(void* addr,
 	       size_t length,
@@ -19,46 +33,46 @@ void* mmap_sys(void* addr,
 		flags,
 		fd,
 		offset);
-
-	if (!(flags & MAP_ANONYMOUS)) {
-		log_error("mmap: Only MAP_ANONYMOUS is supported currently");
+	if (length == 0) {
+		log_error("mmap: length cannot be zero");
 		return nullptr;
 	}
+	length = align_up_page(length);
 
-	if (!addr) {
-		addr = DEF_ADDR;
+	if (flags & MAP_ANONYMOUS) {
+		addr = choose_base_addr(addr);
+
+		int res = map_region(get_current_task()->vas,
+				     (struct mr_file) { 0 },
+				     (uptr)addr,
+				     (uptr)addr + length,
+				     (unsigned long)prot,
+				     (unsigned long)flags);
+
+		if (res < 0) {
+			log_error("mmap: map_region failed");
+			return nullptr;
+		}
+
+		return addr;
 	}
 
-	struct address_space* vas = get_current_task()->vas;
-	while (is_within_vas(vas, (vaddr_t)addr)) {
-		addr = (void*)((uptr)addr + PAGE_SIZE);
+	/*
+	 * File-backed mapping
+	 */
+
+	if ((size_t)offset & (PAGE_SIZE - 1)) return nullptr; // -EINVAL
+	struct vfs_file* file = get_file(fd);
+	if (!file) {
+		log_error("mmap: invalid file descriptor %d", fd);
+		return nullptr; // -EBADF
 	}
 
-	int res = map_region(get_current_task()->vas,
-			     (struct mr_file) { 0 },
-			     (uptr)addr,
-			     (uptr)addr + length,
-			     (unsigned long)prot,
-			     (unsigned long)flags);
+	addr = choose_base_addr(addr);
 
-	if (res < 0) {
-		log_error("mmap: map_region failed");
-		return nullptr;
-	}
-	// size_t pages = CEIL_DIV(length, PAGE_SIZE);
-	// uptr paddr = HHDM_TO_PHYS(get_free_pages(AF_KERNEL, pages));
-	//
-	// // TODO: More flags???
-	// for (size_t i = 0; i < pages; i++) {
-	// 	int res = vmm_map_page((pgd_t*)pml4,
-	// 			       (uptr)addr + i * PAGE_SIZE,
-	// 			       paddr + i * PAGE_SIZE,
-	// 			       PAGE_PRESENT | PAGE_WRITE);
-	// 	if (res) return MAP_FAILED;
-	// 	log_debug("Mapped vaddr: %p, to paddr: %lx", addr, paddr);
-	// }
+	kunimpl("File-backed mmap");
 
-	return addr;
+	return nullptr;
 }
 
 int munmap(void* addr, size_t length)
