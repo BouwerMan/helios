@@ -374,8 +374,29 @@ int launch_init()
 
 	// open /dev/console three times and pin them as 0,1,2
 	int fd0 = __vfs_open_for_task(task, "/dev/console", O_RDONLY);
+	if (fd0 < 0) {
+		destroy_exec_context(ctx);
+		kthread_destroy(task);
+		enable_preemption();
+		return fd0;
+	}
+
 	int fd1 = __vfs_open_for_task(task, "/dev/console", O_WRONLY);
+	if (fd1 < 0) {
+		destroy_exec_context(ctx);
+		kthread_destroy(task);
+		enable_preemption();
+		return fd1;
+	}
+
 	int fd2 = __vfs_open_for_task(task, "/dev/console", O_WRONLY);
+	if (fd2 < 0) {
+		destroy_exec_context(ctx);
+		kthread_destroy(task);
+		enable_preemption();
+		return fd2;
+	}
+
 	// ensure they land at 0,1,2 even if earlier slots weren’t empty
 	if (fd0 != 0) {
 		__install_fd_at(task, task->resources[fd0], 0);

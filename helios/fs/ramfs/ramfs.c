@@ -558,6 +558,7 @@ void ramfs_destroy_inode(struct vfs_inode* inode)
 	hash_del(&inode->hash);
 	// TODO: Need to rework our directory management so in the future if
 	// we deallocate a dentry we can find the data again
+	//
 	// struct ramfs_file* file = RAMFS_FILE(inode);
 	// if (file) {
 	// 	kfree(file->data);
@@ -570,7 +571,7 @@ void ramfs_destroy_inode(struct vfs_inode* inode)
 int ramfs_readdir(struct vfs_file* file, struct dirent* dirent, off_t offset)
 {
 	if (!file || !dirent || offset < 0) {
-		return -VFS_ERR_INVAL;
+		return -EINVAL;
 	}
 
 	struct vfs_dentry* pdentry = file->dentry;

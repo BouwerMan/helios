@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
+#include "drivers/device.h"
 #include "fs/imapping.h"
 #include <drivers/ata/controller.h>
 #include <drivers/ata/device.h>
@@ -171,6 +172,7 @@ struct vfs_inode {
 	int ref_count;
 	uint16_t permissions;
 	uint8_t flags;
+	dev_t rdev;	       // For device files, the device number
 	semaphore_t lock;
 	struct inode_mapping* mapping;
 	struct inode_ops* ops; // What can you DO with this inode?
@@ -215,6 +217,17 @@ struct file_ops {
 	int (*readdir)(struct vfs_file* file,
 		       struct dirent* dirent,
 		       off_t offset);
+
+	int (*ioctl)(struct vfs_file* file, unsigned long, void*);
+
+	short (*poll)(struct vfs_file* file);
+
+	int (*mmap)(struct vfs_file* file,
+		    void* addr,
+		    size_t len,
+		    int prot,
+		    int flags,
+		    off_t off);
 };
 
 // TODO: Make helper function for creating new dentries???
@@ -283,7 +296,7 @@ int vfs_mount(const char* source,
 	      const char* fstype,
 	      int flags);
 void register_filesystem(struct vfs_fs_type* fs);
-struct vfs_superblock* vfs_get_sb(int idx);
+struct vfs_superblock* vfs_get_sb(const char* path);
 
 // NOTE: Functions marked with __ are internal-only and should not be called
 // without things like path normalization.
@@ -339,7 +352,7 @@ struct vfs_dentry* vfs_resolve_path_from_cwd(const char* path,
 
 // --- Inode Management ---
 struct vfs_inode* new_inode(struct vfs_superblock* sb, size_t id);
-struct vfs_inode* iget(struct vfs_superblock* sb, size_t id);
+struct vfs_inode* iget(struct vfs_inode* inode);
 void iput(struct vfs_inode* inode);
 void inode_add(struct vfs_inode* inode);
 
@@ -358,10 +371,8 @@ ssize_t vfs_pwrite(int fd, const char* buffer, size_t count, off_t offset);
 ssize_t vfs_file_write(struct vfs_file* file, const char* buffer, size_t count);
 ssize_t vfs_write(int fd, const char* buffer, size_t count);
 
-ssize_t __vfs_pread(struct vfs_file* file,
-		    char* buffer,
-		    size_t count,
-		    off_t* offset);
+ssize_t
+__vfs_pread(struct vfs_file* file, char* buffer, size_t count, off_t* offset);
 ssize_t vfs_pread(int fd, char* buffer, size_t count, off_t offset);
 ssize_t vfs_file_read(struct vfs_file* file, char* buffer, size_t count);
 ssize_t vfs_read(int fd, char* buffer, size_t count);

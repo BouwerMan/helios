@@ -23,6 +23,7 @@
 #include "drivers/device.h"
 #include "drivers/serial.h"
 #include "drivers/vconsole.h"
+#include "fs/devfs/devfs.h"
 #include "fs/vfs.h"
 #include "kernel/spinlock.h"
 #include "kernel/types.h"
@@ -80,9 +81,51 @@ void tty_init()
 	serial_tty_init();
 	vconsole_tty_init();
 
+	struct vfs_superblock* devfs_sb = vfs_get_sb("/dev");
+	if (!devfs_sb) {
+		log_error("Failed to find devfs superblock");
+		panic("Cannot continue without console");
+	}
+
+	log_debug("Got sb %p for /dev", (void*)devfs_sb);
+
 	struct tty* tty = nullptr;
 	list_for_each_entry (tty, &g_ttys, list) {
-		register_device(tty->name, &tty_device_fops);
+		dev_t base;
+		int e = alloc_chrdev_region(&base, 1, tty->name);
+		if (e < 0) {
+			log_error(
+				"Failed to allocate chrdev region for tty: %d",
+				e);
+			panic("Cannot continue without console");
+		}
+
+		struct chrdev* c = &tty->chrdev;
+
+		c->name = strdup(tty->name);
+		if (!c->name) {
+			log_error("Failed to allocate tty chrdev name");
+			panic("Cannot continue without console");
+		}
+
+		c->base = base;
+		c->count = 1;
+		c->fops = &tty_device_fops;
+		c->drvdata = tty;
+
+		chrdev_add(c, c->base, c->count);
+
+		devfs_map_name(devfs_sb,
+			       c->name,
+			       c->base,
+			       FILETYPE_CHAR_DEV,
+			       0666,
+			       0);
+
+		log_debug("Console chrdev major: %u minor: %u",
+			  MAJOR(c->base),
+			  MINOR(c->base));
+		log_debug("Mounted at %s/%s", devfs_sb->mount_point, c->name);
 	}
 }
 

@@ -22,6 +22,7 @@
 #include "drivers/console.h"
 #include "drivers/device.h"
 #include "drivers/tty.h"
+#include "fs/devfs/devfs.h"
 #include "kernel/semaphores.h"
 #include "mm/kmalloc.h"
 
@@ -42,6 +43,8 @@ struct console_sink {
 	struct list_head list;
 };
 
+struct chrdev console_chrdev = { 0 };
+
 /*******************************************************************************
  * Public Function Definitions
  *******************************************************************************/
@@ -52,7 +55,47 @@ struct console_sink {
 void console_init()
 {
 	sem_init(&g_console_sem, 1);
-	register_device("console", &console_device_fops);
+	dev_t base;
+	int e = alloc_chrdev_region(&base, 1, "console");
+	if (e < 0) {
+		log_error("Failed to allocate chrdev region for console: %d",
+			  e);
+		panic("Cannot continue without console");
+	}
+
+	console_chrdev.name = strdup("console");
+	if (!console_chrdev.name) {
+		log_error("Failed to allocate console chrdev name");
+		panic("Cannot continue without console");
+	}
+
+	console_chrdev.base = base;
+	console_chrdev.count = 1;
+	console_chrdev.fops = &console_device_fops;
+	console_chrdev.drvdata = nullptr;
+
+	chrdev_add(&console_chrdev, console_chrdev.base, console_chrdev.count);
+
+	struct vfs_superblock* devfs_sb = vfs_get_sb("/dev");
+	if (!devfs_sb) {
+		log_error("Failed to find devfs superblock");
+		panic("Cannot continue without console");
+	}
+
+	devfs_map_name(devfs_sb,
+		       console_chrdev.name,
+		       console_chrdev.base,
+		       FILETYPE_CHAR_DEV,
+		       0666,
+		       0);
+
+	log_debug("Got sb %p for /dev", (void*)devfs_sb);
+	log_debug("Console chrdev major: %u minor: %u",
+		  MAJOR(console_chrdev.base),
+		  MINOR(console_chrdev.base));
+	log_debug("Mounted at %s/%s",
+		  devfs_sb->mount_point,
+		  console_chrdev.name);
 }
 
 void attach_tty_to_console(const char* name)

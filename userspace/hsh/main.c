@@ -153,9 +153,6 @@ int hsh_ls(char** args)
 	} else if (errno != 0) {
 		// Error occurred during readdir()
 		perror("readdir failed");
-		// fprintf(stderr,
-		// 	"hsh: ls: error reading directory '%s'\n",
-		// 	path);
 		return errno;
 	}
 

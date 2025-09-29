@@ -77,6 +77,18 @@ static int setup_user_stack(struct exec_context* ctx,
 * Public Function Definitions
 *******************************************************************************/
 
+void destroy_exec_context(struct exec_context* ctx)
+{
+	if (!ctx) {
+		return;
+	}
+	if (ctx->new_vas) {
+		address_space_destroy(ctx->new_vas);
+		kfree(ctx->new_vas);
+	}
+	kfree(ctx);
+}
+
 struct exec_context*
 prepare_exec(const char* path, const char** argv, const char** envp)
 {
@@ -91,7 +103,7 @@ prepare_exec(const char* path, const char** argv, const char** envp)
 
 	ctx->new_vas = alloc_address_space();
 	if (!ctx->new_vas) {
-		kfree(ctx);
+		destroy_exec_context(ctx);
 		return nullptr;
 	}
 	u64* new_pml4 = vmm_create_address_space();
@@ -100,6 +112,7 @@ prepare_exec(const char* path, const char** argv, const char** envp)
 	int fd = vfs_open(path, O_RDONLY);
 	if (fd < 0) {
 		log_error("Failed to open file %s: %d", path, fd);
+		destroy_exec_context(ctx);
 		return nullptr;
 	}
 
@@ -115,6 +128,7 @@ prepare_exec(const char* path, const char** argv, const char** envp)
 
 	if (err < 0) {
 		log_error("Failed to setup user stack");
+		destroy_exec_context(ctx);
 		return nullptr;
 	}
 
