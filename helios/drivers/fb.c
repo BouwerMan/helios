@@ -8,6 +8,8 @@
 #include "lib/log.h"
 #include "lib/string.h"
 
+#include <uapi/helios/errno.h>
+
 struct fb_device fbdev = { 0 };
 
 static struct file_ops fb_fops = {
@@ -97,4 +99,15 @@ fb_write(struct vfs_file* file, const char* buffer, size_t count, off_t* offset)
 	memcpy((void*)PHYS_TO_HHDM(fbdev.vram_paddr), buffer, count);
 
 	return (ssize_t)count;
+}
+
+int fb_mmap(struct vfs_file* file, void* addr, size_t len, int prot, off_t off)
+{
+	(void)file;
+	(void)addr;
+	(void)len;
+	(void)prot;
+	(void)off;
+
+	return -ENOSYS;
 }
