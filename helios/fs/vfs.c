@@ -240,6 +240,20 @@ struct vfs_inode* new_inode(struct vfs_superblock* sb, size_t id)
 	return inode;
 }
 
+struct vfs_inode* iget(struct vfs_inode* inode)
+{
+	if (!inode) {
+		return inode;
+	}
+
+	inode->ref_count++;
+
+	return inode;
+}
+
+// Removing because that code should be in a different function
+#if 0
+
 /**
  * @brief  Obtains an in-memory VFS inode from the global inode cache.
  *
@@ -310,6 +324,7 @@ struct vfs_inode* iget(struct vfs_superblock* sb, size_t id)
 
 	return inode;
 }
+#endif
 
 /**
  * @brief  Releases a reference to an in-memory VFS inode.
@@ -698,6 +713,10 @@ int vfs_readdir(struct vfs_file* dir, struct dirent* out, long pos)
 
 	if (dir->dentry->inode->filetype != FILETYPE_DIR) {
 		return -ENOTDIR;
+	}
+
+	if (dir->fops->readdir == nullptr) {
+		return -ENOSYS;
 	}
 
 	int ret_val = 1;
@@ -1388,10 +1407,16 @@ void register_filesystem(struct vfs_fs_type* fs)
 	}
 }
 
-/// Gets superblock for idx
-struct vfs_superblock* vfs_get_sb(int idx)
+struct vfs_superblock* vfs_get_sb(const char* path)
 {
-	return sb_list[idx];
+	struct vfs_dentry* dentry = vfs_lookup(path);
+	if (!dentry || !dentry->inode || !dentry->inode->sb) {
+		dput(dentry);
+		return nullptr;
+	}
+	struct vfs_superblock* sb = dentry->inode->sb;
+	dput(dentry);
+	return sb;
 }
 
 int uuid = 1; // Always points to next available id, 0 = invalid id

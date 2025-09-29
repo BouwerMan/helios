@@ -83,8 +83,9 @@ static inline u64 hash_64(u64 val, int bits)
 #define HASH_BITS(name) ilog2((unsigned long)HASH_SIZE(name))
 
 /* Use hash_32 when possible to allow for fast 32bit hashing in 64bit kernels. */
-#define hash_min(val, bits) \
-	(sizeof(val) <= 4 ? hash_32((u32)val, bits) : hash_64((u64)val, bits))
+#define hash_min(val, bits)                             \
+	(sizeof(val) <= 4 ? hash_32((u32)(val), bits) : \
+			    hash_64((u64)(val), bits))
 
 static inline void __hash_init(struct hlist_head* ht, unsigned int sz)
 {
@@ -113,7 +114,7 @@ static inline void __hash_init(struct hlist_head* ht, unsigned int sz)
  * @key: the key of the object to be added
  */
 #define hash_add(hashtable, node, key) \
-	hlist_add_head(&hashtable[hash_min(key, HASH_BITS(hashtable))], node)
+	hlist_add_head(&(hashtable)[hash_min(key, HASH_BITS(hashtable))], node)
 
 /**
  * hash_hashed - check whether an object is in any hashtable
@@ -159,10 +160,11 @@ static inline void hash_del(struct hlist_node* node)
  * @obj: the type * to use as a loop cursor for each entry
  * @member: the name of the hlist_node within the struct
  */
-#define hash_for_each(name, bkt, obj, member)                               \
-	for ((bkt) = 0, obj = NULL; obj == NULL && (bkt) < HASH_SIZE(name); \
-	     (bkt)++)                                                       \
-		hlist_for_each_entry (obj, &name[bkt], member)
+#define hash_for_each(name, bkt, obj, member)             \
+	for ((bkt) = 0, (obj) = nullptr;                  \
+	     (obj) == nullptr && (bkt) < HASH_SIZE(name); \
+	     (bkt)++)                                     \
+		hlist_for_each_entry (obj, &(name)[bkt], member)
 
 /**
  * hash_for_each_possible - iterate over all possible objects hashing to the
@@ -172,6 +174,7 @@ static inline void hash_del(struct hlist_node* node)
  * @member: the name of the hlist_node within the struct
  * @key: the key of the objects to iterate over
  */
-#define hash_for_each_possible(name, obj, member, key) \
-	hlist_for_each_entry (                         \
-		obj, &name[hash_min(key, HASH_BITS(name))], member)
+#define hash_for_each_possible(name, obj, member, key)                 \
+	hlist_for_each_entry (obj,                                     \
+			      &(name)[hash_min(key, HASH_BITS(name))], \
+			      member)

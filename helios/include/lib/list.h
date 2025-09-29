@@ -535,6 +535,21 @@ static inline void hlist_add_behind(struct hlist_node* n,
 				      member))
 
 /**
+ * hlist_for_each_entry_safe - iterate over list of given type safe against removal of list entry
+ * @pos:	the type * to use as a loop cursor.
+ * @n:		a &struct hlist_node to use as temporary storage
+ * @head:	the head for your list.
+ * @member:	the name of the hlist_node within the struct.
+ */
+#define hlist_for_each_entry_safe(pos, n, head, member)                       \
+	for ((pos) = hlist_entry_safe((head)->first, typeof(*(pos)), member); \
+	     (pos) && ({                                                      \
+		     (n) = (pos)->member.next;                                \
+		     1;                                                       \
+	     });                                                              \
+	     (pos) = hlist_entry_safe(n, typeof(*(pos)), member))
+
+/**
  * hlist_count_nodes - count nodes in the hlist
  * @head:	the head for your hlist.
  */

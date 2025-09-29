@@ -86,3 +86,19 @@ static void __kassert_fail_base(const char* expr,
 	} while (0)
 #endif
 #endif
+
+#define __stringify_1(x...) #x
+#define __stringify(x...)   __stringify_1(x)
+
+#define STRINGIFY(x) __stringify(x)
+
+#if __KASSERT_ENABLED
+#define kunimpl(name)                               \
+	__kassert_fail_base("Unimplemented: " name, \
+			    __FILE__,               \
+			    __LINE__,               \
+			    __func__)
+#else
+#define kunimpl(name) \
+	panic("Unimplemented: " name " at " __FILE__ ":" STRINGIFY(__LINE__))
+#endif

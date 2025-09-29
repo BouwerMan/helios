@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
+#include "drivers/device.h"
 #include "fs/vfs.h"
-#include <kernel/spinlock.h>
-#include <kernel/tasks/scheduler.h>
+#include "kernel/spinlock.h"
+#include "kernel/tasks/scheduler.h"
 
 // TODO: Actually use waitqueue
 
@@ -31,6 +32,7 @@ struct tty {
 	struct ring_buffer output_buffer;
 	struct ring_buffer input_buffer;
 	semaphore_t write_lock;
+	struct chrdev chrdev;
 	char name[32];
 };
 
@@ -68,10 +70,8 @@ ssize_t tty_write(struct vfs_file* file,
 		  off_t* offset);
 
 void tty_add_input_char(struct tty* tty, char c);
-ssize_t tty_read(struct vfs_file* file,
-		 char* buffer,
-		 size_t count,
-		 off_t* offset);
+ssize_t
+tty_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset);
 ssize_t __read_from_tty(struct tty* tty, char* buffer, size_t count);
 
 /**
