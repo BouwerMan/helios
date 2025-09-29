@@ -4,6 +4,7 @@
 #include "internal/unistd.h"
 #include "stdio.h"
 
+// TODO: Handle buffering properly
 size_t
 __fwrite(const void* buffer, size_t size, size_t count, FILE* __restrict stream)
 {
