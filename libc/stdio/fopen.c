@@ -7,6 +7,7 @@
 // TODO: Use internal only
 #include "string.h"
 
+// TODO: Handle modes and setup buffering
 FILE* __fopen(const char* filename, const char* mode)
 {
 	FILE* file = __malloc(sizeof(FILE));

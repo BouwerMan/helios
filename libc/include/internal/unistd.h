@@ -4,6 +4,8 @@
 
 extern char** __environ;
 
+int __close(int fd);
+
 ssize_t __read(int fd, void* buf, size_t count);
 ssize_t __write(int fd, const void* buf, size_t count);
 

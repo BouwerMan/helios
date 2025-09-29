@@ -15,6 +15,8 @@ extern "C" {
 
 extern char** environ;
 
+int close(int __fd) __nothrow;
+
 ssize_t read(int __fd, void* __buf, size_t __count) __nothrow;
 ssize_t write(int __fd, const void* __buf, size_t __count) __nothrow;
 
