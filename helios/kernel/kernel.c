@@ -19,6 +19,7 @@
  */
 
 #include "drivers/console.h"
+#include "drivers/fb.h"
 #include "drivers/kbd.h"
 #include "drivers/term.h"
 #include "drivers/tty.h"
@@ -120,7 +121,7 @@ void kernel_main()
 
 	tty_init();
 
-	irq_log_init();
+	fb_init();
 	console_init();
 	// attach_tty_to_console("ttyS0");
 	attach_tty_to_console("tty0");

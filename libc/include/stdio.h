@@ -49,13 +49,16 @@ extern FILE* stdin;
 extern FILE* stdout;
 extern FILE* stderr;
 
-int fclose(FILE*);
-int fflush(FILE* __stream) __nothrow;
-FILE* fopen(const char*, const char*);
+int fclose(FILE* __restrict __stream) __nothrow;
+int fflush(FILE* __restrict __stream) __nothrow;
+FILE* fopen(const char* __filename, const char* __mode) __nothrow;
+size_t fwrite(const void* __buffer,
+	      size_t __size,
+	      size_t __count,
+	      FILE* __restrict __stream) __nothrow;
 size_t fread(void*, size_t, size_t, FILE*);
 int fseek(FILE*, long, int);
 long ftell(FILE*);
-size_t fwrite(const void*, size_t, size_t, FILE*);
 void setbuf(FILE*, char*);
 void perror(const char* __s) __nothrow;
 
