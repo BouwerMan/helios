@@ -28,7 +28,7 @@ ifneq ($(MISSING_PATH_TOOLS),)
   $(error Missing required PATH tools: $(MISSING_PATH_TOOLS))
 endif
 
-$(info "Using cross-compiler: $(CC)")
+$(info Using cross-compiler: $(CC))
 
 PROJDIRS := helios libc
 SRCFILES := $(shell find $(PROJDIRS) -type f -name "*.c")
@@ -47,17 +47,17 @@ else
 	QEMU_FLAGS += -serial stdio
 endif
 
-OVMF_SYS_PATH ?= /usr/share/edk2/x64
-OVMF_LOCAL_PATH ?= ovmf
-OVMF_CODE ?= OVMF_CODE.4m.fd
-OVMF_VARS ?= OVMF_VARS.4m.fd
+OVMF_SOURCE_URL := https://retrage.github.io/edk2-nightly/bin
+OVMF_LOCAL_PATH := ovmf
+OVMF_CODE := $(OVMF_LOCAL_PATH)/RELEASEX64_OVMF_CODE.fd
+OVMF_VARS := $(OVMF_LOCAL_PATH)/RELEASEX64_OVMF_VARS.fd
 
-QEMU_UEFI := -drive if=pflash,format=raw,unit=0,file=$(OVMF_LOCAL_PATH)/$(OVMF_CODE),readonly=on \
-	     -drive if=pflash,format=raw,unit=1,file=$(OVMF_LOCAL_PATH)/$(OVMF_VARS) \
+QEMU_UEFI := -drive if=pflash,format=raw,unit=0,file=$(OVMF_CODE),readonly=on \
+	     -drive if=pflash,format=raw,unit=1,file=$(OVMF_VARS) \
 	     -net none
 
 
-.PHONY: all libc helios clean qemu headers iso todolist limine userspace compile_commands tidy
+.PHONY: all libc helios clean qemu headers iso todolist limine userspace compile_commands tidy ovmf
 
 all: headers helios libc userspace
 
@@ -124,9 +124,19 @@ iso: limine/limine initramfs
 # Install Limine stage 1 and 2 for legacy BIOS boot.
 	@./limine/limine bios-install $(OSNAME).iso
 
-ovmf:
-	@cp -r $(OVMF_SYS_PATH) $(OVMF_LOCAL_PATH)
+$(OVMF_VARS):
+	@mkdir -p $(OVMF_LOCAL_PATH)
+	@echo "Downloading OVMF VARS..."
+	@curl -fsSL --progress-bar -o $@ \
+		$(OVMF_SOURCE_URL)/$(notdir $@)
 
+$(OVMF_CODE):
+	@mkdir -p $(OVMF_LOCAL_PATH)
+	@echo "Downloading OVMF CODE..."
+	@curl -fsSL --progress-bar -o $@ \
+		$(OVMF_SOURCE_URL)/$(notdir $@)
+
+ovmf: $(OVMF_CODE) $(OVMF_VARS)
 
 qemu: iso ovmf
 	$(QEMU) $(QEMU_FLAGS) $(QEMU_UEFI) -enable-kvm -cpu host,migratable=no,+invtsc,hv_time,hv_frequencies
