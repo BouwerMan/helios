@@ -1,8 +1,29 @@
+/**
+ * @file kernel/softirq.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "kernel/softirq.h"
-#include "kernel/assert.h"
 #include "kernel/atomic.h"
 #include "kernel/tasks/scheduler.h"
 #include "kernel/time.h"
+#include "lib/log.h"
 
 #include <uapi/helios/errno.h>
 
@@ -13,7 +34,17 @@ bool in_progress = false;
 
 struct task* ksoftirqd = nullptr;
 
-static void ksoftirqd_entry();
+static void ksoftirqd_entry()
+{
+	log_debug("ksoftirqd started");
+	yield_blocked(); // Yield once to let init finish
+	while (true) {
+		static constexpr size_t item_budget = 1024;
+		static constexpr u64 ns_budget = 10UL * 1000UL * 1000UL; // 10ms
+		do_softirq(item_budget, ns_budget);
+		yield_blocked();
+	}
+}
 
 void softirq_init(void)
 {
@@ -87,14 +118,4 @@ int softirq_register(int id, const char* name, softirq_fn fn)
 	g_softirqs[id] = (struct softirq) { name, fn };
 
 	return 0;
-}
-
-static void ksoftirqd_entry()
-{
-	log_debug("ksoftirqd started");
-	yield_blocked(); // Yield once to let init finish
-	while (true) {
-		do_softirq(1024, 10UL * 1000UL * 1000UL); // 10ms
-		yield_blocked();
-	}
 }
