@@ -15,16 +15,11 @@ typedef struct semaphore_s {
 #endif
 } semaphore_t;
 
-/**
- * sem_init - Initializes a semaphore to a clean and unlocked state.
- */
 void sem_init(semaphore_t* sem, int initial_count);
 void sem_wait(semaphore_t* sem);
 void sem_signal(semaphore_t* sem);
 
-/**
- * Reader-writer semaphore structure
- *
+/*
  * Allows multiple readers or a single writer to access a shared resource.
  * Provides priority to writers to prevent writer starvation.
  */
@@ -45,8 +40,10 @@ void up_read(rwsem_t* s);
 void down_write(rwsem_t* s); // may sleep
 void up_write(rwsem_t* s);
 
-// TODO:
+/*
+ * Unimplemented:
+ */
 
-// void downgrade_write(rwsem_t* s); // writer → reader, no gap
-// bool try_down_read(rwsem_t* s);
-// bool try_down_write(rwsem_t* s);
+void downgrade_write(rwsem_t* s); // writer → reader, no gap
+bool try_down_read(rwsem_t* s);
+bool try_down_write(rwsem_t* s);

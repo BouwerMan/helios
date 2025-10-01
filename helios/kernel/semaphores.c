@@ -19,13 +19,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "kernel/semaphores.h"
 #include "kernel/assert.h"
-#include <kernel/semaphores.h>
-#include <kernel/spinlock.h>
-#include <kernel/tasks/scheduler.h>
+#include "kernel/spinlock.h"
+#include "kernel/tasks/scheduler.h"
 
 /**
- * sem_init - Initialize a counting semaphore.
+ * sem_init() - Initialize a counting semaphore.
  * @sem: Target semaphore.
  * @initial_count: Initial number of available permits.
  * Return: None.
@@ -41,7 +41,7 @@ void sem_init(semaphore_t* sem, int initial_count)
 }
 
 /**
- * sem_wait - Acquire one permit from a semaphore (may block).
+ * sem_wait() - Acquire one permit from a semaphore (may block).
  * @sem: Target semaphore.
  * Return: None. Returns only after a permit is acquired.
  * Context: Process context only; may sleep. Not valid in IRQ, NMI, or while
@@ -71,7 +71,7 @@ void sem_wait(semaphore_t* sem)
 }
 
 /**
- * sem_signal - Release one permit and wake a waiter if present.
+ * sem_signal() - Release one permit and wake a waiter if present.
  * @sem: Target semaphore.
  * Return: None.
  * Context: Any; IRQ-safe.
@@ -99,7 +99,7 @@ void sem_signal(semaphore_t* sem)
 }
 
 /**
- * rwsem_init - Initialize an rwsem to the unlocked state
+ * rwsem_init() - Initialize an rwsem to the unlocked state
  * @s: semaphore to initialize
  *
  * Sets up wait queues and clears counters/flags. Subsequent down/up
@@ -118,7 +118,7 @@ void rwsem_init(rwsem_t* s)
 }
 
 /**
- * down_read - Acquire the rwsem for shared (reader) access
+ * down_read() - Acquire the rwsem for shared (reader) access
  * @s: semaphore
  *
  * Blocks if a writer is active or waiting, giving writers preference.
@@ -149,7 +149,7 @@ void down_read(rwsem_t* s)
 }
 
 /**
- * up_read - Release a shared (reader) hold on the rwsem
+ * up_read() - Release a shared (reader) hold on the rwsem
  * @s: semaphore
  *
  * Decrements the reader count; if it reaches zero and writers are queued,
@@ -172,7 +172,7 @@ void up_read(rwsem_t* s)
 }
 
 /**
- * down_write - Acquire the rwsem for exclusive (writer) access
+ * down_write() - Acquire the rwsem for exclusive (writer) access
  * @s: semaphore
  *
  * Blocks until no readers are active and no writer holds the lock. On
@@ -202,7 +202,7 @@ void down_write(rwsem_t* s)
 }
 
 /**
- * up_write - Release an exclusive (writer) hold on the rwsem
+ * up_write() - Release an exclusive (writer) hold on the rwsem
  * @s: semaphore
  *
  * Clears writer_active. If writers are waiting, wake one; otherwise wake
@@ -227,6 +227,18 @@ void up_write(rwsem_t* s)
 	spin_unlock_irqrestore(&s->guard, flags);
 }
 
-void downgrade_write(rwsem_t* s); // writer → reader, no gap
-bool try_down_read(rwsem_t* s);
-bool try_down_write(rwsem_t* s);
+void downgrade_write(rwsem_t* s)
+{
+	(void)s;
+	kunimpl("downgrade_write");
+}
+bool try_down_read(rwsem_t* s)
+{
+	(void)s;
+	kunimpl("try_down_read");
+}
+bool try_down_write(rwsem_t* s)
+{
+	(void)s;
+	kunimpl("try_down_write");
+}
