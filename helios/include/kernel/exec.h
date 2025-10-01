@@ -106,6 +106,4 @@ prepare_exec(const char* path, const char** argv, const char** envp);
 
 int commit_exec(struct task* task, struct exec_context* ctx);
 
-int __load_elf(struct exec_context* ctx, struct vfs_file* file);
-
 void destroy_exec_context(struct exec_context* ctx);

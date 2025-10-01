@@ -26,7 +26,6 @@
 #include "fs/ustar/tar.h"
 #include "fs/vfs.h"
 #include "kernel/helios.h"
-#include "kernel/irq_log.h"
 #include "kernel/klog.h"
 #include "kernel/limine_requests.h"
 #include "kernel/panic.h"

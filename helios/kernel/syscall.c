@@ -25,7 +25,6 @@
 #include <arch/mmu/vmm.h>
 #include <drivers/console.h>
 #include <kernel/exec.h>
-#include <kernel/irq_log.h>
 #include <kernel/panic.h>
 #include <kernel/syscall.h>
 #include <kernel/tasks/fork.h>
@@ -119,7 +118,6 @@ void sys_test_cow(struct registers* r)
 		vaddr2,
 		atomic_read(&page->ref_count));
 
-	irq_log_flush();
 	console_flush();
 
 	log_debug("rflags: %lx, saved_rflags: %lx", r->rflags, r->saved_rflags);
@@ -318,7 +316,6 @@ void sys_shutdown(struct registers* r)
 {
 	(void)r;
 	set_log_mode(LOG_DIRECT);
-	irq_log_flush();
 	console_flush();
 
 	// log_warn("Shutting down in 1 second");

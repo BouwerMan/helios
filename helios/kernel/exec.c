@@ -36,224 +36,10 @@
 #include <mm/page_alloc_flags.h>
 #include <uapi/helios/errno.h>
 
-/*******************************************************************************
-* Private Function Prototypes
-*******************************************************************************/
-
 /**
- * @brief Validates the ELF file header.
- *
- * @param header Pointer to the ELF file header.
+ * validate() - Validates the ELF file header.
+ * @header: Pointer to the ELF file header.
  */
-static bool validate(struct elf_file_header* header);
-
-/**
- * @brief Loads a program header from an ELF file into the task's address space.
- *
- * @param ctx The exec context containing the new address space.
- * @param inode Pointer to the inode of the ELF file, or nullptr for anonymous mapping.
- * @param prog Pointer to the ELF program header.
- * @return 0 on success, -1 on failure.
- */
-static int load_program_header(struct exec_context* ctx,
-			       struct vfs_inode* inode,
-			       struct elf_program_header* prog);
-
-/**
- * @brief Sets up the user stack for the task.
- *
- * @param ctx The exec context containing the new address space.
- * @param stack_base The top address of the stack.
- * @param stack_pages The number of pages to allocate for the stack.
- * @return 0 on success, -1 on failure.
- */
-static int setup_user_stack(struct exec_context* ctx,
-			    uptr stack_top,
-			    size_t stack_pages,
-			    const char** argv,
-			    const char** envp);
-
-/*******************************************************************************
-* Public Function Definitions
-*******************************************************************************/
-
-void destroy_exec_context(struct exec_context* ctx)
-{
-	if (!ctx) {
-		return;
-	}
-	if (ctx->new_vas) {
-		address_space_destroy(ctx->new_vas);
-		kfree(ctx->new_vas);
-	}
-	kfree(ctx);
-}
-
-struct exec_context*
-prepare_exec(const char* path, const char** argv, const char** envp)
-{
-	log_debug("Preparing exec for %s", path);
-
-	struct exec_context* ctx =
-		(struct exec_context*)kzalloc(sizeof(struct exec_context));
-	if (!ctx) {
-		log_error("OOM when creating ctx");
-		return nullptr;
-	}
-
-	ctx->new_vas = alloc_address_space();
-	if (!ctx->new_vas) {
-		destroy_exec_context(ctx);
-		return nullptr;
-	}
-	u64* new_pml4 = vmm_create_address_space();
-	vas_set_pml4(ctx->new_vas, (pgd_t*)new_pml4);
-
-	int fd = vfs_open(path, O_RDONLY);
-	if (fd < 0) {
-		log_error("Failed to open file %s: %d", path, fd);
-		destroy_exec_context(ctx);
-		return nullptr;
-	}
-
-	__load_elf(ctx, get_file(fd));
-
-	vfs_close(fd);
-
-	int err = setup_user_stack(ctx,
-				   DEFAULT_STACK_TOP,
-				   STACK_SIZE_PAGES,
-				   argv,
-				   envp);
-
-	if (err < 0) {
-		log_error("Failed to setup user stack");
-		destroy_exec_context(ctx);
-		return nullptr;
-	}
-
-	VAS_DUMP(ctx->new_vas);
-
-	ctx->prepared = true;
-	return ctx;
-}
-
-int commit_exec(struct task* task, struct exec_context* ctx)
-{
-
-	if (!ctx || !ctx->prepared) {
-		return -EINVAL;
-	}
-	disable_preemption();
-
-	struct task* current = get_current_task();
-	pgd_t* old_pml4 = task->vas->pml4;
-	struct address_space* old_vas = task->vas;
-
-	if (task == current) {
-		// Switch to new address space first
-		vmm_load_cr3(HHDM_TO_PHYS(ctx->new_vas->pml4));
-	}
-
-	// Now safe to update task structure
-	task->vas = ctx->new_vas;
-
-	address_space_destroy(old_vas);
-	// TODO: Make sure there are no page table leaks here
-	free_page(old_pml4);
-	kfree(old_vas);
-
-	memset(task->regs, 0, sizeof(struct registers));
-
-	task->regs->rip = (u64)ctx->entry_point;
-	task->regs->rsp = (u64)ctx->user_stack_top;
-	task->regs->cs = USER_CS;
-	task->regs->ds = USER_DS;
-	task->regs->ss = USER_DS;
-	task->regs->rflags = DEFAULT_RFLAGS;
-
-	strncpy(task->name, ctx->name, MAX_TASK_NAME_LEN - 1);
-
-	kfree(ctx);
-
-	enable_preemption();
-	return 0;
-}
-
-int __load_elf(struct exec_context* ctx, struct vfs_file* file)
-{
-	void* temp_buf = get_free_page(AF_KERNEL);
-	if (!temp_buf) {
-		log_error("Failed to allocate temporary buffer");
-		return -ENOMEM;
-	}
-
-	vfs_file_read(file, temp_buf, PAGE_SIZE);
-
-	struct elf_file_header* header = temp_buf;
-
-	if (!validate(header)) {
-		log_error("Invalid ELF header");
-		return -ENOEXEC;
-	}
-
-	log_debug("Loading ELF binary with entry point at 0x%lx",
-		  header->entry);
-
-	if (header->type != ET_EXE) {
-		log_error("Invalid elf type: %d", header->type);
-		return -1;
-	}
-
-	log_debug("Valid type, reading program headers");
-
-	// TODO: Proper section header handling for .bss and such
-
-	struct elf_program_header* prog =
-		(struct elf_program_header*)((uintptr_t)header +
-					     header->header_size);
-	for (size_t i = 0; i < header->program_header_entry_count; i++) {
-
-		log_debug(
-			"ELF Program Header: type=0x%x, flags=0x%x, offset=0x%lx,"
-			" virtual_address=0x%lx, size_in_file=0x%lx, size_in_memory=0x%lx, align=0x%lx",
-			prog->type,
-			prog->flags,
-			prog->offset,
-			prog->virtual_address,
-			prog->size_in_file,
-			prog->size_in_memory,
-			prog->align);
-
-		switch (prog->type) {
-		case PT_LOAD:
-			if (load_program_header(ctx,
-						file->dentry->inode,
-						prog) < 0) {
-				// TODO: Free previous program sections
-				log_error("Failed to load program header");
-				return -1;
-			}
-			break;
-		default:
-			log_error("Unknown program type %d", prog->type);
-			return -1;
-		}
-		prog++;
-	}
-
-	ctx->entry_point = (void*)header->entry;
-	strncpy(ctx->name, file->dentry->name, MAX_TASK_NAME_LEN - 1);
-	ctx->name[MAX_TASK_NAME_LEN - 1] = '\0';
-
-	free_page(temp_buf);
-	return 0;
-}
-
-/*******************************************************************************
-* Private Function Definitions
-*******************************************************************************/
-
 static bool validate(struct elf_file_header* header)
 {
 	kassert(header != NULL && "elf_validate: header is NULL");
@@ -282,6 +68,13 @@ static bool validate(struct elf_file_header* header)
 	return true;
 }
 
+/**
+ * load_program_header() - Loads a program header from an ELF file into the task's address space.
+ * @ctx:   The exec context containing the new address space.
+ * @inode: Pointer to the inode of the ELF file, or nullptr for anonymous mapping.
+ * @prog:  Pointer to the ELF program header loaded in memory.
+ * Return: 0 on success, -errno on failure.
+ */
 static int load_program_header(struct exec_context* ctx,
 			       struct vfs_inode* inode,
 			       struct elf_program_header* prog)
@@ -385,8 +178,7 @@ static int load_program_header(struct exec_context* ctx,
 		return err;
 	}
 
-	// ANON tail if memsz > filesz
-	// if (prog->size_in_memory > prog->size_in_file) {
+	// ANON tail
 	if (bss_vstart < bss_vend) {
 		log_debug(
 			"map ANON tail: [0x%lx..0x%lx) prot=0x%lx (%s) flags=0x%lx",
@@ -420,6 +212,15 @@ static size_t arg_len(const char** args)
 	return len;
 }
 
+/**
+ * setup_user_stack() - Sets up the user stack for the task.
+ * @ctx:         The exec context containing the new address space.
+ * @stack_top:   The top address of the stack.
+ * @stack_pages: The number of pages to allocate for the stack.
+ * @argv:        The argument vector.
+ * @envp:        The environment vector.
+ * Return: 0 on success, -errno on failure.
+ */
 static int setup_user_stack(struct exec_context* ctx,
 			    uptr stack_top,
 			    size_t stack_pages,
@@ -439,7 +240,7 @@ static int setup_user_stack(struct exec_context* ctx,
 		   PROT_READ | PROT_WRITE,
 		   MAP_ANONYMOUS | MAP_PRIVATE | MAP_GROWSDOWN);
 
-	// TODO: Split this into new function
+	// TODO: Refactor into smaller functions
 
 	struct address_space* vas = ctx->new_vas;
 	uptr current_sp = stack_top;
@@ -508,4 +309,210 @@ static int setup_user_stack(struct exec_context* ctx,
 	log_debug("User stack setup complete. Final SP: 0x%lx", current_sp);
 
 	return 0;
+}
+
+static int exec_load_elf(struct exec_context* ctx, struct vfs_file* file)
+{
+	void* temp_buf = get_free_page(AF_KERNEL);
+	if (!temp_buf) {
+		log_error("Failed to allocate temporary buffer");
+		return -ENOMEM;
+	}
+
+	vfs_file_read(file, temp_buf, PAGE_SIZE);
+
+	struct elf_file_header* header = temp_buf;
+
+	if (!validate(header)) {
+		log_error("Invalid ELF header");
+		return -ENOEXEC;
+	}
+
+	log_debug("Loading ELF binary with entry point at 0x%lx",
+		  header->entry);
+
+	if (header->type != ET_EXE) {
+		log_error("Invalid elf type: %d", header->type);
+		return -1;
+	}
+
+	log_debug("Valid type, reading program headers");
+
+	// TODO: Proper section header handling for .bss and such
+
+	struct elf_program_header* prog =
+		(struct elf_program_header*)((uintptr_t)header +
+					     header->header_size);
+	for (size_t i = 0; i < header->program_header_entry_count; i++) {
+
+		log_debug(
+			"ELF Program Header: type=0x%x, flags=0x%x, offset=0x%lx,"
+			" virtual_address=0x%lx, size_in_file=0x%lx, size_in_memory=0x%lx, align=0x%lx",
+			prog->type,
+			prog->flags,
+			prog->offset,
+			prog->virtual_address,
+			prog->size_in_file,
+			prog->size_in_memory,
+			prog->align);
+
+		switch (prog->type) {
+		case PT_LOAD:
+			if (load_program_header(ctx,
+						file->dentry->inode,
+						prog) < 0) {
+				// TODO: Free previous program sections
+				log_error("Failed to load program header");
+				return -1;
+			}
+			break;
+		default:
+			log_error("Unknown program type %d", prog->type);
+			return -1;
+		}
+		prog++;
+	}
+
+	ctx->entry_point = (void*)header->entry;
+	strncpy(ctx->name, file->dentry->name, MAX_TASK_NAME_LEN - 1);
+	ctx->name[MAX_TASK_NAME_LEN - 1] = '\0';
+
+	free_page(temp_buf);
+	return 0;
+}
+
+/**
+ * prepare_exec() - Build a new exec context for a userspace image
+ * @path: Path to executable
+ * @argv: NULL-terminated argument vector
+ * @envp: NULL-terminated environment vector
+ * Return: New exec_context* on success, NULL on failure
+ * Context: May sleep; performs I/O and allocations.
+ *
+ * Creates a fresh address space and PML4, loads the ELF image, and
+ * constructs a user stack per @argv/@envp. Marks the context prepared
+ * on success; on failure, cleans up all intermediate resources.
+ */
+struct exec_context*
+prepare_exec(const char* path, const char** argv, const char** envp)
+{
+	log_debug("Preparing exec for %s", path);
+
+	struct exec_context* ctx =
+		(struct exec_context*)kzalloc(sizeof(struct exec_context));
+	if (!ctx) {
+		log_error("OOM when creating ctx");
+		return nullptr;
+	}
+
+	ctx->new_vas = alloc_address_space();
+	if (!ctx->new_vas) {
+		destroy_exec_context(ctx);
+		return nullptr;
+	}
+	u64* new_pml4 = vmm_create_address_space();
+	vas_set_pml4(ctx->new_vas, (pgd_t*)new_pml4);
+
+	int fd = vfs_open(path, O_RDONLY);
+	if (fd < 0) {
+		log_error("Failed to open file %s: %d", path, fd);
+		destroy_exec_context(ctx);
+		return nullptr;
+	}
+
+	exec_load_elf(ctx, get_file(fd));
+
+	vfs_close(fd);
+
+	int err = setup_user_stack(ctx,
+				   DEFAULT_STACK_TOP,
+				   STACK_SIZE_PAGES,
+				   argv,
+				   envp);
+
+	if (err < 0) {
+		log_error("Failed to setup user stack");
+		destroy_exec_context(ctx);
+		return nullptr;
+	}
+
+	VAS_DUMP(ctx->new_vas);
+
+	ctx->prepared = true;
+	return ctx;
+}
+
+/**
+ * commit_exec() - Install a prepared exec context into a task
+ * @task: Task to reinitialize
+ * @ctx:  Prepared exec context from prepare_exec()
+ * Return: 0 on success, -EINVAL if @ctx is NULL or not prepared
+ * Context: Disables preemption internally; caller must ensure @task is
+ *          not executing concurrently on another CPU.
+ *
+ * If @task is current, switches CR3 to the new address space, updates
+ * the task's VAS, tears down the old VAS, resets registers, seeds user
+ * CS/DS/SS/RFLAGS, updates @task->name, frees @ctx, and returns.
+ */
+int commit_exec(struct task* task, struct exec_context* ctx)
+{
+
+	if (!ctx || !ctx->prepared) {
+		return -EINVAL;
+	}
+	disable_preemption();
+
+	struct task* current = get_current_task();
+	pgd_t* old_pml4 = task->vas->pml4;
+	struct address_space* old_vas = task->vas;
+
+	if (task == current) {
+		// Switch to new address space first
+		vmm_load_cr3(HHDM_TO_PHYS(ctx->new_vas->pml4));
+	}
+
+	// Now safe to update task structure
+	task->vas = ctx->new_vas;
+
+	address_space_destroy(old_vas);
+	// TODO: Make sure there are no page table leaks here
+	free_page(old_pml4);
+	kfree(old_vas);
+
+	memset(task->regs, 0, sizeof(struct registers));
+
+	task->regs->rip = (u64)ctx->entry_point;
+	task->regs->rsp = (u64)ctx->user_stack_top;
+	task->regs->cs = USER_CS;
+	task->regs->ds = USER_DS;
+	task->regs->ss = USER_DS;
+	task->regs->rflags = DEFAULT_RFLAGS;
+
+	strncpy(task->name, ctx->name, MAX_TASK_NAME_LEN - 1);
+
+	kfree(ctx);
+
+	enable_preemption();
+	return 0;
+}
+
+/**
+ * destroy_exec_context() - Free an exec context (best-effort cleanup)
+ * @ctx: Exec context (may be partially initialized)
+ * Return: none
+ * Context: May sleep.
+ *
+ * Destroys the new address space if present and frees @ctx. Safe to call
+ * after a failed prepare_exec().
+ */
+void destroy_exec_context(struct exec_context* ctx)
+{
+	if (!ctx) {
+		return;
+	}
+	if (ctx->new_vas) {
+		address_space_destroy(ctx->new_vas);
+		kfree(ctx->new_vas);
+	}
+	kfree(ctx);
 }

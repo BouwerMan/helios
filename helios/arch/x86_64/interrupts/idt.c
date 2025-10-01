@@ -23,7 +23,7 @@
 #include "arch/gdt/gdt.h"
 #include "arch/ports.h"
 #include "drivers/console.h"
-#include "kernel/irq_log.h"
+#include "kernel/klog.h"
 #include "kernel/tasks/scheduler.h"
 #include "lib/log.h"
 #include "lib/string.h"
@@ -396,7 +396,7 @@ static void set_descriptor(uint8_t vector, uint64_t isr, uint8_t flags)
 static void default_exception_handler(struct registers* registers)
 {
 	set_log_mode(LOG_DIRECT);
-	irq_log_flush();
+	klog_flush();
 	console_flush();
 
 	log_error(
