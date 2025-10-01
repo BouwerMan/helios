@@ -49,7 +49,6 @@
 #include "drivers/console.h"
 #include "kernel/bootinfo.h"
 #include "kernel/helios.h"
-#include "kernel/irq_log.h"
 #include "kernel/klog.h"
 #include "kernel/panic.h"
 #include "kernel/tasks/scheduler.h"
@@ -1536,7 +1535,6 @@ static void page_fault_fail(struct registers* r)
 	int id = (int)(r->err_code & 0x10);
 
 	set_log_mode(LOG_DIRECT);
-	irq_log_flush();
 	console_flush();
 	klog_flush();
 

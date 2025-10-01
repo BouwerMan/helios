@@ -26,7 +26,7 @@
 #include "kernel/klog.h"
 #include "lib/log.h"
 
-// Very rudimentary panic, still relies on libc and stuff.
+// Very rudimentary panic
 void panic(const char* message)
 {
 	__asm__ volatile("cli");

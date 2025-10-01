@@ -20,9 +20,8 @@ struct bootinfo {
 
 	struct {
 		uintptr_t physical_base; // Physical base address of the executable
-		uintptr_t virtual_base;	 // Virtual base address of the executable
+		uintptr_t virtual_base; // Virtual base address of the executable
 	} executable;
 };
 
 void bootinfo_init();
-void kernel_structure_init();
