@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include <kernel/spinlock.h>
-#include <kernel/types.h>
+#include "kernel/spinlock.h"
+#include "kernel/types.h"
 
 typedef void (*work_func_t)(void* data);
 
@@ -17,16 +17,5 @@ struct work_queue {
 	spinlock_t lock;	// Lock to protect the queue
 };
 
-/**
- * work_queue_init - Initialize the global work queue subsystem
- */
 void work_queue_init();
-
-/**
- * add_work_item - Queue a work item for asynchronous execution
- * @func: Function to execute when the work item is processed
- * @data: Arbitrary data pointer to pass to the function
- *
- * Return: 0 on success, -1 on memory allocation failure
- */
 int add_work_item(work_func_t func, void* data);
