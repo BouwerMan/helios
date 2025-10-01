@@ -1,3 +1,24 @@
+/**
+ * @file helios/kernel/klog.c
+ *
+ * Copyright (C) 2025  Dylan Parks
+ *
+ * This file is part of HeliOS
+ *
+ * HeliOS is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <uapi/helios/errno.h>
 
 #include "drivers/serial.h"
@@ -10,6 +31,7 @@
 #include "kernel/types.h"
 #include "mm/page_alloc.h"
 
+// TODO: Implement and use levels
 // TODO: Implement backlog tracking that effects delay
 // TODO: Make sure my u64->long casts are safe on x86_64
 
@@ -18,8 +40,61 @@ static atomic64_t klog_dropped_records = ATOMIC64_INIT(0);
 struct klog_ring g_klog_ring = { 0 };
 struct klog_cursor g_klog_cursor = { 0 };
 
-static bool klog_is_empty(const struct klog_ring* rb,
-			  const struct klog_cursor* cur)
+static inline u32 klog_len_from_sf(u32 sf)
+{
+	return sf & KFLAG_SIZE_MASK;
+}
+
+static inline bool klog_is_committed(u32 sf)
+{
+	return !!(sf & KFLAG_COMMITTED);
+}
+
+static inline bool klog_is_padding(u32 sf)
+{
+	return !!(sf & KFLAG_PADDING);
+}
+
+static inline u32 klog_make_sf(u32 len_aligned, u32 flags)
+{
+	return (u32)((len_aligned & KFLAG_SIZE_MASK) |
+		     (flags & ~KFLAG_SIZE_MASK));
+}
+
+static inline u32 klog_sf_committed(u32 len_aligned)
+{
+	return klog_make_sf(len_aligned, KFLAG_COMMITTED);
+}
+
+static inline u32 klog_sf_padding(u32 pad_len)
+{
+	return klog_make_sf(pad_len, KFLAG_COMMITTED | KFLAG_PADDING);
+}
+
+// [7:0]=level, [23:8]=cpu_id, [31:24]=mini-flags/facility/reserved
+static inline u32 klog_pack_id(klog_level_t level, u16 cpu_id, u8 mini_flags)
+{
+	return ((u32)mini_flags << 24) | ((u32)cpu_id << 8) | (u32)level;
+}
+
+[[maybe_unused]]
+static inline u8 klog_id_level(u32 id)
+{
+	return (u8)(id & 0xFF);
+}
+[[maybe_unused]]
+static inline u16 klog_id_cpu(u32 id)
+{
+	return (u16)((id >> 8) & 0xFFFF);
+}
+[[maybe_unused]]
+static inline u8 klog_id_flags(u32 id)
+{
+	return (u8)(id >> 24);
+}
+
+static inline bool klog_is_empty(const struct klog_ring* rb,
+				 const struct klog_cursor* cur)
 {
 	u64 head = (u64)atomic64_load_acquire(&rb->head_bytes);
 	return cur->bytes == head;
@@ -36,119 +111,8 @@ static int klog_emit_serial(const struct klog_header* hdr,
 	return 0;
 }
 
-static softirq_ret_t klog_softirq_action(size_t* item_budget, u64 ns_budget)
-{
-	static constexpr size_t CHUNK_MIN = 1;
-	static constexpr size_t CHUNK_MAX = 64;
-	size_t chunk = 16;
-	u64 deadline = clock_now_ns() + ns_budget;
-
-	while (*item_budget > 0) {
-		u64 now = clock_now_ns();
-		if (now >= deadline) {
-			// Out of time
-			return klog_is_empty(&g_klog_ring, &g_klog_cursor) ?
-				       SOFTIRQ_DONE :
-				       SOFTIRQ_MORE;
-		}
-
-		size_t n = *item_budget < chunk ? *item_budget : chunk;
-
-		int res = klog_drain(&g_klog_ring,
-				     &g_klog_cursor,
-				     klog_emit_serial,
-				     nullptr,
-				     (u32)n);
-
-		switch ((enum KLOG_DRAIN_STATUS)res) {
-		case KLOG_DRAIN_BUDGET_EXHAUSTED:
-			// Emitted 'n' records
-			*item_budget -= n;
-			break;
-
-		case KLOG_DRAIN_OK:
-			// Drained to current head snapshot. If empty now, we're done.
-			if (klog_is_empty(&g_klog_ring, &g_klog_cursor)) {
-				return SOFTIRQ_DONE;
-			}
-			// New records arrived; don't charge full chunk since we don't know how many.
-			if (*item_budget) {
-				(*item_budget)--; // conservative accounting
-			}
-			continue;
-
-		case KLOG_DRAIN_RESYNCED:
-			// Nothing to flush after resync
-			return SOFTIRQ_DONE;
-
-		case KLOG_DRAIN_STOPPED_UNCOMMITTED:
-			// We hit an in-flight record: stop this pass, try again later
-			return SOFTIRQ_MORE;
-
-		case KLOG_DRAIN_EMIT_BACKPRESSURE:
-			// TODO:This will matter one day, it should depend on
-			// how a sink becomes "ready". For now, UART literally
-			// never exerts backpressure.
-			kassert(false, "Unexpected backpressure");
-			__builtin_unreachable();
-		}
-
-		// adapt chunk by how close we are to the deadline
-		now = clock_now_ns();
-		if (deadline - now <= ns_budget / 8) {
-			// in the last ~12.5% of time: drain in singles
-			chunk = CHUNK_MIN;
-		} else if (chunk < CHUNK_MAX) {
-			// plenty of time: ramp up a bit for throughput
-			chunk *= 2;
-			if (chunk > CHUNK_MAX) chunk = CHUNK_MAX;
-		}
-	}
-
-	return klog_is_empty(&g_klog_ring, &g_klog_cursor) ? SOFTIRQ_DONE :
-							     SOFTIRQ_MORE;
-}
-
-struct klog_ring* klog_init()
-{
-	void* buf = get_free_pages(AF_KERNEL, KLOG_SIZE_PAGES);
-	int res = klog_ring_init(&g_klog_ring, buf, KLOG_SIZE_BYTES);
-	if (res < 0) {
-		panic("klog_ring_init failed");
-	}
-
-	g_klog_cursor.bytes =
-		(u64)atomic64_load_relaxed(&g_klog_ring.head_bytes);
-	g_klog_cursor.last_seq =
-		(u64)atomic64_load_relaxed(&g_klog_ring.next_seq);
-
-	softirq_register(SOFTIRQ_KLOG, "klog", klog_softirq_action);
-
-	return &g_klog_ring;
-}
-
-int klog_ring_init(struct klog_ring* rb, void* buf, u32 size_pow2)
-{
-	bool buf_valid = buf && CHECK_ALIGN(buf, 8);
-	bool size_valid = is_pow_of_two(size_pow2);
-	if (!rb || !buf_valid || !size_valid) {
-		return -EINVAL;
-	}
-
-	rb->buf = buf;
-	rb->size = size_pow2;
-	rb->mask = size_pow2 - 1;
-
-	rb->head_bytes = (atomic64_t) { 0 };
-	rb->next_seq = (atomic64_t) { 0 };
-
-	memset(rb->buf, 0, size_pow2);
-
-	return 0;
-}
-
 /**
- * emit_padding - publish a PADDING record that fills the tail to end-of-ring
+ * emit_padding() - publish a PADDING record that fills the tail to end-of-ring
  * @rb:   initialized ring
  * @pos:  masked byte offset within the ring buffer (0 <= pos < rb->size)
  * @len:  number of bytes from @pos to end-of-ring (strictly > 0, 8B-aligned)
@@ -160,13 +124,13 @@ static inline void emit_padding(struct klog_ring* rb, u32 pos, u32 len)
 		"len must be positive and 8-byte aligned");
 
 	struct klog_header* hdr = (struct klog_header*)&rb->buf[pos];
-	u32 sf = klog_make_sf(len, KFLAG_PADDING | KFLAG_COMMITTED);
+	u32 sf = klog_sf_padding(len);
 
 	smp_store_release_u32(&hdr->size_flags, sf);
 }
 
 /**
- * klog_reserve_bytes - reserve a contiguous byte range for one record
+ * klog_reserve_bytes() - reserve a contiguous byte range for one record
  * @rb:    initialized ring
  * @len:   total bytes for this record (header + payload + pad), 8B-aligned
  * @start: OUT: unbounded starting byte index (monotonic head before add)
@@ -205,7 +169,8 @@ static inline void emit_padding(struct klog_ring* rb, u32 pos, u32 len)
  *   - *off   is the masked in-buffer offset of the reservation.
  *   - The reserved region [*off, *off+len) does not straddle end-of-ring.
  */
-bool klog_reserve_bytes(struct klog_ring* rb, u32 len, u64* start, u32* off)
+static bool
+klog_reserve_bytes(struct klog_ring* rb, u32 len, u64* start, u32* off)
 {
 	kassert(rb && start && off, "Invalid args to klog_reserve_bytes");
 	kassert(len % 8 == 0, "len must be 8-byte aligned");
@@ -250,13 +215,13 @@ bool klog_reserve_bytes(struct klog_ring* rb, u32 len, u64* start, u32* off)
 	}
 }
 
-void klog_fill_and_publish(struct klog_ring* rb,
-			   u32 off,
-			   u32 total,
-			   klog_level_t level,
-			   const char* msg,
-			   u32 msg_len,
-			   u64 seq)
+static void klog_fill_and_publish(struct klog_ring* rb,
+				  u32 off,
+				  u32 total,
+				  klog_level_t level,
+				  const char* msg,
+				  u32 msg_len,
+				  u64 seq)
 {
 	kassert(rb && msg, "Invalid args to klog_fill_and_publish");
 	kassert(total > 0 && (total % 8) == 0,
@@ -318,24 +283,51 @@ bool klog_try_write(struct klog_ring* rb,
 	return true;
 }
 
-void klog_flush()
+/* Helper used inside drain when we detect an overrun */
+static u64
+klog_resync_scan(const struct klog_ring* rb, u64 scan_from, u64 head_snapshot)
 {
-	klog_drain(&g_klog_ring,
-		   &g_klog_cursor,
-		   klog_emit_serial,
-		   nullptr,
-		   UINT32_MAX);
+	u64 scan_pos = ALIGN_UP(scan_from, 8);
+	for (; scan_pos < head_snapshot; scan_pos += 8) {
+		u32 off = (u32)(scan_pos & rb->mask);
+		struct klog_header* hdr = (struct klog_header*)&rb->buf[off];
+
+		u32 sf = smp_load_acquire_u32(&hdr->size_flags);
+		if (!klog_is_committed(sf)) {
+			return head_snapshot;
+		}
+
+		u64 len = klog_len_from_sf(sf);
+		if (len < (u64)KLOG_HDR_LEN_8 * 8 || (len % 8) != 0 ||
+		    len > rb->size) {
+			continue;
+		}
+
+		if (klog_is_padding(sf)) {
+			return scan_pos;
+		}
+
+		if (hdr->hdr_len_8 < 4 || hdr->magic != KLOG_MAGIC ||
+		    len < (u64)hdr->hdr_len_8 * 8 ||
+		    hdr->payload_len > len - (u32)(hdr->hdr_len_8 * 8)) {
+			continue;
+		}
+
+		return scan_pos;
+	}
+
+	return head_snapshot;
 }
 
 static constexpr u32 REFRESH_HEAD_EVERY = 64;
 _Static_assert((REFRESH_HEAD_EVERY & (REFRESH_HEAD_EVERY - 1)) == 0,
 	       "REFRESH_HEAD_EVERY must be a power of 2");
 
-int klog_drain(struct klog_ring* rb,
-	       struct klog_cursor* cur,
-	       klog_emit_fn emit,
-	       void* cookie,
-	       u32 budget_records)
+static int klog_drain(struct klog_ring* rb,
+		      struct klog_cursor* cur,
+		      klog_emit_fn emit,
+		      void* cookie,
+		      u32 budget_records)
 {
 	if (!emit || !rb || !cur || budget_records == 0) {
 		return -EINVAL;
@@ -437,39 +429,122 @@ int klog_drain(struct klog_ring* rb,
 				     KLOG_DRAIN_OK;
 }
 
-/* Helper used inside drain when we detect an overrun */
-u64 klog_resync_scan(const struct klog_ring* rb,
-		     u64 scan_from,
-		     u64 head_snapshot)
+void klog_flush()
 {
-	u64 scan_pos = ALIGN_UP(scan_from, 8);
-	for (; scan_pos < head_snapshot; scan_pos += 8) {
-		u32 off = (u32)(scan_pos & rb->mask);
-		struct klog_header* hdr = (struct klog_header*)&rb->buf[off];
+	klog_drain(&g_klog_ring,
+		   &g_klog_cursor,
+		   klog_emit_serial,
+		   nullptr,
+		   UINT32_MAX);
+}
 
-		u32 sf = smp_load_acquire_u32(&hdr->size_flags);
-		if (!klog_is_committed(sf)) {
-			return head_snapshot;
+static softirq_ret_t klog_softirq_action(size_t* item_budget, u64 ns_budget)
+{
+	static constexpr size_t CHUNK_MIN = 1;
+	static constexpr size_t CHUNK_MAX = 64;
+	size_t chunk = 16;
+	u64 deadline = clock_now_ns() + ns_budget;
+
+	while (*item_budget > 0) {
+		u64 now = clock_now_ns();
+		if (now >= deadline) {
+			// Out of time
+			return klog_is_empty(&g_klog_ring, &g_klog_cursor) ?
+				       SOFTIRQ_DONE :
+				       SOFTIRQ_MORE;
 		}
 
-		u64 len = klog_len_from_sf(sf);
-		if (len < (u64)KLOG_HDR_LEN_8 * 8 || (len % 8) != 0 ||
-		    len > rb->size) {
+		size_t n = *item_budget < chunk ? *item_budget : chunk;
+
+		int res = klog_drain(&g_klog_ring,
+				     &g_klog_cursor,
+				     klog_emit_serial,
+				     nullptr,
+				     (u32)n);
+
+		switch ((enum KLOG_DRAIN_STATUS)res) {
+		case KLOG_DRAIN_BUDGET_EXHAUSTED:
+			// Emitted 'n' records
+			*item_budget -= n;
+			break;
+
+		case KLOG_DRAIN_OK:
+			if (klog_is_empty(&g_klog_ring, &g_klog_cursor)) {
+				return SOFTIRQ_DONE;
+			}
+
+			// New records arrived; don't charge full chunk since we don't know how many.
+			if (*item_budget) {
+				(*item_budget)--; // conservative accounting
+			}
 			continue;
+
+		case KLOG_DRAIN_RESYNCED:
+			// Nothing to flush after resync
+			return SOFTIRQ_DONE;
+
+		case KLOG_DRAIN_STOPPED_UNCOMMITTED:
+			// We hit an in-flight record: stop this pass, try again later
+			return SOFTIRQ_MORE;
+
+		case KLOG_DRAIN_EMIT_BACKPRESSURE:
+			// TODO:This will matter one day, it should depend on
+			// how a sink becomes "ready". For now, UART literally
+			// never exerts backpressure.
+			kassert(false, "Unexpected backpressure");
+			__builtin_unreachable();
 		}
 
-		if (klog_is_padding(sf)) {
-			return scan_pos;
+		// adapt chunk by how close we are to the deadline
+		now = clock_now_ns();
+		if (deadline - now <= ns_budget / 8) {
+			// in the last ~12.5% of time: drain in singles
+			chunk = CHUNK_MIN;
+		} else if (chunk < CHUNK_MAX) {
+			// plenty of time: ramp up a bit for throughput
+			chunk *= 2;
+			if (chunk > CHUNK_MAX) chunk = CHUNK_MAX;
 		}
-
-		if (hdr->hdr_len_8 < 4 || hdr->magic != KLOG_MAGIC ||
-		    len < (u64)hdr->hdr_len_8 * 8 ||
-		    hdr->payload_len > len - (u32)(hdr->hdr_len_8 * 8)) {
-			continue;
-		}
-
-		return scan_pos;
 	}
 
-	return head_snapshot;
+	return klog_is_empty(&g_klog_ring, &g_klog_cursor) ? SOFTIRQ_DONE :
+							     SOFTIRQ_MORE;
+}
+
+struct klog_ring* klog_init()
+{
+	void* buf = get_free_pages(AF_KERNEL, KLOG_SIZE_PAGES);
+	int res = klog_ring_init(&g_klog_ring, buf, KLOG_SIZE_BYTES);
+	if (res < 0) {
+		panic("klog_ring_init failed");
+	}
+
+	g_klog_cursor.bytes =
+		(u64)atomic64_load_relaxed(&g_klog_ring.head_bytes);
+	g_klog_cursor.last_seq =
+		(u64)atomic64_load_relaxed(&g_klog_ring.next_seq);
+
+	softirq_register(SOFTIRQ_KLOG, "klog", klog_softirq_action);
+
+	return &g_klog_ring;
+}
+
+int klog_ring_init(struct klog_ring* rb, void* buf, u32 size_pow2)
+{
+	bool buf_valid = buf && CHECK_ALIGN(buf, 8);
+	bool size_valid = is_pow_of_two(size_pow2);
+	if (!rb || !buf_valid || !size_valid) {
+		return -EINVAL;
+	}
+
+	rb->buf = buf;
+	rb->size = size_pow2;
+	rb->mask = size_pow2 - 1;
+
+	rb->head_bytes = (atomic64_t) { 0 };
+	rb->next_seq = (atomic64_t) { 0 };
+
+	memset(rb->buf, 0, size_pow2);
+
+	return 0;
 }

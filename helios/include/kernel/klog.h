@@ -69,63 +69,21 @@ typedef int (*klog_emit_fn)(const struct klog_header* hdr,
 			    void* cookie /* sink context */
 );
 
+/**
+ * enum KLOG_DRAIN_STATUS - return codes from klog_drain()
+ * @KLOG_DRAIN_OK: drained all available records
+ * @KLOG_DRAIN_STOPPED_UNCOMMITTED: hit a not-yet-published record
+ * @KLOG_DRAIN_BUDGET_EXHAUSTED: emitted 'budget' records
+ * @KLOG_DRAIN_EMIT_BACKPRESSURE: sink asked us to stop (nonzero return)
+ * @KLOG_DRAIN_RESYNCED: overrun detected; cursor jumped forward
+ */
 enum KLOG_DRAIN_STATUS {
 	KLOG_DRAIN_OK = 0,
-	KLOG_DRAIN_STOPPED_UNCOMMITTED, // hit a not-yet-published record
-	KLOG_DRAIN_BUDGET_EXHAUSTED,	// emitted 'budget' records
-	KLOG_DRAIN_EMIT_BACKPRESSURE, // sink asked us to stop (nonzero return)
-	KLOG_DRAIN_RESYNCED,	      // overrun detected; cursor jumped forward
+	KLOG_DRAIN_STOPPED_UNCOMMITTED,
+	KLOG_DRAIN_BUDGET_EXHAUSTED,
+	KLOG_DRAIN_EMIT_BACKPRESSURE,
+	KLOG_DRAIN_RESYNCED,
 };
-
-static inline u32 klog_len_from_sf(u32 sf)
-{
-	return sf & KFLAG_SIZE_MASK;
-}
-
-static inline bool klog_is_committed(u32 sf)
-{
-	return !!(sf & KFLAG_COMMITTED);
-}
-
-static inline bool klog_is_padding(u32 sf)
-{
-	return !!(sf & KFLAG_PADDING);
-}
-
-static inline u32 klog_make_sf(u32 len_aligned, u32 flags)
-{
-	return (u32)((len_aligned & KFLAG_SIZE_MASK) |
-		     (flags & ~KFLAG_SIZE_MASK));
-}
-
-static inline u32 klog_sf_committed(u32 len_aligned)
-{
-	return klog_make_sf(len_aligned, KFLAG_COMMITTED);
-}
-
-static inline u32 klog_sf_padding(u32 pad_len)
-{
-	return klog_make_sf(pad_len, KFLAG_COMMITTED | KFLAG_PADDING);
-}
-
-// [7:0]=level, [23:8]=cpu_id, [31:24]=mini-flags/facility/reserved
-static inline u32 klog_pack_id(klog_level_t level, u16 cpu_id, u8 mini_flags)
-{
-	return ((u32)mini_flags << 24) | ((u32)cpu_id << 8) | (u32)level;
-}
-
-static inline u8 klog_id_level(u32 id)
-{
-	return (u8)(id & 0xFF);
-}
-static inline u16 klog_id_cpu(u32 id)
-{
-	return (u16)((id >> 8) & 0xFFFF);
-}
-static inline u8 klog_id_flags(u32 id)
-{
-	return (u8)(id >> 24);
-}
 
 // Going to wait until things are fully setup to init this.
 // We will just straight log to serial or screen until the buddy allocator is available.
@@ -133,33 +91,10 @@ struct klog_ring* klog_init();
 
 int klog_ring_init(struct klog_ring* rb, void* buf, u32 size_pow2);
 
-// Reserves a contiguous 'len' bytes; inserts a PADDING record if wrap is needed.
-// On success: *start is the unbounded byte index; *off is (start & rb->mask).
-bool klog_reserve_bytes(struct klog_ring* rb, u32 len, u64* start, u32* off);
-
-void klog_fill_and_publish(struct klog_ring* rb,
-			   u32 off,
-			   u32 total,
-			   klog_level_t level,
-			   const char* msg,
-			   u32 msg_len,
-			   u64 seq);
-
 bool klog_try_write(struct klog_ring* rb,
 		    klog_level_t level,
 		    const char* msg,
 		    u32 msg_len,
 		    u64* out_seq /* optional */);
-
-int klog_drain(struct klog_ring* rb,
-	       struct klog_cursor* cur,
-	       klog_emit_fn emit,
-	       void* cookie,
-	       u32 budget_records);
-
-/* Helper used inside drain when we detect an overrun */
-u64 klog_resync_scan(const struct klog_ring* rb,
-		     u64 scan_from /* usually head - rb->size */,
-		     u64 head_snapshot /* bound for scan */);
 
 void klog_flush();
