@@ -19,6 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "kernel/timer.h"
 #undef LOG_LEVEL
 #define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
@@ -570,6 +571,20 @@ void scheduler_tick()
 			}
 		}
 	}
+}
+
+/**
+ * @brief Suspends execution of the current thread for a specified duration.
+ *
+ * @param millis The duration to sleep, in milliseconds.
+ */
+void sleep(uint64_t millis)
+{
+	struct task* t = get_current_task();
+	if (!t) return;
+	// Don't need to convert to ticks since we have 1ms ticks but just incase
+	t->sleep_ticks = millis_to_ticks(millis);
+	yield_blocked();
 }
 
 void scheduler_dump()

@@ -12,4 +12,5 @@ $(BUILDDIR)/$(ARCHDIR)/mmu/vmm.o \
 $(BUILDDIR)/$(ARCHDIR)/mmu/switch_stack.o \
 $(BUILDDIR)/$(ARCHDIR)/entry.o \
 $(BUILDDIR)/$(ARCHDIR)/tsc.o \
+$(BUILDDIR)/$(ARCHDIR)/pit.o \
 $(BUILDDIR)/$(ARCHDIR)/lib/memset.o \

@@ -38,17 +38,13 @@ static struct timer_subsystem ts = {
 	.tick_frequency = TIMER_HERTZ,
 };
 
-// Some IBM employee had a very fun time when designing this fucker.
-static constexpr u32 PIT_CLK = 1193180;
-
-/* This will keep track of how many ticks that the system
- *  has been running for */
-// volatile uint64_t ticks = 0;
-// volatile uint64_t seconds_since_start = 0;
-static uint32_t phase = 18;
+static uint32_t ts_phase = 18;
 
 extern volatile bool need_reschedule;
 
+/**
+ * timer_create() - Create and initialize a new timer
+ */
 struct timer* timer_create()
 {
 	struct timer* t = (struct timer*)kzalloc(sizeof(struct timer));
@@ -58,6 +54,13 @@ struct timer* timer_create()
 	return t;
 }
 
+/**
+ * timer_schedule() - Schedule a timer to expire after a delay
+ * @timer:    Pointer to the timer to schedule
+ * @delay_ms: Delay in milliseconds before the timer expires
+ * @callback: Function to call when the timer expires
+ * @data:     Data to pass to the callback function
+ */
 void timer_schedule(struct timer* timer,
 		    u64 delay_ms,
 		    timer_callback_t callback,
@@ -97,6 +100,11 @@ void timer_cancel(struct timer* timer)
 	kassert(false, "Not implemented");
 }
 
+/**
+ * timer_reschedule() - Reschedule an existing timer with a new delay
+ * @timer: Pointer to the timer to reschedule
+ * @new_delay_ms: New delay in milliseconds
+ */
 void timer_reschedule(struct timer* timer, u64 new_delay_ms)
 {
 	timer_schedule(timer, new_delay_ms, timer->callback, timer->data);
@@ -108,7 +116,10 @@ void timer_destroy(struct timer* timer)
 	kassert(false, "Not implemented");
 }
 
-void timer_tick()
+/**
+ * timer_tick() - Check for expired timers and call their callbacks
+ */
+static void timer_tick(void)
 {
 	unsigned long flags;
 	spin_lock_irqsave(&ts.lock, &flags);
@@ -134,23 +145,16 @@ void timer_tick()
 }
 
 /**
- * Handles the timer interrupt.
- *
- * This function is called whenever the timer fires. It increments the global
- * tick count and manages the sleep countdown. Additionally, it performs an
- * action every `phase` ticks, such as updating a ticker variable.
- *
- * @param r Unused parameter representing the CPU registers at the time of the interrupt.
+ * timer_handler() - Called on each timer tick (from IRQ context)
  */
-void timer_handler(struct registers* r)
+void timer_handler(void)
 {
-	(void)r;
-
+	// Called from IRQ context, source depends on arch (Ex: PIT)
 	unsigned long flags;
 	spin_lock_irqsave(&ts.lock, &flags);
 
 	ts.current_ticks++;
-	if (ts.current_ticks % phase == 0) ts.seconds_since_start++;
+	if (ts.current_ticks % ts_phase == 0) ts.seconds_since_start++;
 	if (ts.current_ticks % SCHEDULER_TIME == 0) need_reschedule = true;
 
 	spin_unlock_irqrestore(&ts.lock, flags);
@@ -159,50 +163,7 @@ void timer_handler(struct registers* r)
 	scheduler_tick();
 }
 
-/**
- * @brief Suspends execution of the current thread for a specified duration.
- *
- * @param millis The duration to sleep, in milliseconds.
- */
-void sleep(uint64_t millis)
+void timer_init(u32 phase)
 {
-	struct task* t = get_current_task();
-	if (!t) return;
-	// Don't need to convert to ticks since we have 1ms ticks but just incase
-	t->sleep_ticks = millis_to_ticks(millis);
-	yield_blocked();
-}
-
-/**
- * Sets the timer phase by configuring the Programmable Interval Timer (PIT).
- *
- * This function calculates the divisor based on the desired frequency (in Hz)
- * and programs the PIT to generate interrupts at the specified frequency.
- *
- * @param hz The desired frequency in hertz (Hz).
- */
-void timer_phase(uint32_t hz)
-{
-	phase = hz;
-	uint32_t divisor = PIT_CLK / hz; /* Calculate our divisor */
-	uint8_t low = (uint8_t)(divisor & 0xFF);
-	uint8_t high = (uint8_t)((divisor >> 8) & 0xFF);
-	outb(0x43, 0x36);		 /* Set our command byte 0x36 */
-	outb(0x40, low);		 /* Set low byte of divisor */
-	outb(0x40, high);		 /* Set high byte of divisor */
-}
-
-/**
- * Initializes the system timer to generate interrupts at a frequency of 1000Hz.
- *
- * This function sets up the timer by installing the `timer_handler` as the
- * interrupt service routine (ISR) for IRQ0 and configuring the timer phase.
- * The timer is essential for task scheduling and timekeeping in the system.
- */
-void timer_init(void)
-{
-	log_debug("Initializing timer to 1000Hz");
-	/* Installs 'timer_handler' to IRQ0 */
-	isr_install_handler(IRQ0, timer_handler);
-	timer_phase(TIMER_HERTZ);
+	ts_phase = phase;
 }
