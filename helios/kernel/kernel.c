@@ -18,6 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "arch/idt.h"
 #include "drivers/console.h"
 #include "drivers/fb.h"
 #include "drivers/kbd.h"
@@ -32,7 +33,6 @@
 #include "kernel/softirq.h"
 #include "kernel/syscall.h"
 #include "kernel/tasks/scheduler.h"
-#include "kernel/timer.h"
 #include "kernel/work_queue.h"
 #include "lib/log.h"
 #include "limine.h"
@@ -47,7 +47,7 @@ struct vfs_file* g_kernel_console = nullptr;
 extern void* g_entry_new_stack;
 
 /**
- * init_kernel_structure - Initialize core kernel data structures
+ * init_kernel_structure() - Initialize core kernel data structures
  */
 void init_kernel_structure()
 {
@@ -69,7 +69,6 @@ void kernel_main()
 	softirq_init();
 	syscall_init();
 	work_queue_init();
-	timer_init();
 	term_init();
 
 	log_init("Initializing klog");
@@ -77,12 +76,6 @@ void kernel_main()
 	kernel.klog = ring;
 
 	set_log_mode(LOG_KLOG);
-
-	// list_devices();
-	// ctrl_init();
-	//
-	// sATADevice* fat_device = ctrl_get_device(3);
-	// mount("/", fat_device, &fat_device->part_table[0], FAT16);
 
 	test_split_path();
 
@@ -116,16 +109,14 @@ void kernel_main()
 	vfs_close(fd);
 	vfs_close(fd2);
 
-	// ramfs_test();
-
-	tty_init();
-
 	fb_init();
+	tty_init();
 	console_init();
 	// attach_tty_to_console("ttyS0");
 	attach_tty_to_console("tty0");
 	keyboard_init();
 
+	ENABLE_INTERRUPTS();
 	log_info("Successfully got out of bootstrapping hell");
 	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
 
@@ -135,16 +126,6 @@ void kernel_main()
 		panic("Could not launch init!");
 	}
 
-	scheduler_dump();
-
-#if 0
-	log_warn("Shutting down in 1 second");
-	sleep(1000);
-
-	// QEMU shutdown command
-	console_flush();
-	outword(0x604, 0x2000);
-#endif
 	yield_blocked();
 	log_info("Entering idle loop");
 	for (;;) {

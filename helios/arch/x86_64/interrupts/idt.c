@@ -161,8 +161,6 @@ void idt_init()
 	outb(PIC1_DATA, 0x0);
 	io_wait();
 	outb(PIC2_DATA, 0x0);
-
-	__asm__ volatile("sti"); // set the interrupt flag
 }
 
 /**

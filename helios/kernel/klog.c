@@ -28,6 +28,7 @@
 #include "kernel/klog.h"
 #include "kernel/kmath.h"
 #include "kernel/softirq.h"
+#include "kernel/time.h"
 #include "kernel/types.h"
 #include "mm/page_alloc.h"
 

@@ -133,6 +133,7 @@ void yield_blocked();
 void task_wake(struct task* task);
 void task_block(struct task* task);
 void reap_task(struct task* task);
+void sleep(u64 millis);
 
 [[noreturn]]
 void task_end(int status);

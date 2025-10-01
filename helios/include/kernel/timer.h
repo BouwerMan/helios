@@ -1,12 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
-#include "arch/regs.h"
-#include "arch/tsc.h"
-#include "kernel/spinlock.h"
-#include "kernel/time.h"
-#include "kernel/types.h"
 #include <stdint.h>
+
+#include "kernel/spinlock.h"
+#include "kernel/types.h"
 
 static constexpr int TIMER_HERTZ = 1000;
 static inline unsigned long millis_to_ticks(unsigned long ms)
@@ -21,12 +19,6 @@ static inline unsigned long millis_to_ticks(unsigned long ms)
 	log_debug(#label ": %lu (%lx) ns",       \
 		  (label##_end - label##_start), \
 		  (label##_end - label##_start))
-
-void timer_init(void);
-void timer_poll(void);
-void timer_phase(uint32_t hz);
-void sleep(uint64_t millis);
-void timer_handler(struct registers* r);
 
 struct timer {
 	struct list_head list;	      // Linked list node
@@ -46,6 +38,11 @@ struct timer_subsystem {
 
 typedef void (*timer_callback_t)(void* data);
 
+// Functions to initialize and handle timer interrupts
+void timer_init(u32 phase);
+void timer_handler(void);
+
+// Functions to manage timers
 struct timer* timer_create();
 void timer_schedule(struct timer* timer,
 		    u64 delay_ms,

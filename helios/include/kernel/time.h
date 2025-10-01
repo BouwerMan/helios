@@ -17,7 +17,3 @@ void clock_init(u64 (*read)(void), u64 counter_hz);
 
 u64 clock_now_ns(void);
 u64 clock_now_ms(void);
-
-// helpers
-u64 cycles_to_ns(u64 cycles);		 // uses precomputed mul/shift
-u64 ns_to_deadline_cycles(u64 delta_ns); // for timers later

@@ -62,6 +62,16 @@ struct xmm_reg {
 	uint64_t high;
 };
 
+static inline void ENABLE_INTERRUPTS()
+{
+	__asm__ __volatile__("sti");
+}
+
+static inline void DISABLE_INTERRUPTS()
+{
+	__asm__ __volatile__("cli");
+}
+
 // IDT
 void idt_init(void);
 

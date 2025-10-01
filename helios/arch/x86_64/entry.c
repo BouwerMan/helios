@@ -22,6 +22,7 @@
 #include "arch/gdt/gdt.h"
 #include "arch/idt.h"
 #include "arch/mmu/vmm.h"
+#include "arch/pit.h"
 #include "arch/tsc.h"
 #include "drivers/screen.h"
 #include "drivers/serial.h"
@@ -53,7 +54,7 @@ void* g_entry_new_stack = nullptr;
 [[gnu::used]]
 void __arch_entry()
 {
-	// Stage 0: Sanity checks
+	DISABLE_INTERRUPTS();
 
 	// Ensure the bootloader actually understands our base revision (see spec).
 	if (LIMINE_BASE_REVISION_SUPPORTED == false) {
@@ -76,6 +77,9 @@ void __arch_entry()
 	gdt_init();
 	log_debug("Initializing IDT");
 	idt_init();
+
+	pit_init();
+	timer_init(__pit_phase);
 
 	tsc_init();
 	clock_init(__rdtsc, __tsc_hz);
