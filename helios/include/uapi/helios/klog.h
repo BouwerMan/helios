@@ -6,3 +6,5 @@
  * Version: 1
  * hdr_len_8: 4
  */
+
+// TODO: This will be filled out when we implement kernel log readers in userspace.
