@@ -1,6 +1,20 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
+/* Functions discarded after init */
+#define __init __attribute__((section(".init.text"))) __attribute__((cold))
+
+/* Read-only data used only during init */
+#define __initconst __attribute__((section(".init.rodata")))
+
+/* Writable data used only during init */
+#define __initdata __attribute__((section(".init.data")))
+
+/* Use when a non-init caller must reference an init symbol */
+#define __ref                       \
+	__attribute__((no_sanitize( \
+		"address"))) /* marker; you can also put it in a .ref.text if you add checks */
+
 // Always inline, even if the compiler thinks otherwise
 #ifndef __always_inline
 #define __always_inline inline __attribute__((always_inline))
