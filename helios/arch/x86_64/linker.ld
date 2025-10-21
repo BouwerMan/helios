@@ -13,6 +13,8 @@ PHDRS
 	text PT_LOAD;
 	rodata PT_LOAD;
 	data PT_LOAD;
+	inittext PT_LOAD;   /* RX for init code */
+	initdata PT_LOAD;   /* RW for init data/bss */
 }
 
 SECTIONS
@@ -95,6 +97,29 @@ SECTIONS
 		*(.eh_frame*)
 		*(.note .note.*)
 	}
+
+	. = ALIGN(CONSTANT(MAXPAGESIZE));
+	__init_begin = .;
+
+	.init.text : {
+		KEEP(*(.init.text .init.text.*))
+	} :inittext
+
+	/* Optional, if you separate read-only init constants */
+	.init.rodata : {
+		KEEP(*(.init.rodata .init.rodata.*))
+	} :rodata
+
+	.init.data : {
+		KEEP(*(.init.data .init.data.*))
+	} :initdata
+
+	.init.bss : {
+		KEEP(*(.init.bss .init.bss.*))
+		*(COMMON)
+	} :initdata
+
+	__init_end = .;
 
 	__kernel_end = .;       /* end of kernel image */
 }

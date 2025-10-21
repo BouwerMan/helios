@@ -8,7 +8,8 @@ section .text
 
 extern g_pending_bits
 extern g_interrupt_nesting_level
-extern need_reschedule
+;extern need_reschedule
+extern squeue
 
 extern interrupt_handler
 extern schedule
@@ -172,7 +173,7 @@ outermost_exit:
 	jne	handle_softirq
 
 	; If we don't need to reschedule, just return
-	cmp	byte [rel need_reschedule], 0
+	cmp	byte [rel squeue], 0
 	jne	handle_schedule
 
 ; Setup for return from our interrupt context
@@ -197,7 +198,7 @@ handle_softirq:
 	mov	rsi, 250000	; Max time budget of 250000 ns
 	call	do_softirq
 	; Recheck scheduling after softirq (may have set need_reschedule)
-	cmp	byte [rel need_reschedule], 0
+	cmp	byte [rel squeue], 0
 	je	return_from_interrupt
 	; Fall through to scheduling
 

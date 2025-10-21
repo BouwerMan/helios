@@ -85,22 +85,28 @@ struct task {
 	int exit_code;		     // Store the exit code
 	struct waitqueue parent_wq;  // For parents to wait on
 
-	struct waitqueue*
-		wait; // For debugging, stores current blocking waitqueue
-
 	char name[MAX_TASK_NAME_LEN];
+
+	struct waitqueue* wait; // For debug, stores current blocking waitqueue
 };
 
 struct scheduler_queue {
-	struct list_head ready_list; // list head of the queue
+	volatile bool
+		need_reschedule; // Must be first for interrupt handler access
+	struct list_head ready_list;
 	struct list_head blocked_list;
 	struct list_head terminated_list;
 	struct task* current_task;
+
+	struct task* idle_task;
+
 	struct slab_cache* cache;
 	size_t task_count;
 	pid_t kernel_pid_counter;
 	pid_t user_pid_counter;
 	bool inited;
+
+	struct task* last_task; // For debug
 };
 
 static inline bool waitqueue_empty(struct waitqueue* wqueue)

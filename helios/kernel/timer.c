@@ -40,8 +40,6 @@ static struct timer_subsystem ts = {
 
 static uint32_t ts_phase = 18;
 
-extern volatile bool need_reschedule;
-
 /**
  * timer_create() - Create and initialize a new timer
  */
@@ -153,9 +151,12 @@ void timer_handler(void)
 	unsigned long flags;
 	spin_lock_irqsave(&ts.lock, &flags);
 
+	struct scheduler_queue* squeue = get_scheduler_queue();
+
 	ts.current_ticks++;
 	if (ts.current_ticks % ts_phase == 0) ts.seconds_since_start++;
-	if (ts.current_ticks % SCHEDULER_TIME == 0) need_reschedule = true;
+	if (ts.current_ticks % SCHEDULER_TIME == 0)
+		squeue->need_reschedule = true;
 
 	spin_unlock_irqrestore(&ts.lock, flags);
 

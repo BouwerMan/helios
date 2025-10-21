@@ -19,7 +19,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "kernel/timer.h"
 #undef LOG_LEVEL
 #define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
@@ -35,6 +34,7 @@
 #include "kernel/panic.h"
 #include "kernel/spinlock.h"
 #include "kernel/tasks/scheduler.h"
+#include "kernel/timer.h"
 #include "lib/list.h"
 #include "lib/string.h"
 #include "mm/address_space.h"
@@ -45,67 +45,15 @@
 
 #include <uapi/helios/errno.h>
 
-/*******************************************************************************
-* Global Variable Definitions
-*******************************************************************************/
-
 extern void* g_entry_new_stack;
 
-volatile bool need_reschedule = false;
-// If > 0, preempt is disabled
 static bool g_preempt_enabled = false;
 
 struct scheduler_queue squeue = { 0 };
 struct task* kernel_task;
-struct task* idle_task;
-
-/*******************************************************************************
-* Private Function Prototypes
-*******************************************************************************/
 
 [[noreturn]]
 extern void __switch_to(struct task* next);
-
-/**
- * @brief Picks the next task to run from the scheduler queue.
- *
- * @return Pointer to the next task structure, or the idle task if no ready task is found.
- */
-static struct task* pick_next();
-
-static void task_remove(struct task* task);
-
-/**
- * @brief Creates a kernel stack an imitates an interrupt frame for the given task.
- *
- * @param task Pointer to the task structure.
- * @param entry Pointer to entry function for kernel tasks
- * @return 0 on success, 1 on failure.
- */
-static int create_kernel_stack(struct task* task, entry_func entry);
-
-/**
- * Entry point for the idle task. This task halts the CPU in an infinite loop.
- */
-static void idle_task_entry();
-
-/**
- * setup_first_kernel_task - Initialize the primary kernel task
- */
-static void setup_first_kernel_task();
-
-/**
- * setup_idle_task - Create the idle task for CPU idle periods
- */
-static void setup_idle_task();
-
-/**
- * Checks whether preemption is enabled by checking the preemption counter.
- */
-static inline bool preempt_is_enabled()
-{
-	return get_current_task()->preempt_count == 0;
-}
 
 /**
  * Helper to set task state and add the task to the chosen block list
@@ -119,19 +67,14 @@ static inline void __task_block(struct task* task, struct list_head* block_list)
 static inline bool should_reschedule()
 {
 	struct task* task = get_current_task();
-	return need_reschedule && task->preempt_count == 0;
+	return squeue.need_reschedule && task->preempt_count == 0;
 }
-
-/*******************************************************************************
-* Public Function Definitions
-*******************************************************************************/
 
 /**
  * Enables task preemption by decrementing the preemption counter.
  */
 void enable_preemption(void)
 {
-	// preempt_count--;
 	get_current_task()->preempt_count--;
 }
 
@@ -141,33 +84,61 @@ void enable_preemption(void)
  */
 void disable_preemption(void)
 {
-	// if (++preempt_count < 0) panic("preempt count underflow");
 	if (++get_current_task()->preempt_count < 0) {
 		panic("preempt count underflow");
 	}
 }
 
 /**
- * Retrieves the currently running task.
- *
- * @return Pointer to the current task structure.
+ * get_current_task() - Retrieves the currently running task.
+ * Return: Pointer to the current task structure.
  */
 struct task* get_current_task()
 {
 	return squeue.current_task;
 }
 
-/**
- * Retrieves the scheduler queue.
- *
- * @return Pointer to the scheduler queue structure.
- */
 struct scheduler_queue* get_scheduler_queue()
 {
 	return &squeue;
 }
 
-struct task* previous_task = nullptr;
+static struct task* get_next_task()
+{
+	if (list_empty(&squeue.ready_list)) {
+		// Nothing is ready
+		return squeue.current_task;
+	} else if (squeue.current_task == squeue.idle_task) {
+		// If we were the idle task and there is a ready task, pick it
+		struct task* next = list_first_entry(&squeue.ready_list,
+						     struct task,
+						     sched_list);
+		return next;
+	}
+
+	// If we only have 1 task then might as well make sure we continue it
+	if (squeue.task_count == 1) {
+		return squeue.current_task;
+	}
+
+	struct task* current = get_current_task();
+	struct task* next;
+
+	// Since we have a blocked list now, we can assume that everything in the
+	// ready list is READY. So we don't have to do any looping for a simple
+	// round-robin scheduler. (This still sucks though)
+	if (current->state != READY) {
+		next = list_first_entry(&squeue.ready_list,
+					struct task,
+					sched_list);
+	} else {
+		next = list_next_entry_circular(current,
+						&squeue.ready_list,
+						sched_list);
+	}
+
+	return next;
+}
 
 /**
  * Checks if a reschedule is needed and performs a context switch if required.
@@ -178,17 +149,18 @@ void schedule(struct registers* regs)
 {
 	if (!should_reschedule()) return;
 
-	need_reschedule = false;
+	squeue.need_reschedule = false;
 
 	struct task* prev = squeue.current_task;
-	previous_task = prev;
+	squeue.last_task = prev;
 	prev->regs = regs;
 	if (prev->state == RUNNING) {
 		prev->state = READY;
 	}
 
 	// scheduler_dump();
-	struct task* new = pick_next();
+	struct task* new = get_next_task();
+	squeue.current_task = new;
 
 	new->state = RUNNING;
 
@@ -197,6 +169,95 @@ void schedule(struct registers* regs)
 	/* @ref Does not return */
 	__switch_to(new);
 	__builtin_unreachable();
+}
+
+static int create_kernel_stack(struct task* task, entry_func entry)
+{
+	void* stack = (void*)get_free_pages(AF_KERNEL, STACK_SIZE_PAGES);
+	log_debug("Allocated stack at %p", stack);
+	if (!stack) return -ENOMEM;
+
+	uintptr_t stack_top = (uintptr_t)stack + STACK_SIZE_PAGES * PAGE_SIZE;
+
+	task->kernel_stack = stack_top;
+	task->regs = (struct registers*)(uintptr_t)(stack_top -
+						    sizeof(struct registers));
+	// Simulate interrupt frame
+	task->regs->ss = KERNEL_DS; // optional for ring 0
+	task->regs->rsp = stack_top;
+	task->regs->rflags = 0x202;
+	task->regs->cs = KERNEL_CS; // kernel code segment
+
+	// Other important registers, all other registers set to 0
+	task->regs->ds = KERNEL_DS;
+	task->regs->saved_rflags = 0x202;
+
+	// A null entry doesn't matter as long as we are not doing a first run
+	// with a null entry
+	task->regs->rip = (uptr)entry;
+
+	log_debug("Created stack for task %d, kernel_stack: %lx, regs addr: %p",
+		  task->pid,
+		  task->kernel_stack,
+		  (void*)task->regs);
+
+	return 0;
+}
+
+static void idle_task_entry()
+{
+	while (1) {
+		if (squeue.need_reschedule || !list_empty(&squeue.ready_list)) {
+			yield();
+		}
+		__builtin_ia32_pause();
+	}
+}
+
+/**
+ * setup_first_kernel_task - Initialize the primary kernel task
+ * 
+ * Creates and configures the initial kernel task that represents the kernel's
+ * execution context. This task serves as the root of the task hierarchy and
+ * is used for kernel-level operations that require a task context.
+ * 
+ * This function must be called during early kernel initialization before
+ * any other tasks are created or scheduled.
+ */
+static void setup_first_kernel_task()
+{
+	kernel_task = __alloc_task();
+	if (!kernel_task) {
+		panic("Unable to allocate initial kernel task");
+	}
+
+	kernel_task->type = KERNEL_TASK;
+	kernel_task->parent = kernel_task;
+	kernel_task->pid = squeue.kernel_pid_counter++;
+	kernel_task->cwd = dget(vfs_lookup("/"));
+
+	// Set kernel_stack to stack we set from __arch_entry
+	kernel_task->kernel_stack = (uptr)g_entry_new_stack;
+
+	vas_set_pml4(kernel_task->vas, (pgd_t*)PHYS_TO_HHDM(vmm_read_cr3()));
+
+	strncpy(kernel_task->name, "Kernel Task", MAX_TASK_NAME_LEN);
+	kernel_task->name[MAX_TASK_NAME_LEN - 1] = '\0';
+
+	kernel_task->state = RUNNING;
+	__task_add(kernel_task);
+	squeue.current_task = kernel_task;
+}
+
+/**
+ * setup_idle_task - Create the idle task for CPU idle periods
+ * 
+ * This task is selected by the scheduler when the ready queue is empty.
+ */
+static void setup_idle_task()
+{
+	squeue.idle_task =
+		kthread_create("Idle task", (entry_func)idle_task_entry);
 }
 
 /**
@@ -422,6 +483,12 @@ int launch_init()
 	return 0;
 }
 
+static void task_remove(struct task* task)
+{
+	list_del(&task->sched_list);
+	squeue.task_count--;
+}
+
 void reap_task(struct task* task)
 {
 	struct task* pos = nullptr;
@@ -506,7 +573,6 @@ struct task* __alloc_task()
 
 	memset(task, 0, sizeof(struct task));
 	task->vas = vas;
-	// task->pid = squeue.pid_i++;
 
 	// Init lists, maybe default resources (stdio)
 	struct task* parent = get_current_task();
@@ -523,19 +589,12 @@ struct task* __alloc_task()
 		list_add_tail(&task->parent->children, &task->sibling);
 	}
 
-	// Initialize stdio
-
 	return task;
 }
 
 void task_wake(struct task* task)
 {
 	disable_preemption();
-
-	// if (task->state != BLOCKED) {
-	// 	enable_preemption();
-	// 	return;
-	// }
 
 	task->state = READY;
 	list_move_tail(&task->sched_list, &squeue.ready_list);
@@ -548,8 +607,6 @@ void task_block(struct task* task)
 	disable_preemption();
 
 	__task_block(task, &squeue.blocked_list);
-	// task->state = BLOCKED;
-	// list_move_tail(&task->list, &squeue.blocked_list);
 
 	enable_preemption();
 }
@@ -620,7 +677,7 @@ void scheduler_dump()
  */
 void yield()
 {
-	need_reschedule = true;
+	squeue.need_reschedule = true;
 	__asm__ volatile("int $0x30"); // use an unused vector
 }
 
@@ -666,7 +723,6 @@ void waitqueue_prepare_wait(struct waitqueue* wqueue)
 	struct task* task = get_current_task();
 	task->wait_state = WAIT_PREPARING;
 	task->wait = wqueue;
-	// __wq_add_to_list(wqueue, task);
 	list_add_tail(&task->wait_list, &wqueue->waiters_list);
 
 	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
@@ -815,148 +871,4 @@ void __task_add(struct task* task)
 
 	log_debug("Added task %d", task->pid);
 	log_debug("Currently have %lu tasks", squeue.task_count);
-}
-
-/*******************************************************************************
-* Private Function Definitions
-*******************************************************************************/
-
-static struct task* pick_next()
-{
-	if (list_empty(&squeue.ready_list)) {
-		// No ready task available
-		squeue.current_task = idle_task;
-		return squeue.current_task;
-	} else if (squeue.current_task == idle_task) {
-		// If we were the idle task and there is a ready task, pick it
-		struct task* next = list_first_entry(&squeue.ready_list,
-						     struct task,
-						     sched_list);
-		squeue.current_task = next;
-		return next;
-	}
-
-	// If we only have 1 task then might as well make sure we continue it
-	if (squeue.task_count == 1) {
-		return squeue.current_task;
-	}
-
-	struct task* current = get_current_task();
-	struct task* next;
-
-	// TODO: Skip over WAIT_PREPARING tasks
-
-	// Since we have a blocked list now, we can assume that everything in the
-	// ready list is READY. So we don't have to do any looping for a simple
-	// round-robin scheduler. (This still sucks though)
-	if (current->state != READY) {
-		next = list_first_entry(&squeue.ready_list,
-					struct task,
-					sched_list);
-	} else {
-		next = list_next_entry_circular(current,
-						&squeue.ready_list,
-						sched_list);
-	}
-
-	squeue.current_task = next;
-	return next;
-}
-
-static int create_kernel_stack(struct task* task, entry_func entry)
-{
-	void* stack = (void*)get_free_pages(AF_KERNEL, STACK_SIZE_PAGES);
-	log_debug("Allocated stack at %p", stack);
-	if (!stack) return -ENOMEM;
-
-	uintptr_t stack_top = (uintptr_t)stack + STACK_SIZE_PAGES * PAGE_SIZE;
-
-	task->kernel_stack = stack_top;
-	task->regs = (struct registers*)(uintptr_t)(stack_top -
-						    sizeof(struct registers));
-	// Simulate interrupt frame
-	task->regs->ss = KERNEL_DS; // optional for ring 0
-	task->regs->rsp = stack_top;
-	task->regs->rflags = 0x202;
-	task->regs->cs = KERNEL_CS; // kernel code segment
-
-	// Other important registers, all other registers set to 0
-	task->regs->ds = KERNEL_DS;
-	task->regs->saved_rflags = 0x202;
-
-	// A null entry doesn't matter as long as we are not doing a first run
-	// with a null entry
-	task->regs->rip = (uptr)entry;
-
-	log_debug("Created stack for task %d, kernel_stack: %lx, regs addr: %p",
-		  task->pid,
-		  task->kernel_stack,
-		  (void*)task->regs);
-
-	return 0;
-}
-
-static void task_remove(struct task* task)
-{
-	list_del(&task->sched_list);
-	squeue.task_count--;
-}
-
-static void idle_task_entry()
-{
-	while (1) {
-		if (need_reschedule || !list_empty(&squeue.ready_list)) {
-			yield();
-		}
-		__builtin_ia32_pause();
-	}
-}
-
-/**
- * setup_first_kernel_task - Initialize the primary kernel task
- * 
- * Creates and configures the initial kernel task that represents the kernel's
- * execution context. This task serves as the root of the task hierarchy and
- * is used for kernel-level operations that require a task context.
- * 
- * This function must be called during early kernel initialization before
- * any other tasks are created or scheduled.
- */
-static void setup_first_kernel_task()
-{
-	kernel_task = __alloc_task();
-	if (!kernel_task) {
-		panic("Unable to allocate initial kernel task");
-	}
-
-	kernel_task->type = KERNEL_TASK;
-	kernel_task->parent = kernel_task;
-	kernel_task->pid = squeue.kernel_pid_counter++;
-	kernel_task->cwd = dget(vfs_lookup("/"));
-
-	// Set kernel_stack to stack we set from __arch_entry
-	kernel_task->kernel_stack = (uptr)g_entry_new_stack;
-
-	vas_set_pml4(kernel_task->vas, (pgd_t*)PHYS_TO_HHDM(vmm_read_cr3()));
-
-	strncpy(kernel_task->name, "Kernel Task", MAX_TASK_NAME_LEN);
-	kernel_task->name[MAX_TASK_NAME_LEN - 1] = '\0';
-
-	kernel_task->state = RUNNING;
-	__task_add(kernel_task);
-	squeue.current_task = kernel_task;
-}
-
-/**
- * setup_idle_task - Create the idle task for CPU idle periods
- * 
- * This task is selected by the scheduler when the ready queue is empty.
- */
-static void setup_idle_task()
-{
-	idle_task = kthread_create("Idle task", (entry_func)idle_task_entry);
-	// kthread_run(idle_task);
-
-	// idle_task->parent = kernel_task;
-	// idle_task->state = IDLE;
 }
