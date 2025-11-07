@@ -24,7 +24,7 @@
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
-#include <lib/log.h>
+#include "lib/log.h"
 #undef FORCE_LOG_REDEF
 
 #include "fs/devfs/devfs.h"
@@ -40,10 +40,6 @@
 
 // TODO: Find a better way to handle some of these icky globals, also def need
 // some locks
-
-/*******************************************************************************
- * Global Variable Definitions
- *******************************************************************************/
 
 struct vfs_fs_type* fs_list = NULL;
 struct vfs_mount* mount_list = NULL;
@@ -76,18 +72,6 @@ struct path_component {
 	size_t len;
 };
 
-/*******************************************************************************
- * Private Function Prototypes
- *******************************************************************************/
-
-static const char* path_next_token(struct path_tokenizer* tok, size_t* out_len);
-static struct vfs_fs_type* find_filesystem(const char* fs_type);
-static void register_mount(struct vfs_mount* mnt);
-static inline int vfs_create_args_valid(const char* path,
-					uint16_t mode,
-					int flags,
-					struct vfs_dentry** out);
-
 static void add_superblock(struct vfs_superblock* sb)
 {
 	if (sb_idx >= 8) return;
@@ -98,23 +82,6 @@ static inline u32 inode_key(const struct vfs_superblock* sb, const size_t id)
 {
 	return (u32)((uptr)sb ^ id);
 }
-
-/**
- * @brief Splits a filesystem path into parent directory and basename.
- *
- * @param path       Input path string (must be non-NULL).
- * @param parent_out On success, allocated buffer containing parent path.
- * @param name_out   On success, allocated buffer containing basename.
- *
- * @return VFS_OK on success, negative VFS_ERR_* on error.
- *
- * @note Both @p parent_out and @p name_out must be freed with kfree() by the caller.
- */
-static int __split_path(const char* path, char** parent_out, char** name_out);
-
-/*******************************************************************************
- * Public Function Definitions
- *******************************************************************************/
 
 /**
  * vfs_init - Initializes the virtual filesystem.
@@ -149,10 +116,47 @@ void vfs_init()
 		panic("file cache init failure");
 	}
 
+	// TODO: Better way to init supported filesystems
 	ramfs_init();
 	devfs_init();
 
 	mount_initial_rootfs();
+}
+
+/**
+ * register_mount - Registers a mount point in the virtual filesystem.
+ * @mnt: Pointer to the vfs_mount structure representing the mount point.
+ *
+ * This function adds the given mount point to the global mount list. If the
+ * list is empty, the mount point becomes the head of the list. Otherwise, it
+ * is added to the beginning of the list.
+ */
+static void register_mount(struct vfs_mount* mnt)
+{
+	if (mount_list == NULL) {
+		mount_list = mnt;
+	} else {
+		mnt->next = mount_list;
+		mount_list = mnt;
+	}
+}
+
+/**
+ * register_filesystem - Registers a filesystem type in the virtual filesystem.
+ * @fs: Pointer to the vfs_fs_type structure representing the filesystem type.
+ *
+ * This function adds the given filesystem type to the global filesystem list.
+ * If the list is empty, the filesystem type becomes the head of the list.
+ * Otherwise, it is added to the beginning of the list.
+ */
+void register_filesystem(struct vfs_fs_type* fs)
+{
+	if (fs_list == NULL) {
+		fs_list = fs;
+	} else {
+		fs->next = fs_list; // Add fs to beginning of list
+		fs_list = fs;
+	}
 }
 
 int mount_initial_rootfs()
@@ -200,16 +204,11 @@ mount_point_fail:
 }
 
 /**
- * @brief Creates a new, empty inode and adds it to the inode cache.
+ * new_inode - Creates a new, empty inode and adds it to the inode cache.
  *
- * This function is used when creating a new file or directory. It allocates
- * a blank inode, initializes its basic VFS fields (sb, id, ref_count), and
- * inserts it into the global inode hash table. It does NOT populate it
- * with filesystem-specific data; that is the caller's responsibility.
- *
- * @param sb The superblock of the filesystem where the new inode belongs.
- * @param id The unique ID for the new inode.
- * @return A pointer to the new, locked vfs_inode, or NULL on failure.
+ * @sb: The superblock of the filesystem where the new inode belongs.
+ * @id: The unique ID for the new inode.
+ * Return: A pointer to the new vfs_inode, or NULL on failure.
  */
 struct vfs_inode* new_inode(struct vfs_superblock* sb, size_t id)
 {
@@ -232,7 +231,7 @@ struct vfs_inode* new_inode(struct vfs_superblock* sb, size_t id)
 	// Initialize the core VFS fields
 	inode->sb = sb;
 	inode->id = id;
-	inode->ref_count = 1;
+	inode->ref_count = 1; // Ref held by caller
 
 	// Add it to the cache so future lookups will find it.
 	inode_add(inode);
@@ -242,107 +241,19 @@ struct vfs_inode* new_inode(struct vfs_superblock* sb, size_t id)
 
 struct vfs_inode* iget(struct vfs_inode* inode)
 {
-	if (!inode) {
-		return inode;
-	}
-
-	inode->ref_count++;
-
-	return inode;
-}
-
-// Removing because that code should be in a different function
-#if 0
-
-/**
- * @brief  Obtains an in-memory VFS inode from the global inode cache.
- *
- * This function is the primary way to get a pointer to an active `vfs_inode`.
- * It uniquely identifies an inode using its superblock and on-disk inode
- * number.
- *
- * The function first searches the global inode cache.
- * - If the inode is found (a cache hit), its reference count is incremented,
- * and a pointer to the existing in-memory inode is returned.
- * - If the inode is not found (a cache miss), a new `vfs_inode` is allocated,
- * and the filesystem-specific `read_inode` operation is called (via the
- * superblock) to populate it with data from the underlying storage. The new
- * inode is then added to the cache before being returned.
- *
- * @param sb    A pointer to the `vfs_superblock` of the filesystem where the
- * inode resides. This provides the context for the filesystem type
- * and its operations.
- * @param id    The inode number, which is a unique identifier for the inode
- * within its filesystem.
- *
- * @return      A pointer to the locked `vfs_inode` structure with an
- * incremented reference count. Returns NULL if allocation or
- * reading from disk fails.
- *
- * @note        Every successful call to `iget` must be paired with a
- * corresponding call to `iput` to release the reference when the inode is no
- * longer needed.
- */
-struct vfs_inode* iget(struct vfs_superblock* sb, size_t id)
-{
-	struct vfs_inode* inode = inode_ht_check(sb, id);
 	if (inode) {
 		inode->ref_count++;
-		return inode;
 	}
-
-	if (sb->sops == nullptr || sb->sops->alloc_inode == nullptr) {
-		log_error("Superblock %p has no alloc_inode operation",
-			  (void*)sb);
-		return nullptr;
-	}
-
-	inode = sb->sops->alloc_inode(sb);
-
-	if (!inode) {
-		log_error("Failed to allocate inode for id %zu in sb %p",
-			  id,
-			  (void*)sb);
-		return nullptr;
-	}
-
-	inode->sb = sb;
-	inode->id = id;
-	inode->ref_count = 1;
-
-	sem_init(&inode->lock, 1);
-
-	if (sb->sops->read_inode(inode) < 0) {
-		log_error("Failed to read inode %zu from superblock %p",
-			  id,
-			  (void*)sb);
-		sb->sops->destroy_inode(inode);
-		return nullptr;
-	}
-
-	inode_add(inode);
 
 	return inode;
 }
-#endif
 
 /**
- * @brief  Releases a reference to an in-memory VFS inode.
- *
- * This function decrements the `ref_count` of an inode. It is the counterpart
- * to `iget`. When the reference count drops to zero, it signifies that no part
- * of the kernel is actively using the inode.
- *
- * An inode with a zero reference count becomes a candidate for being written
- * back to disk if it is dirty (modified) and eventually being evicted from
- * the inode cache to reclaim memory, especially under memory pressure.
+ * iput() - Releases a reference to an in-memory VFS inode.
  *
  * @param inode A pointer to the `vfs_inode` whose reference should be released.
- * If the pointer is NULL, the function does nothing.
  *
- * @note        This function must be called to balance every call to `iget`
- * to prevent inode reference leaks, which would result in memory
- * leaks and prevent filesystems from being unmounted correctly.
+ * This function frees the inode if its reference count reaches zero.
  */
 void iput(struct vfs_inode* inode)
 {
@@ -366,13 +277,19 @@ void iput(struct vfs_inode* inode)
 	}
 }
 
+/**
+ * inode_add() - Add an inode to the global inode hash table
+ * @inode: The inode to add to the hash table
+ *
+ * This function takes a reference on the inode.
+ */
 void inode_add(struct vfs_inode* inode)
 {
 	u32 key = inode_key(inode->sb, inode->id);
 	struct hlist_head* bucket = &i_ht[hash_min(key, HASH_BITS(i_ht))];
 	inode->bucket = bucket;
 
-	// hash_add(i_ht, &inode->hash, key);
+	iget(inode);
 	hlist_add_head(bucket, &inode->hash);
 }
 
@@ -500,7 +417,7 @@ struct vfs_dentry* dentry_ht_check(struct vfs_dentry* d)
 }
 
 /**
- * dentry_lookup - Find or construct a child dentry under @parent
+ * __dentry_lookup - Find or construct a child dentry under @parent
  * @parent: Directory dentry to search
  * @name:   Child name
  *
@@ -547,15 +464,15 @@ struct vfs_dentry* __dentry_lookup(struct vfs_dentry* parent, const char* name)
 }
 
 /**
- * @brief Computes a 32-bit hash for a directory entry (dentry).
+ * dentry_hash - Computes a 32-bit hash for a directory entry (dentry).
  *
  * Generates a hash value based on the parent inode ID and the dentry name,
  * using the FNV-1a algorithm. Handles NULL pointers safely.
  *
- * @param key Pointer to a `struct vfs_dentry` to be hashed.
+ * @key: Pointer to a `struct vfs_dentry` to be hashed.
  *            If NULL, returns 0. If parent/inode or name are NULL,
  *            special constants are mixed into the hash.
- * @return 32-bit FNV-1a hash value representing the dentry.
+ * Return: 32-bit FNV-1a hash value representing the dentry.
  */
 u32 dentry_hash(const struct vfs_dentry* key)
 {
@@ -600,14 +517,11 @@ u32 dentry_hash(const struct vfs_dentry* key)
 }
 
 /**
- * Compares two directory entries (dentries) for equality.
+ * dentry_compare - Compares two directory entries (dentries) for equality.
  *
- * This function checks if two `vfs_dentry` structures are equal by comparing
- * their names and the IDs of their parent inodes.
- *
- * @param d1 A pointer to the first `vfs_dentry` structure.
- * @param d2 A pointer to the second `vfs_dentry` structure.
- * @return `true` if the dentries are equal, `false` otherwise.
+ * @d1: A pointer to the first `vfs_dentry` structure.
+ * @d2: A pointer to the second `vfs_dentry` structure.
+ * Returns: `true` if the dentries are equal, `false` otherwise.
  */
 bool dentry_compare(const struct vfs_dentry* d1, const struct vfs_dentry* d2)
 {
@@ -618,24 +532,11 @@ bool dentry_compare(const struct vfs_dentry* d1, const struct vfs_dentry* d2)
 /**
  * __fill_dirent - Populate a VFS dirent from a (stable) dentry
  * @dentry: Dentry whose inode/name/type will be copied (must not be freed during the call)
- * @dirent:        Output record to fill (caller-provided)
+ * @dirent: Output record to fill (caller-provided)
  *
  * Copies the inode number, type, record length policy, and name from @locked_dentry
  * into @dirent. This helper does not set @dirent->d_off; the caller (typically
  * the VFS readdir wrapper) is responsible for assigning the resume position.
- *
- * Type mapping:
- *    Maps internal FILETYPE_* to DT_* (DT_UNKNOWN when the type cannot be determined).
- *
- * Name handling:
- *    Copies up to NAME_MAX bytes and NUL-terminates. If the underlying name exceeds
- *    NAME_MAX, the current behavior truncates; consider enforcing a strict policy
- *    (reject/skip with a warning) to avoid silent truncation.
- *
- * Record length:
- *    Sets d_reclen according to the in-kernel policy. My policy is currently a fixed-size
- *    record, this will be sizeof(struct dirent). If I later adopt variable-length
- *    records, compute header + strlen(name)+1 and align as needed.
  *
  * Return:
  *    VFS_OK (0) on success; negative -VFS_ERR_* if I add stricter validation and
@@ -651,12 +552,14 @@ int __fill_dirent(struct vfs_dentry* dentry, struct dirent* dirent)
 	case FILETYPE_CHAR_DEV: dirent->d_type = DT_CHR; break;
 	default:		dirent->d_type = DT_UNKNOWN;
 	}
+
+	// For now we everything is static sized
 	dirent->d_reclen = sizeof(struct dirent);
 
 	strncpy(dirent->d_name, dentry->name, 255);
 	dirent->d_name[255] = '\0';
 
-	return VFS_OK;
+	return 0;
 }
 
 /**
@@ -664,23 +567,6 @@ int __fill_dirent(struct vfs_dentry* dentry, struct dirent* dirent)
  * @dir:    Opened directory file object (must reference a directory inode)
  * @out:    Output dirent to fill
  * @offset: Global position (a.k.a. "cookie"): 0=".", 1="..", >=2=children
- *
- * Semantics:
- *    - Positions 0 and 1 are synthesized by the VFS for "." and ".." respectively.
- *      For these, @out->d_off is set to the next global position (1 for ".",
- *      2 for "..") and @dir->f_pos is updated to match.
- *
- *    - For positions >= 2, the VFS translates the global position to a filesystem
- *      child index as: child_index = @offset - 2, and invokes the filesystem's
- *      ->readdir() with that child_index. The filesystem returns one entry and
- *      sets @out->d_off to the next child index (typically child_index+1 for
- *      simple list-ordered directories). The VFS then converts this back to a global
- *      position by adding 2:
- *
- *           out->d_off  = (filesystem_next_child_index) + 2;
- *           dir->f_pos  = out->d_off;   // stateful "next" position
- *
- *    - This function always returns at most one entry per call.
  *
  * Returns:
  *    @retval  1  One entry was emitted and @out is valid; @out->d_off is where to resume.
@@ -694,12 +580,7 @@ int __fill_dirent(struct vfs_dentry* dentry, struct dirent* dirent)
  *    - Provides a best-effort snapshot: under concurrent mutations, an iterator may
  *      skip or re-see entries but must never crash or return partially initialized data.
  *
- * Interaction with lseek/f_pos:
- *    - @offset is a global position compatible with directory lseek: 0=".", 1="..",
- *      >=2 children. Implementations should treat absurdly large @offset as EOF (0),
- *      not an error.
- *    - On a successful emission, @dir->f_pos is advanced to @out->d_off so a subsequent
- *      "read next" can use @dir->f_pos as its starting point.
+ * See: docs/man9/readdir.9.md
  */
 int vfs_readdir(struct vfs_file* dir, struct dirent* out, long pos)
 {
@@ -763,16 +644,14 @@ ret:
 	return ret_val;
 }
 
-ssize_t vfs_getdents(int fd, struct dirent* dirp, size_t count)
+/**
+ * See: docs/man2/getdents.2.md
+ */
+ssize_t vfs_getdents(struct vfs_file* dir, struct dirent* dirp, size_t count)
 {
 	size_t num_dirp = count / sizeof(struct dirent);
-	log_info("vfs_getdents: fd=%d, dirp=%p, count=%zu (num_dirp=%zu)",
-		 fd,
-		 (void*)dirp,
-		 count,
-		 num_dirp);
 	for (size_t i = 0; i < num_dirp; i++) {
-		int res = vfs_readdir(get_file(fd), &dirp[i], DIRENT_GET_NEXT);
+		int res = vfs_readdir(dir, &dirp[i], DIRENT_GET_NEXT);
 		if (res < 0) {
 			return (ssize_t)res;
 		} else if (res == 0) {
@@ -784,6 +663,15 @@ ssize_t vfs_getdents(int fd, struct dirent* dirp, size_t count)
 	return (ssize_t)(num_dirp * sizeof(struct dirent));
 }
 
+/**
+ * __vfs_open_for_task - Open a file for a specific task
+ *
+ * @t:     Task for which to open the file
+ * @path:  Path to the file to open
+ * @flags: Open flags (e.g., O_RDONLY, O_WRONLY, O_CREAT)
+ *
+ * Return: File descriptor on success, negative -VFS_ERR_* on error
+ */
 int __vfs_open_for_task(struct task* t, const char* path, int flags)
 {
 	char* norm_path = vfs_normalize_path(path, t->cwd);
@@ -847,6 +735,11 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags)
 	return fd;
 }
 
+/**
+ * vfs_open - Open a file and return a file descriptor
+ * @path: Path to the file to open
+ * @flags: Open flags (e.g., O_RDONLY, O_WRONLY, O_CREAT)
+ */
 int vfs_open(const char* path, int flags)
 {
 	return __vfs_open_for_task(get_current_task(), path, flags);
@@ -862,7 +755,7 @@ int vfs_close(int fd)
 {
 	struct vfs_file* file = get_file(fd);
 	if (!file) {
-		return -VFS_ERR_INVAL;
+		return -EINVAL;
 	}
 
 	file->ref_count--;
@@ -878,7 +771,7 @@ int vfs_close(int fd)
 	// Clear the entry in the task's resource table
 	get_current_task()->resources[fd] = nullptr;
 
-	return VFS_OK;
+	return 0;
 }
 
 int vfs_access(const char* path, int amode)
@@ -889,7 +782,7 @@ int vfs_access(const char* path, int amode)
 	log_info("path=%s, amode=%d", path, amode);
 	struct vfs_dentry* dentry = vfs_lookup(path);
 	if (!dentry || !dentry->inode) {
-		return -VFS_ERR_NOENT;
+		return -ENOENT;
 	}
 
 	// TODO: Check permissions
@@ -919,6 +812,162 @@ void vfs_dump_child(struct vfs_dentry* parent)
 			  sb->mount_point,
 			  (void*)sb);
 	}
+}
+
+/**
+ * __split_string - Split a path into parent and basename (internal)
+ * @path:       input path string
+ * @parent_out: receives kzalloc'ed parent (or nullptr on failure)
+ * @name_out:   receives kzalloc'ed basename (or nullptr on failure)
+ * Return: VFS_OK on success; <0 as -VFS_ERR_* on error.
+ * Context: may sleep; allocates memory; no locks held.
+ * See: docs/man9/__split_string.9.md
+ */
+static int __split_path(const char* path, char** parent_out, char** name_out)
+{
+	// TODO: Expect a normalized path, so we can just tokenize on '/'
+	if (!path || !parent_out || !name_out) {
+		return -EINVAL;
+	}
+
+	const char* parent_begin;
+	const char* name_begin;
+	size_t parent_len;
+	size_t name_len;
+	size_t name_last;
+
+	size_t path_len = strlen(path);
+	if (path_len == 0) {
+		*parent_out = *name_out = nullptr;
+		return -EINVAL;
+	}
+
+	ssize_t scan = (ssize_t)path_len - 1;
+
+	// After this loop, scan points to last non-'/' character,
+	// or is < 0 if there is only slashes
+	while (scan >= 0 && path[scan] == '/') {
+		scan--;
+	}
+
+	if (scan < 0) {
+		log_error("All slashes: '%s'", path);
+		*parent_out = *name_out = nullptr;
+		return -EINVAL;
+	}
+
+	name_last = (size_t)scan;
+
+	// After this loop, scan points to the slash immediately before the basename,
+	// or -1 if there is no parent slice.
+	while (scan >= 0 && path[scan] != '/') {
+		scan--;
+	}
+
+	name_len = name_last - (size_t)scan;
+	name_begin = &path[scan + 1];
+
+	if (name_len > VFS_MAX_NAME) {
+		log_error("Name too long: '%s'", name_begin);
+		*parent_out = *name_out = nullptr;
+		return -ENAMETOOLONG;
+	}
+
+	// After this loop, scan points to final char of parent,
+	// or -1 if there is no parent slice
+	while (scan >= 0 && path[scan] == '/') {
+		scan--;
+	}
+
+	if (scan < 0) {
+		// parent is either '/' or '.'
+		parent_begin = path[0] == '/' ? "/" : ".";
+		parent_len = 1;
+	} else {
+		// Parent is valid
+		parent_begin = path;
+		parent_len = (size_t)scan + 1;
+	}
+
+	// Name being "." or ".." is usually invalid (especially for creation)
+	if (name_begin[0] == '.' &&
+	    (name_begin[1] == '.' || name_begin[1] == '\0')) {
+		log_error("Invalid basename: '%s'", name_begin);
+		*parent_out = *name_out = nullptr;
+		return -EINVAL;
+	}
+
+	*parent_out = kzalloc(parent_len + 1);
+	*name_out = kzalloc(name_len + 1);
+	if (!*parent_out || !*name_out) {
+		log_error("Could not allocate buffer");
+		if (*parent_out) {
+			kfree(*parent_out);
+			*parent_out = nullptr;
+		}
+		if (*name_out) {
+			kfree(*name_out);
+			*name_out = nullptr;
+		}
+		return -ENOMEM;
+	}
+
+	memcpy(*parent_out, parent_begin, parent_len);
+	memcpy(*name_out, name_begin, name_len);
+
+	return 0;
+}
+
+// TODO: Finish implementing
+static inline int vfs_create_args_valid(const char* path,
+					uint16_t mode,
+					int flags,
+					struct vfs_dentry** out)
+{
+	// Early validation of non-path parameters
+	if (!out) {
+		return -EINVAL;
+	}
+
+	static constexpr int FORBIDDEN_FLAG_MASK = O_TRUNC | O_APPEND |
+						   O_DIRECTORY;
+	if (flags & FORBIDDEN_FLAG_MASK) {
+		return -EINVAL;
+	}
+
+	if ((mode & VFS_PERM_ALL) != mode) {
+		return -EINVAL;
+	}
+
+	// Single-pass path validation
+	// NOTE: We only allow absolute paths for now
+	if (!path || *path != '/') {
+		return -EINVAL;
+	}
+
+	// Skip leading slashes and validate path in one pass
+	const char* p = path;
+	while (*p == '/') {
+		p++;
+	}
+
+	// Check for any path that's only slashes (including root "/")
+	if (*p == '\0') {
+		return -EINVAL; // Path contains only slashes
+	}
+
+	// Validate path length while checking for valid characters
+	size_t len = (size_t)(p - path); // Length of leading slashes
+	while (*p && len < VFS_MAX_PATH) {
+		p++;
+		len++;
+	}
+
+	if (len >= VFS_MAX_PATH) {
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 int vfs_create(const char* path,
@@ -954,11 +1003,13 @@ int vfs_create(const char* path,
 	struct vfs_dentry* pdentry = vfs_lookup(parent);
 	if (!pdentry || !pdentry->inode ||
 	    !(pdentry->inode->filetype == FILETYPE_DIR)) {
-		dput(pdentry);
-		kfree(norm_path);
-		kfree(parent);
-		kfree(name);
-		return -ENOTDIR;
+		res = -ENOTDIR;
+		goto free_all;
+		// dput(pdentry);
+		// kfree(norm_path);
+		// kfree(parent);
+		// kfree(name);
+		// return -ENOTDIR;
 	}
 
 	// Try to lookup the file by name
@@ -967,73 +1018,83 @@ int vfs_create(const char* path,
 	if (child && child->inode) {
 		log_debug("child: %p, name: %p", child->name, name);
 		if (flags & O_EXCL) {
+			res = -EEXIST;
 			dput(child);
-			kfree(norm_path);
-			kfree(parent);
-			kfree(name);
-			return -EEXIST;
+			goto free_all;
+			// kfree(norm_path);
+			// kfree(parent);
+			// kfree(name);
+			// return -EEXIST;
 		}
 		// File exists but not O_EXCL — treat as success?
 		*out_dentry = child;
-		dput(pdentry);
-		kfree(norm_path);
-		kfree(parent);
-		kfree(name);
-		return 0;
+		res = 0;
+		goto free_all;
+		// dput(pdentry);
+		// kfree(norm_path);
+		// kfree(parent);
+		// kfree(name);
+		// return 0;
 	}
 
 	child = dentry_alloc(pdentry, name);
 	log_debug("child: %p, name: %p", child->name, name);
 	if (!child) {
-		dput(pdentry);
-		kfree(norm_path);
-		kfree(parent);
-		kfree(name);
-		return -ENOMEM;
+		res = -ENOMEM;
+		goto free_all;
+		// dput(pdentry);
+		// kfree(norm_path);
+		// kfree(parent);
+		// kfree(name);
+		// return -ENOMEM;
 	}
 
 	if (!pdentry->inode->ops || !pdentry->inode->ops->create) {
+		res = -ENODEV;
 		dentry_dealloc(child);
-		dput(pdentry);
-		kfree(norm_path);
-		kfree(parent);
-		kfree(name);
-		return -ENODEV;
+		goto free_all;
+		// dput(pdentry);
+		// kfree(norm_path);
+		// kfree(parent);
+		// kfree(name);
+		// return -ENODEV;
 	}
 
 	res = pdentry->inode->ops->create(pdentry->inode, child, mode);
 	if (res < 0) {
 		dentry_dealloc(child);
-		dput(pdentry);
-		kfree(norm_path);
-		kfree(parent);
-		kfree(name);
-		return res;
+		goto free_all;
+		// dput(pdentry);
+		// kfree(norm_path);
+		// kfree(parent);
+		// kfree(name);
+		// return res;
 	}
 	dentry_add(child); // Now track the new dentry in the hashtable
-	dput(pdentry);
 
 	*out_dentry = child;
 
+free_all:
+	dput(pdentry);
 	kfree(norm_path);
 	kfree(parent);
 	kfree(name);
-	return 0;
+	return res;
 }
 
 int vfs_mkdir(const char* path, uint16_t mode)
 {
 	if (!path) {
-		return -VFS_ERR_INVAL;
+		return -EINVAL;
 	}
 
 	if (strcmp(path, "/") == 0) {
-		return -VFS_ERR_EXIST;
+		return -EEXIST;
 	}
 
 	char* norm_path = vfs_normalize_path(path, get_current_task()->cwd);
 	if (!norm_path) {
-		return -VFS_ERR_NOMEM;
+		return -ENOMEM;
 	}
 
 	char* parent;
@@ -1052,7 +1113,7 @@ int vfs_mkdir(const char* path, uint16_t mode)
 		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
-		return -VFS_ERR_NOENT;
+		return -ENOENT;
 	}
 
 	struct vfs_inode* pinode = pdentry->inode;
@@ -1063,7 +1124,7 @@ int vfs_mkdir(const char* path, uint16_t mode)
 		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
-		return -VFS_ERR_EXIST;
+		return -EEXIST;
 	}
 
 	struct vfs_dentry* child = dentry_alloc(pdentry, name);
@@ -1072,7 +1133,7 @@ int vfs_mkdir(const char* path, uint16_t mode)
 		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
-		return -VFS_ERR_NOMEM;
+		return -ENOMEM;
 	}
 
 	if (!pinode->ops || !pinode->ops->mkdir) {
@@ -1080,7 +1141,7 @@ int vfs_mkdir(const char* path, uint16_t mode)
 		kfree(norm_path);
 		kfree(parent);
 		kfree(name);
-		return -VFS_ERR_NODEV;
+		return -ENODEV;
 	}
 
 	res = pinode->ops->mkdir(pinode, child, mode);
@@ -1099,7 +1160,7 @@ int vfs_mkdir(const char* path, uint16_t mode)
 	kfree(norm_path);
 	kfree(parent);
 	kfree(name);
-	return VFS_OK;
+	return 0;
 }
 
 ssize_t __vfs_pwrite(struct vfs_file* file,
@@ -1288,56 +1349,62 @@ bool vfs_does_name_exist(struct vfs_dentry* parent, const char* name)
 	return false;
 }
 
+static struct vfs_fs_type* find_filesystem(const char* fs_type)
+{
+	struct vfs_fs_type* p = fs_list;
+	while (p) {
+		if (strncmp(fs_type, p->fs_type, FS_TYPE_LEN) == 0) return p;
+		p = p->next;
+	}
+	return nullptr;
+}
+
 /**
- * @param source device to mount at (`/dev/sda1`). Can be nullptr for
- * ramfs/virtual devices
- * @param target path to mount at
- * @param fstype filesystem to mount
- * @param flags mount flags
+ * vfs_mount - Mount a filesystem at a given path
+ * @source: Device to mount at (`/dev/sda1`).
+ *          Can be nullptr for ramfs/virtual devices
+ * @target: path to mount at
+ * @fstype: filesystem to mount
+ * @flags: mount flags
  */
 int vfs_mount(const char* source,
 	      const char* target,
 	      const char* fstype,
 	      int flags)
 {
-	// 1. Find the filesystem type (e.g., "fat32", "ramfs") in your list of
-	// registered filesystems.
+	// Find the filesystem type (e.g., "fat32", "ramfs") in registered filesystems.
 	struct vfs_fs_type* fs = find_filesystem(fstype);
 	if (!fs) {
-		return -VFS_ERR_NODEV; // Filesystem not found
+		return -ENODEV; // Filesystem type not found
 	}
 
-	// 2. Find the directory in the VFS that we want to mount on.
-	//    You'll need a path walking function for this (e.g.,
-	//    vfs_lookup(target)).
+	// Find the directory in the VFS that we want to mount on.
 	struct vfs_dentry* mount_point_dentry = vfs_lookup(target);
 	if (!mount_point_dentry) {
-		return -VFS_ERR_NOENT; // Mount point doesn't exist
+		return -ENOENT; // Mount point doesn't exist
 	}
 	// TODO: Add a check to ensure mount_point_dentry is a directory.
 
-	// 3. Call the filesystem-specific mount function.
-	//    This is where the magic happens! It returns a fully formed
-	//    superblock.
+	// Call the filesystem-specific mount function.
 	struct vfs_superblock* sb = fs->mount(source, flags);
 	if (!sb) {
 		dput(mount_point_dentry);
-		return -VFS_ERR_NODEV; // The FS failed to mount
+		return -ENODEV; // The FS failed to mount
 	}
 
-	// The dentry for the mount point should now point to the new
-	// superblock's root.
+	// The dentry for the mount point should now point to the new superblock's root.
 	struct vfs_inode* old = mount_point_dentry->inode;
 	mount_point_dentry->inode = sb->root_dentry->inode;
+
 	if (mount_point_dentry->inode) {
-		// TODO: inode refcount api
-		mount_point_dentry->inode->ref_count++;
+		iget(mount_point_dentry->inode);
 	}
+
 	if (old) {
+		iput(old);
 		old->ref_count--;
 	}
-	// You'll also want to link the mount information so you can unmount it
-	// later. Your vfs_mount struct is good for this.
+
 	struct vfs_mount* new_mount =
 		(struct vfs_mount*)kmalloc(sizeof(struct vfs_mount));
 	new_mount->mount_point = strdup(target);
@@ -1348,7 +1415,7 @@ int vfs_mount(const char* source,
 
 	dput(mount_point_dentry);
 	log_info("Mounted %s on %s type %s", source, target, fstype);
-	return VFS_OK; // Success!
+	return 0;
 }
 
 struct vfs_dentry* vfs_lookup(const char* path)
@@ -1369,42 +1436,6 @@ struct vfs_dentry* vfs_lookup(const char* path)
 
 	kfree(norm_path);
 	return current_dentry;
-}
-
-/**
- * register_mount - Registers a mount point in the virtual filesystem.
- * @mnt: Pointer to the vfs_mount structure representing the mount point.
- *
- * This function adds the given mount point to the global mount list. If the
- * list is empty, the mount point becomes the head of the list. Otherwise, it
- * is added to the beginning of the list.
- */
-static void register_mount(struct vfs_mount* mnt)
-{
-	if (mount_list == NULL) {
-		mount_list = mnt;
-	} else {
-		mnt->next = mount_list;
-		mount_list = mnt;
-	}
-}
-
-/**
- * register_filesystem - Registers a filesystem type in the virtual filesystem.
- * @fs: Pointer to the vfs_fs_type structure representing the filesystem type.
- *
- * This function adds the given filesystem type to the global filesystem list.
- * If the list is empty, the filesystem type becomes the head of the list.
- * Otherwise, it is added to the beginning of the list.
- */
-void register_filesystem(struct vfs_fs_type* fs)
-{
-	if (fs_list == NULL) {
-		fs_list = fs;
-	} else {
-		fs->next = fs_list; // Add fs to beginning of list
-		fs_list = fs;
-	}
 }
 
 struct vfs_superblock* vfs_get_sb(const char* path)
@@ -1431,19 +1462,44 @@ int vfs_get_id()
 	return uuid - 1;
 }
 
+// TODO: Make this use path_component struct
+static const char* path_next_token(struct path_tokenizer* tok, size_t* out_len)
+{
+	if (!tok || !tok->path) {
+		return nullptr;
+	}
+
+	// Skip leading slashes
+	while (tok->path[tok->offset] == '/') {
+		tok->offset++;
+	}
+
+	// Check if end of string is reached
+	if (tok->path[tok->offset] == '\0') {
+		return nullptr;
+	}
+
+	size_t start_offset = tok->offset;
+	// const char* start = &tok->path[tok->offset];
+	const char* token_start = &tok->path[tok->offset];
+
+	// Scan forward to find the end of the current token
+	while (tok->path[tok->offset] != '/' &&
+	       tok->path[tok->offset] != '\0') {
+		tok->offset++;
+	}
+
+	*out_len = tok->offset - start_offset;
+
+	return token_start;
+}
+
 /**
- * @brief Resolves a relative path starting from a given root dentry.
+ * __vfs_walk_path - Resolves a relative path starting from a given root dentry.
  *
- * This function walks the path one component at a time, using the VFS's
- * lookup mechanism (which in turn delegates to the filesystem driver).
- *
- * For example, given root = "/mnt/usb" and path = "dir/file.txt", this
- * function resolves to the dentry for "/mnt/usb/dir/file.txt".
- *
- * @param root     The starting directory dentry (must be a directory).
- * @param path     The relative path to resolve (e.g., "foo/bar.txt").
- * @return         A pointer to the final vfs_dentry on success, or NULL on
- *                 failure.
+ * @root:     The starting directory dentry (must be a directory).
+ * @path:     The relative path to resolve (e.g., "foo/bar.txt").
+ * Return:    A pointer to the final vfs_dentry on success, or NULL on failure.
  */
 struct vfs_dentry* __vfs_walk_path(struct vfs_dentry* root, const char* path)
 {
@@ -1744,29 +1800,29 @@ int test_split_path()
 	static const struct test_case cases[] = {
 		/* --- Success cases --- */
 		{ "/a/b/c",
-		  VFS_OK,
+		  0,
 		  "/",
 		  "c" }, /* parent will be "/a/b" (verified below) */
-		{ "/a/b//c///", VFS_OK, "/a/b", "c" },
-		{ "a/b/c", VFS_OK, "a/b", "c" },
-		{ "a////b", VFS_OK, "a", "b" },
-		{ "/c", VFS_OK, "/", "c" },
-		{ "c", VFS_OK, ".", "c" },
-		{ "./a", VFS_OK, ".", "a" },
-		{ "//a", VFS_OK, "/", "a" },
-		{ "a/../b", VFS_OK, "a/..", "b" },
-		{ "/.hidden", VFS_OK, "/", ".hidden" },
+		{ "/a/b//c///", 0, "/a/b", "c" },
+		{ "a/b/c", 0, "a/b", "c" },
+		{ "a////b", 0, "a", "b" },
+		{ "/c", 0, "/", "c" },
+		{ "c", 0, ".", "c" },
+		{ "./a", 0, ".", "a" },
+		{ "//a", 0, "/", "a" },
+		{ "a/../b", 0, "a/..", "b" },
+		{ "/.hidden", 0, "/", ".hidden" },
 
 		/* --- Error cases --- */
-		{ "", -VFS_ERR_INVAL, nullptr, nullptr },
-		{ "/", -VFS_ERR_INVAL, nullptr, nullptr },
-		{ "////", -VFS_ERR_INVAL, nullptr, nullptr },
-		{ "a/.", -VFS_ERR_INVAL, nullptr, nullptr },
-		{ "a/..", -VFS_ERR_INVAL, nullptr, nullptr },
+		{ "", -EINVAL, nullptr, nullptr },
+		{ "/", -EINVAL, nullptr, nullptr },
+		{ "////", -EINVAL, nullptr, nullptr },
+		{ "a/.", -EINVAL, nullptr, nullptr },
+		{ "a/..", -EINVAL, nullptr, nullptr },
 
 		/* Additional edge-y successes */
-		{ "a//", VFS_OK, ".", "a" },
-		{ "///a///", VFS_OK, "/", "a" },
+		{ "a//", 0, ".", "a" },
+		{ "///a///", 0, "/", "a" },
 	};
 
 	log_info(TESTING_HEADER, "Path Splitter");
@@ -1781,10 +1837,10 @@ int test_split_path()
 		int rc = __split_path(tc->path, &parent, &name);
 		++tests;
 
-		if (tc->exp_rc == VFS_OK) {
-			if (rc != VFS_OK) {
+		if (tc->exp_rc == 0) {
+			if (rc != 0) {
 				log_error(
-					"[T%zu] expected VFS_OK, got %d for path='%s'",
+					"[T%zu] expected 0, got %d for path='%s'",
 					t,
 					rc,
 					tc->path);
@@ -1880,7 +1936,7 @@ int test_split_path()
 		char* name = (char*)0x1;
 		int rc = __split_path(buf, &parent, &name);
 		++tests;
-		if (rc != -VFS_ERR_NAMETOOLONG) {
+		if (rc != -ENAMETOOLONG) {
 			log_error(
 				"[LEN1] expected -VFS_ERR_NAMETOOLONG, got %d for path of len=%zu",
 				rc,
@@ -1915,8 +1971,8 @@ int test_split_path()
 		int rc = __split_path(buf, &parent, &name);
 		++tests;
 
-		if (rc != VFS_OK) {
-			log_error("[LEN2] expected VFS_OK, got %d", rc);
+		if (rc != 0) {
+			log_error("[LEN2] expected 0, got %d", rc);
 			++fails;
 		} else {
 			if (!parent || !name) {
@@ -1953,234 +2009,4 @@ int test_split_path()
 	log_info(TESTING_FOOTER, "Path Splitter");
 
 	return (int)fails;
-}
-
-/*******************************************************************************
- * Private Function Definitions
- *******************************************************************************/
-
-/**
- * @brief Parse a filesystem path into parent directory and basename components.
- *
- * This function takes a canonical filesystem path and splits it into two parts:
- * - The *parent path* (e.g., `/usr/bin` from `/usr/bin/ls`)
- * - The *basename* (e.g., `ls` from `/usr/bin/ls`)
- *
- * Contract and Policy
- * - @p path must be a valid, null-terminated string.
- * - Trailing slashes are ignored (`/usr/bin/` → parent=`/usr`, name=`bin`).
- * - Multiple adjacent slashes are treated as a single separator.
- * - A root-only path (`/`) or all-slash input (`///`) is invalid.
- * - `.` and `..` are not valid basenames and will return `-VFS_ERR_INVAL`.
- * - The basename length must not exceed `VFS_MAX_NAME`, otherwise
- *   `-VFS_ERR_NAMETOOLONG` is returned.
- * - On success, both `parent_out` and `name_out` are allocated with `kzalloc`.
- *   The caller owns these buffers and must free them with `kfree()`.
- * - On allocation failure, both outputs are set to `nullptr` and
- *   `-VFS_ERR_NOMEM` is returned.
- * - On any failure, both `*parent_out` and `*name_out` are set to `nullptr`
- *   to ensure predictable cleanup behavior.
- *
- * Examples
- * | Input path       | parent_out | name_out | Return         |
- * |------------------|------------|----------|----------------|
- * | "/usr/bin/ls"    | "/usr/bin" | "ls"     | VFS_OK         |
- * | "foo/bar/"       | "foo"      | "bar"    | VFS_OK         |
- * | "/"              | nullptr    | nullptr  | -VFS_ERR_INVAL |
- * | "/.."            | nullptr    | nullptr  | -VFS_ERR_INVAL |
- * | "////"           | nullptr    | nullptr  | -VFS_ERR_INVAL |
- *
- * @param path       Input path string.
- * @param parent_out Pointer to receive allocated parent string.
- * @param name_out   Pointer to receive allocated basename string.
- *
- * @return VFS_OK on success, or a negative VFS_ERR_* code on error.
- */
-static int __split_path(const char* path, char** parent_out, char** name_out)
-{
-	// TODO: Expect a normalized path, so we can just tokenize on '/'
-	if (!path || !parent_out || !name_out) {
-		return -VFS_ERR_INVAL;
-	}
-
-	const char* parent_begin;
-	const char* name_begin;
-	size_t parent_len;
-	size_t name_len;
-	size_t name_last;
-
-	size_t path_len = strlen(path);
-	if (path_len == 0) {
-		*parent_out = *name_out = nullptr;
-		return -VFS_ERR_INVAL;
-	}
-
-	ssize_t scan = (ssize_t)path_len - 1;
-
-	// After this loop, scan points to last non-'/' character,
-	// or is < 0 if there is only slashes
-	while (scan >= 0 && path[scan] == '/') {
-		scan--;
-	}
-
-	if (scan < 0) {
-		log_error("All slashes: '%s'", path);
-		*parent_out = *name_out = nullptr;
-		return -VFS_ERR_INVAL;
-	}
-
-	name_last = (size_t)scan;
-
-	// After this loop, scan points to the slash immediately before the basename,
-	// or -1 if there is no parent slice.
-	while (scan >= 0 && path[scan] != '/') {
-		scan--;
-	}
-
-	name_len = name_last - (size_t)scan;
-	name_begin = &path[scan + 1];
-
-	if (name_len > VFS_MAX_NAME) {
-		log_error("Name too long: '%s'", name_begin);
-		*parent_out = *name_out = nullptr;
-		return -VFS_ERR_NAMETOOLONG;
-	}
-
-	// After this loop, scan points to final char of parent,
-	// or -1 if there is no parent slice
-	while (scan >= 0 && path[scan] == '/') {
-		scan--;
-	}
-
-	if (scan < 0) {
-		// parent is either '/' or '.'
-		parent_begin = path[0] == '/' ? "/" : ".";
-		parent_len = 1;
-	} else {
-		// Parent is valid
-		parent_begin = path;
-		parent_len = (size_t)scan + 1;
-	}
-
-	// Name being "." or ".." is usually invalid (especially for creation)
-	if (name_begin[0] == '.' &&
-	    (name_begin[1] == '.' || name_begin[1] == '\0')) {
-		log_error("Invalid basename: '%s'", name_begin);
-		*parent_out = *name_out = nullptr;
-		return -VFS_ERR_INVAL;
-	}
-
-	*parent_out = kzalloc(parent_len + 1);
-	*name_out = kzalloc(name_len + 1);
-	if (!*parent_out || !*name_out) {
-		log_error("Could not allocate buffer");
-		if (*parent_out) {
-			kfree(*parent_out);
-			*parent_out = nullptr;
-		}
-		if (*name_out) {
-			kfree(*name_out);
-			*name_out = nullptr;
-		}
-		return -VFS_ERR_NOMEM;
-	}
-
-	memcpy(*parent_out, parent_begin, parent_len);
-	memcpy(*name_out, name_begin, name_len);
-
-	return VFS_OK;
-}
-
-static struct vfs_fs_type* find_filesystem(const char* fs_type)
-{
-	struct vfs_fs_type* p = fs_list;
-	while (p) {
-		if (strncmp(fs_type, p->fs_type, FS_TYPE_LEN) == 0) return p;
-		p = p->next;
-	}
-	return nullptr;
-}
-
-// TODO: Make this use path_component struct
-static const char* path_next_token(struct path_tokenizer* tok, size_t* out_len)
-{
-	if (!tok || !tok->path) {
-		return nullptr;
-	}
-
-	// Skip leading slashes
-	while (tok->path[tok->offset] == '/') {
-		tok->offset++;
-	}
-
-	// Check if end of string is reached
-	if (tok->path[tok->offset] == '\0') {
-		return nullptr;
-	}
-
-	size_t start_offset = tok->offset;
-	// const char* start = &tok->path[tok->offset];
-	const char* token_start = &tok->path[tok->offset];
-
-	// Scan forward to find the end of the current token
-	while (tok->path[tok->offset] != '/' &&
-	       tok->path[tok->offset] != '\0') {
-		tok->offset++;
-	}
-
-	*out_len = tok->offset - start_offset;
-
-	return token_start;
-}
-
-// TODO: Finish implementing
-static inline int vfs_create_args_valid(const char* path,
-					uint16_t mode,
-					int flags,
-					struct vfs_dentry** out)
-{
-	// Early validation of non-path parameters
-	if (!out) {
-		return -VFS_ERR_INVAL;
-	}
-
-	static constexpr int FORBIDDEN_FLAG_MASK = O_TRUNC | O_APPEND |
-						   O_DIRECTORY;
-	if (flags & FORBIDDEN_FLAG_MASK) {
-		return -VFS_ERR_INVAL;
-	}
-
-	if ((mode & VFS_PERM_ALL) != mode) {
-		return -VFS_ERR_INVAL;
-	}
-
-	// Single-pass path validation
-	// NOTE: We only allow absolute paths for now
-	if (!path || *path != '/') {
-		return -VFS_ERR_INVAL;
-	}
-
-	// Skip leading slashes and validate path in one pass
-	const char* p = path;
-	while (*p == '/') {
-		p++;
-	}
-
-	// Check for any path that's only slashes (including root "/")
-	if (*p == '\0') {
-		return -VFS_ERR_INVAL; // Path contains only slashes
-	}
-
-	// Validate path length while checking for valid characters
-	size_t len = (size_t)(p - path); // Length of leading slashes
-	while (*p && len < VFS_MAX_PATH) {
-		p++;
-		len++;
-	}
-
-	if (len >= VFS_MAX_PATH) {
-		return -VFS_ERR_INVAL;
-	}
-
-	return VFS_OK;
 }

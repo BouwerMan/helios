@@ -207,10 +207,19 @@ long sys_chdir(struct registers* r)
 long sys_getdents(struct registers* r)
 {
 	int fd = (int)r->rdi;
-	struct dirent* dirp = (struct dirent*)r->rsi;
+	struct dirent __user* dirp = (struct dirent*)r->rsi;
 	size_t count = (size_t)r->rdx;
 
-	return vfs_getdents(fd, dirp, count);
+	struct vfs_file* dir = get_file(fd);
+	if (!dir) {
+		return -EBADF;
+	}
+
+	if (dir->dentry->inode->filetype != FILETYPE_DIR) {
+		return -ENOTDIR;
+	}
+
+	return vfs_getdents(dir, dirp, count);
 }
 
 long sys_open(struct registers* r)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Set the directory where the toolchain was installed.
-# This should match the PREFIX variable in your build script.
+# This should match the PREFIX variable in the top level Makefile.
 INSTALL_DIR="$PWD/tools"
 
 main() {
@@ -23,7 +23,6 @@ main() {
 	echo "" # Add a newline for better formatting.
 
 	# Check the user's response.
-	# We use a case statement to handle different inputs (Y, y, Yes, yes).
 	case "$reply" in
 	[yY][eE][sS] | [yY])
 		echo "Uninstalling..."
@@ -37,5 +36,4 @@ main() {
 	esac
 }
 
-# Run the main function
 main
