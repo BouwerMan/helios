@@ -15,6 +15,9 @@
 	__attribute__((no_sanitize( \
 		"address"))) /* marker; you can also put it in a .ref.text if you add checks */
 
+/* Currently does nothing, but it is a good marker */
+#define __user
+
 // Always inline, even if the compiler thinks otherwise
 #ifndef __always_inline
 #define __always_inline inline __attribute__((always_inline))

@@ -94,59 +94,8 @@ enum MOUNT_FLAGS {
 	MOUNT_PRESENT = 0x1,
 };
 
-/**
- * @brief Common error codes for VFS operations.
- */
-enum vfs_err {
-	VFS_OK = 0,	     ///< Success (no error)
-	VFS_ERR_EXIST,	     ///< Entry already exists
-	VFS_ERR_NOTDIR,	     ///< Not a directory
-	VFS_ERR_NAMETOOLONG, ///< Name is too long
-	VFS_ERR_NOENT,	     ///< No such file or directory
-	VFS_ERR_NOSPC,	     ///< No space left on device
-	VFS_ERR_NOMEM,	     ///< Out of memory
-	VFS_ERR_PERM,	     ///< Permission denied
-	VFS_ERR_IO,	     ///< I/O error (generic)
-	VFS_ERR_NODEV,	     ///< No such device or device not available
-	VFS_ERR_NOTEMPTY,    ///< Directory not empty
-	VFS_ERR_ROFS,	     ///< Read-only file system
-	VFS_ERR_FAULT,	     ///< Bad address (invalid pointer)
-	VFS_ERR_BUSY,	     ///< Resource busy
-	VFS_ERR_XDEV,	     ///< Cross-device link
-	VFS_ERR_INVAL,	     ///< Invalid argument
-	VFS_ERR_UNKNOWN,     ///< Miscellanious error
-};
-
-/**
- * Array of error names corresponding to VFS error codes.
- * The index of each error name matches the absolute value of the error code.
- */
-static const char* vfs_err_names[] = {
-	"VFS_OK",	    "VFS_ERR_EXIST",
-	"VFS_ERR_NOTDIR",   "VFS_ERR_NAMETOOLONG",
-	"VFS_ERR_NOENT",    "VFS_ERR_NOSPC",
-	"VFS_ERR_NOMEM",    "VFS_ERR_PERM",
-	"VFS_ERR_IO",	    "VFS_ERR_NODEV",
-	"VFS_ERR_NOTEMPTY", "VFS_ERR_ROFS",
-	"VFS_ERR_FAULT",    "VFS_ERR_BUSY",
-	"VFS_ERR_XDEV",	    "VFS_ERR_INVAL",
-	"VFS_ERR_UNKNOWN"
-};
-
-/**
- * Retrieves the name of a VFS error code.
- * @param errno: The VFS error code (can be negative or positive).
- * @return: The corresponding error name as a string.
- */
-static inline const char* vfs_get_err_name(enum vfs_err errno)
-{
-	if (errno < 0) errno = -errno;
-	return vfs_err_names[errno];
-}
-
-// A more Unix-like vfs_file
 struct vfs_file {
-	struct vfs_dentry* dentry; // <-- THIS IS THE MAGIC LINK!
+	struct vfs_dentry* dentry;
 	off_t f_pos;	    // The current read/write offset for this session
 	int flags;	    // Open flags (O_RDONLY, O_WRONLY, O_APPEND, etc.)
 	int ref_count;	    // How many file descriptors point to this?
@@ -279,10 +228,6 @@ struct sb_ops {
 	int (*read_inode)(struct vfs_inode* inode);
 };
 
-// =============================================================================
-// == Function Prototypes
-// =============================================================================
-
 static inline struct vfs_inode* inode_from_file(struct vfs_file* file)
 {
 	return file->dentry ? file->dentry->inode : nullptr;
@@ -298,42 +243,19 @@ int vfs_mount(const char* source,
 void register_filesystem(struct vfs_fs_type* fs);
 struct vfs_superblock* vfs_get_sb(const char* path);
 
-// NOTE: Functions marked with __ are internal-only and should not be called
-// without things like path normalization.
-// This also includes functions that have norm_path as an argument.
-
 // --- Path and Dentry Management ---
 
 /**
- * DOC: Dentry lifetime & reference counting
- *
- * A dentry is owned through a counted reference. The rules are:
- *
- * 1) If you HAND a dentry to a new owner, you must hold a reference for them.
- *    Examples: returning from a lookup helper, storing into a long-lived
- *    structure (e.g., struct vfs_file), returning "/" from vfs_lookup().
- *
- * 2) If you are RETURNING an EXISTING, ALREADY-CACHED dentry (e.g., hash hit),
- *    you must acquire a reference with dget() before returning it.
- *
- * 3) If you are RETURNING the FRESHLY-ALLOCATED child passed into ->lookup()
- *    (no preexisting cache entry), do NOT add another ref: the child already
- *    starts at refcount=1 from dentry_alloc().
- *
- * 4) Walkers own exactly one reference to the “current” component:
- *      - dget(start), for each step: next = dentry_lookup(cur,...); dput(cur); cur = next;
- *      - return cur with one live reference.
- *
- * 5) Balance EVERY success path and EVERY error path: if you looked up a
- *    dentry and then fail later (alloc fail, open fail, install_fd fail),
- *    dput() it before returning.
- *
- * 6) Cache insertion (dentry_add) takes an internal cache reference. This does
- *    not change the caller’s obligation: the caller still owns exactly one ref
- *    and must dput() when done.
- *
- * 7) Dropping the last reference deallocates the dentry; as part of teardown
- *    we iput() the inode. Callers must not touch the dentry after dput().
+ * DOC: Dentry lifetime & refs
+ * Dentries are owned via counted references. Key rules:
+ * 1) Returning cached dentries: dget() before returning.
+ * 2) Fresh from dentry_alloc(): do not add another ref.
+ * 3) Walkers hold exactly one ref to the current component.
+ * 4) Balance refs on all success/error paths (dput() on failure).
+ * 5) dentry_add() takes a cache ref; caller still owns exactly one.
+ * 6) Last dput() frees the dentry and iput()s the inode; never touch after.
+ * NOTE: __* helpers are internal; require normalized paths/preconditions.
+ * See: docs/man9/vfs_dentry_refs.9.md
  */
 struct vfs_dentry* vfs_lookup(const char* path);
 int vfs_access(const char* path, int amode);
@@ -360,7 +282,7 @@ void inode_add(struct vfs_inode* inode);
 int vfs_open(const char* path, int flags);
 int __vfs_open_for_task(struct task* t, const char* path, int flags);
 int vfs_close(int fd);
-ssize_t vfs_getdents(int fd, struct dirent* dirp, size_t count);
+ssize_t vfs_getdents(struct vfs_file* dir, struct dirent* dirp, size_t count);
 int vfs_readdir(struct vfs_file* dir, struct dirent* out, long pos);
 
 ssize_t __vfs_pwrite(struct vfs_file* file,

@@ -183,7 +183,6 @@ build_gcc() {
 	echo "GCC build and installation complete."
 }
 
-# --- Script Execution ---
 main() {
 	echo "Starting cross-compiler toolchain build..."
 	echo "Installation Prefix: $PREFIX"
@@ -195,7 +194,7 @@ main() {
 
 	# Build the components
 	build_binutils
-	build_gcc # You can add the function call for GCC here later
+	build_gcc
 
 	echo "Toolchain build finished successfully!"
 }

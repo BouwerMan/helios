@@ -2,31 +2,7 @@ HELIOS_ROOT ?= $(shell git rev-parse --show-toplevel 2>/dev/null || echo $(CURDI
 export HELIOS_ROOT
 include $(HELIOS_ROOT)/toolchain.mk
 
-TOOLCHAIN_BINS := $(AR) $(AS) $(CC)
-
-# Use 'wildcard' to find which of the required tools actually exist
-EXISTING_TOOLS := $(wildcard $(TOOLCHAIN_BINS))
-
-# Compare the list of required tools with the list of existing ones.
-# If they don't match, something is missing.
-ifneq ($(TOOLCHAIN_BINS),$(EXISTING_TOOLS))
-    # For a better error message, figure out exactly which tools are missing
-    MISSING_TOOLS := $(filter-out $(EXISTING_TOOLS),$(TOOLCHAIN_BINS))
-    # Stop make and print a descriptive error
-    $(error Missing required tools: $(MISSING_TOOLS). Please check your cross-compiler installation and PREFIX.)
-endif
-
-REQUIRED_PATH_TOOLS := git xorriso bear $(NASM) $(QEMU)
-
-# Helper: returns the tool name if not found
-define _missing_if_not_on_path
-$(if $(shell command -v $(1) >/dev/null 2>&1 && echo found),,$(1))
-endef
-
-MISSING_PATH_TOOLS := $(strip $(foreach t,$(REQUIRED_PATH_TOOLS),$(call _missing_if_not_on_path,$(t))))
-ifneq ($(MISSING_PATH_TOOLS),)
-  $(error Missing required PATH tools: $(MISSING_PATH_TOOLS))
-endif
+# TODO: Better way to check for cross-compiler
 
 $(info Using cross-compiler: $(CC))
 
@@ -57,7 +33,7 @@ QEMU_UEFI := -drive if=pflash,format=raw,unit=0,file=$(OVMF_CODE),readonly=on \
 	     -net none
 
 
-.PHONY: all libc helios clean qemu headers iso todolist limine userspace compile_commands tidy ovmf
+.PHONY: all libc helios qemu headers iso todolist limine userspace compile_commands tidy ovmf docs
 
 all: headers helios libc userspace
 
@@ -78,6 +54,19 @@ headers:
 	@mkdir -p $(SYSROOT)
 	@DESTDIR=$(SYSROOT) $(MAKE) -C ./helios install-headers
 	@DESTDIR=$(SYSROOT) $(MAKE) -C ./libc install-headers
+
+docs:
+	@echo "Generating documentation..."
+	@$(MAKE) -C ./docs
+
+docs-index:
+	@$(MAKE) -C ./docs index
+
+docs-preview:
+	@$(MAKE) -C ./docs preview
+
+docs-clean:
+	@$(MAKE) -C ./docs clean
 
 todolist:
 	-@grep --color=auto 'TODO.*' -rno $(PROJDIRS)
@@ -148,11 +137,29 @@ gdbinit:
 qemugdb: iso gdbinit ovmf
 	$(QEMU) $(QEMU_FLAGS) $(QEMU_UEFI) -s -S -cpu qemu64,tsc-frequency=3609600000,+invtsc,vmware-cpuid-freq=on
 
+.PHONY: clean distclean pristine clean-docs clean-iso
+
+CLEAN_DIRS  := $(SYSROOT)
+CLEAN_FILES := *.iso ./cpu_reset_log.txt ./gdb.txt
+
+DISTCLEAN_DIRS  := ./ovmf ./limine
+DISTCLEAN_FILES :=
+
+PRISTINE_DIRS  := ./.cache
+PRISTINE_FILES := ./compile_commands.json ./.gdbinit
+
 clean:
 	-@$(MAKE) -C ./libc clean
 	-@$(MAKE) -C ./helios clean
-	-@$(MAKE) -C ./limine clean
 	-@$(MAKE) -C ./userspace clean
-	-@rm -rf sysroot/
-	-@rm -rf *.iso
-	-@rm -rf ovmf/
+	-@rm -rf $(CLEAN_DIRS)
+	-@rm -f $(CLEAN_FILES)
+
+distclean: clean docs-clean
+	-@$(MAKE) -C ./limine clean
+	-@rm -rf $(DISTCLEAN_DIRS)
+	-@rm -f $(DISTCLEAN_FILES)
+
+pristine: distclean
+	-@rm -rf $(PRISTINE_DIRS)
+	-@rm -f $(PRISTINE_FILES)

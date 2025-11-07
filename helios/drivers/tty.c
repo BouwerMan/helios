@@ -259,7 +259,7 @@ int tty_open(struct vfs_inode* inode, struct vfs_file* file)
 {
 	(void)inode;
 	file->private_data = find_tty_by_name(file->dentry->name);
-	return VFS_OK;
+	return 0;
 }
 
 /**
