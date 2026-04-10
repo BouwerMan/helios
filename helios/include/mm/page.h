@@ -80,6 +80,16 @@ struct page {
 #define PHYS_TO_HHDM(p) ((uintptr_t)(p) + HHDM_OFFSET)
 #define HHDM_TO_PHYS(p) ((uintptr_t)(p) - HHDM_OFFSET)
 
+static inline size_t bytes_to_pages(size_t bytes)
+{
+	return (bytes + PAGE_SIZE - 1) >> PAGE_SHIFT;
+}
+
+static inline size_t pages_to_bytes(size_t pages)
+{
+	return pages << PAGE_SHIFT;
+}
+
 [[gnu::always_inline]]
 static inline bool is_page_aligned(uintptr_t addr)
 {

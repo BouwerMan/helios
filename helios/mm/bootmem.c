@@ -55,7 +55,7 @@
 
 struct page* mem_map;
 
-pfn_t max_pfn = 0;
+pfn_t max_pfn = 0;	 // Exclusive
 const pfn_t min_pfn = 0; // Always 0
 static size_t free_page_count;
 static size_t total_page_count;
@@ -66,7 +66,8 @@ static size_t bitmap_size;
 static uintptr_t boot_bitmap_phys = UINTPTR_MAX;
 static uint64_t* boot_bitmap = (uint64_t*)UINTPTR_MAX;
 
-static constexpr int BITSET_WIDTH = (sizeof(*boot_bitmap) * CHAR_BIT);
+static constexpr size_t BITSET_WIDTH =
+	(sizeof(*boot_bitmap) * (size_t)CHAR_BIT);
 
 /*******************************************************************************
 * Private Function Prototypes
@@ -172,36 +173,88 @@ void bootmem_init()
 		 * Usable and bootloader reclaimable entries are guaranteed to be 4096 byte aligned for both base and length.
 		 */
 
-		uintptr_t end = entry->base + entry->length;
+		uptr end = entry->base + entry->length;
 		total_len += entry->length;
-		max_pfn = (end - PAGE_SIZE) >> PAGE_SHIFT;
+		// max_pfn = (end - PAGE_SIZE) >> PAGE_SHIFT;
+		max_pfn = MAX(max_pfn, end >> PAGE_SHIFT);
 	}
 	log_debug("Highest address: 0x%lx, Total memory length: %zx",
-		  pfn_to_phys(max_pfn + 1),
+		  pfn_to_phys(max_pfn),
 		  total_len);
 
-	bitmap_size = CEIL_DIV(max_pfn - min_pfn, (pfn_t)8);
-	map_elems = bitmap_size / sizeof(boot_bitmap[0]);
+	total_page_count = max_pfn - min_pfn;
+
+	map_elems = CEIL_DIV(total_page_count, BITSET_WIDTH);
+	bitmap_size = map_elems * sizeof(*boot_bitmap);
+	// bitmap_size = CEIL_DIV(max_pfn - min_pfn, 8u);
+	// map_elems = bitmap_size / sizeof(boot_bitmap[0]);
 	log_debug("min_pfn: %lu, max_pfn: %lu, mapsize: %zu, map_elems: %zu",
 		  min_pfn,
 		  max_pfn,
 		  bitmap_size,
 		  map_elems);
 
-	// Second pass: Find a suitable location for the bitmap.
+	size_t mem_map_size = total_page_count * sizeof(struct page);
+	// size_t req_pages = CEIL_DIV(mem_map_size, PAGE_SIZE);
+	size_t req_pages = bytes_to_pages(mem_map_size);
+	uptr mem_map_start_addr = 0;
+	uptr mem_map_end_addr = 0;
+
+	log_debug("mem_map_size: %zu, req_pages: %zu", mem_map_size, req_pages);
+
+	// Second pass: Find suitable location for the memmap
 	for (size_t i = 0; i < mmap->entry_count; i++) {
 		struct limine_memmap_entry* entry = mmap->entries[i];
 		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
 
-		// Check if the memory region is large enough to hold the bitmap.
-		if (!(entry->length > bitmap_size)) continue;
+		// Check if the memory region is large enough to hold the memmap
+		if (entry->length < mem_map_size) continue;
 		log_debug(
-			"Found valid location for bitmap at mmap entry: %zu, base: 0x%lx, length: %lu",
+			"Found valid location for memmap at entry: %zu, base: 0x%lx, length: %lu",
 			i,
 			entry->base,
 			entry->length);
 
-		boot_bitmap_phys = entry->base;
+		// Map to virtual memory.
+		mem_map = (struct page*)PHYS_TO_HHDM(entry->base);
+		mem_map_start_addr = entry->base;
+		mem_map_end_addr = mem_map_start_addr + mem_map_size;
+		break;
+	}
+
+	// Double check we got a mem_map
+	if (!mem_map) {
+		panic("Could not allocate mem_map");
+	}
+
+	// Third pass: Find a suitable location for the bitmap.
+	for (size_t i = 0; i < mmap->entry_count; i++) {
+		struct limine_memmap_entry* entry = mmap->entries[i];
+		if (entry->type != LIMINE_MEMMAP_USABLE) continue;
+
+		// Check if the memory region is large enough to hold the bitmap
+		if (entry->length < bitmap_size) {
+			continue;
+		}
+
+		uptr start = entry->base;
+
+		// Check if they overlap, then check if the remaining space is enough for the bitmap
+		if (MAX(start, mem_map_start_addr) <
+		    MIN(start + entry->length, mem_map_end_addr)) {
+			if (bitmap_size > entry->length - mem_map_size) {
+				continue; // Overlaps with mem_map
+			}
+			start += mem_map_size;
+		}
+
+		log_debug(
+			"Found valid location for bitmap at mmap entry: %zu, base: 0x%lx, length: %lu",
+			i,
+			start,
+			entry->length);
+
+		boot_bitmap_phys = start;
 		// Map to virtual memory.
 		boot_bitmap = (uint64_t*)PHYS_TO_HHDM(boot_bitmap_phys);
 		break;
@@ -233,8 +286,13 @@ void bootmem_init()
 		for (uint64_t addr = start; addr < end; addr += PAGE_SIZE) {
 			// Skip pages that overlap with the bitmap itself.
 			if (addr >= boot_bitmap_phys &&
-			    addr < (boot_bitmap_phys + bitmap_size))
+			    addr < (boot_bitmap_phys + bitmap_size)) {
 				continue;
+			}
+			if (MAX(addr, mem_map_start_addr) <
+			    MIN(addr + PAGE_SIZE, mem_map_end_addr)) {
+				continue; // Overlaps with mem_map
+			}
 			uint64_t word_index = get_word_offset(addr);
 			uint64_t bit_offset = get_bit_offset(addr);
 
@@ -242,19 +300,6 @@ void bootmem_init()
 			boot_bitmap[word_index] &= ~(1ULL << bit_offset);
 			free_page_count++;
 		}
-	}
-
-	// TODO: Invert mem_map and bitmap init order, that way when we free the bitmap we have less fragmentation
-
-	// Setup the mem_map
-	total_page_count = max_pfn - min_pfn;
-	size_t mem_map_size = total_page_count * sizeof(struct page);
-	size_t req_pages = CEIL_DIV(mem_map_size, PAGE_SIZE);
-
-	log_debug("mem_map_size: %zu, req_pages: %zu", mem_map_size, req_pages);
-	mem_map = (void*)PHYS_TO_HHDM(bootmem_alloc_contiguous(req_pages));
-	if (!mem_map) {
-		panic("Could not allocate mem_map");
 	}
 
 	memset(mem_map, 0, mem_map_size);
