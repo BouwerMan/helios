@@ -6,6 +6,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bison flex \
+            libgmp-dev libmpc-dev libmpfr-dev texinfo libisl-dev nasm
+
       - name: Restore toolchain
         id: toolchain
         uses: actions/cache@v4
@@ -19,9 +25,6 @@ jobs:
 
       - name: Put toolchain on PATH
         run: echo "$PWD/tools/bin" >> "$GITHUB_PATH"
-
-      - name: Install build deps
-        run: sudo apt-get update && sudo apt-get install -y nasm
 
       - name: Build kernel
         run: make
