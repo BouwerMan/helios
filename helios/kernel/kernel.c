@@ -30,6 +30,7 @@
 #include "kernel/klog.h"
 #include "kernel/limine_requests.h"
 #include "kernel/panic.h"
+#include "kernel/qemu.h"
 #include "kernel/softirq.h"
 #include "kernel/syscall.h"
 #include "kernel/tasks/scheduler.h"

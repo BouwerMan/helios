@@ -12,7 +12,7 @@ HDRFILES := $(shell find $(PROJDIRS) -type f -name "*.h")
 ALLFILES := $(SRCFILES) $(HDRFILES)
 
 # boot d = boot from cdrom
-QEMU_MOUNTS := -cdrom $(OSNAME).iso -hdd ./fat.img -boot d 
+QEMU_MOUNTS := -cdrom $(OSNAME).iso -boot d 
 QEMU_MEM    := -m 4096M
 QEMU_FLAGS  := $(QEMU_MEM) $(QEMU_MOUNTS) -no-reboot -d cpu_reset -D cpu_reset_log.txt \
 	       -device isa-debug-exit,iobase=0xF4,iosize=0x04

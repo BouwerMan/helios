@@ -22,8 +22,8 @@
 #include "kernel/panic.h"
 #include "drivers/console.h"
 #include "drivers/screen.h"
-#include "kernel/helios.h"
 #include "kernel/klog.h"
+#include "kernel/qemu.h"
 #include "lib/log.h"
 
 // Very rudimentary panic
