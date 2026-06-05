@@ -1,0 +1,33 @@
+name: build
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore toolchain
+        id: toolchain
+        uses: actions/cache@v4
+        with:
+          path: tools/
+          key: toolchain-u24-${{ hashFiles('scripts/install_cross.sh', 'scripts/patches/**') }}
+
+      - name: Build toolchain
+        if: steps.toolchain.outputs.cache-hit != 'true'
+        run: ./scripts/install_cross.sh
+
+      - name: Put toolchain on PATH
+        run: echo "$PWD/tools/bin" >> "$GITHUB_PATH"
+
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y nasm
+
+      - name: Build kernel
+        run: make
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kernel
+          path: helios/build/*.kernel
+          if-no-files-found: error
