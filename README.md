@@ -2,11 +2,6 @@
 
 A small, educational 64‑bit operating system for x86‑64. HeliOS boots via the Limine bootloader, runs as a freestanding C23 kernel, and includes a tiny libc and a couple of userspace samples.
 
-> **Branches**
->
-> * **main** – stable snapshots
-> * **dev** – active development (latest features, occasionally sharp edges)
-
 ---
 
 ## Status & scope
@@ -15,23 +10,24 @@ HeliOS is a learning project. Expect incomplete features.
 
 ### Implemented
 
-* Early console (serial + text framebuffer)
-* GDT/IDT setup and basic interrupt/IRQ handling
+* Early console (serial + text framebuffer, keyboard input)
+* GDT/IDT setup, interrupt/IRQ handling, softirqs, and work queues
 * Physical memory: boot-time allocator → buddy allocator
 * Kernel heap: slab allocator (with optional red‑zones/poisoning)
-* Virtual memory manager (4‑level paging, higher‑half kernel)
-* Simple scheduler and task/fork scaffolding
+* Virtual memory manager (4‑level paging, higher‑half kernel, mmap)
+* Scheduler, task management, fork, and exec
+* Semaphores and spinlocks
 * ATA PIO storage driver
-* VFS skeleton with RAMFS, early FAT, DEVFS, and TAR (initramfs) stubs
+* VFS with RAMFS, FAT, DEVFS (chrdev integration), and TAR (initramfs)
+* Syscalls: open, close, read, write, and others
 * Minimal libc and userspace samples (`/usr/bin/init.elf`, `hello_world.elf`)
 
 ### In progress / planned
 
-* More complete filesystem support (FAT improvements, devfs polish)
-* Syscalls & userspace runtime expansion
+* More complete filesystem support and POSIX syscall coverage
 * SMP, ACPI, PCIe, and better device model
 
-See `Documentation/` for subsystem overviews (init path, GDT, memory managers, etc.).
+See `docs/` for subsystem overviews (init path, GDT, memory managers, etc.).
 
 ---
 
@@ -72,12 +68,12 @@ Default run uses 4 GiB RAM and boots the ISO with Limine. Check the top‑leve
 ## Repository layout
 
 ```
-Documentation/        High‑level docs (init sequence, GDT, memory subsystems)
+docs/                 High‑level docs (init sequence, GDT, memory subsystems)
 helios/               Kernel sources
   arch/x86_64/        Architecture‑specific entry, GDT/IDT, paging, linker
   drivers/            Console/TTY/serial, ATA, PCI, fs drivers (devfs, fat, ramfs, tarfs)
   include/            Public kernel headers (types, mm, tasks, syscalls, etc.)
-  kernel/             Core services (bootinfo, panic, syscalls, timer, workqueue)
+  kernel/             Core services (bootinfo, panic, syscalls, timer, softirq, workqueue)
   lib/                Kernel libc‑ish utilities (log, string, printf config)
   mm/                 Bootmem, buddy page allocator, slab, address spaces
 libc/                 Freestanding libc for HeliOS (stdio/stdlib/string, crt)
@@ -117,7 +113,7 @@ Common targets:
 
 ## Contributing
 
-Issues and PRs are welcome. Please keep changesets focused, include a brief rationale, and reference relevant docs in `Documentation/` when possible. For new subsystems, add a short design note.
+Issues and PRs are welcome. Please keep changesets focused, include a brief rationale, and reference relevant docs in `docs/` when possible. For new subsystems, add a short design note.
 
 ---
 
