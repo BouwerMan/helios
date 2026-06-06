@@ -1,7 +1,7 @@
 /**
  * @file drivers/fs/vfs.c
  *
- * Copyright (C) 2025  Dylan Parks
+ * Copyright (C) 2026 Dylan Parks
  *
  * This file is part of HeliOS
  *
@@ -1751,26 +1751,66 @@ char* vfs_normalize_path(const char* path, struct vfs_dentry* base_dir)
 	return result;
 }
 
-void test_tokenizer()
+#if defined(HELIOS_TESTS)
+
+#include "kernel/ktest.h"
+
+KTEST(test_path_tokenizer)
 {
+	static const struct {
+		const char* path;
+		const char* expected[8];
+		int count;
+	} cases[] = {
+		{ "/foo/bar/baz/qux", { "foo", "bar", "baz", "qux" }, 4 },
+		{ "foo/bar", { "foo", "bar" }, 2 },
+		{ "//foo//bar//", { "foo", "bar" }, 2 },
+		{ "/", {}, 0 },
+		{ "", {}, 0 },
+	};
 
-	size_t len = 0;
-	const char* path = "/foo/bar/baz/qux";
-	struct path_tokenizer tok = { .path = path };
-	const char* token;
+	int fails = 0;
 
-	log_info(TESTING_HEADER, "Path Tokenizer");
+	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		struct path_tokenizer tok = { .path = cases[i].path };
+		size_t len = 0;
+		int n = 0;
+		const char* token;
 
-	log_debug("Testing path tokenizer with path: %s", path);
+		while ((token = path_next_token(&tok, &len))) {
+			if (n >= cases[i].count) {
+				log_error("[T%zu] extra token '%.*s'",
+					  i,
+					  (int)len,
+					  token);
+				fails++;
+				break;
+			}
+			if (strlen(cases[i].expected[n]) != len ||
+			    strncmp(token, cases[i].expected[n], len) != 0) {
+				log_error(
+					"[T%zu] token[%d]: got '%.*s', want '%s'",
+					i,
+					n,
+					(int)len,
+					token,
+					cases[i].expected[n]);
+				fails++;
+			}
+			n++;
+		}
 
-	while ((token = path_next_token(&tok, &len))) {
-		char token_buf[len + 1];
-		memcpy(token_buf, token, len);
-		token_buf[len] = '\0';
-		log_debug("Token: '%s', len: %zu", token_buf, len);
+		if (n < cases[i].count) {
+			log_error("[T%zu] got %d tokens, want %d for path='%s'",
+				  i,
+				  n,
+				  cases[i].count,
+				  cases[i].path);
+			fails++;
+		}
 	}
 
-	log_info(TESTING_FOOTER, "Path Tokenizer");
+	return fails;
 }
 
 /* Self-test for parse_path_components().
@@ -1784,7 +1824,7 @@ void test_tokenizer()
  *
  *   I'll be honest this shit is ChatGPT
  */
-int test_split_path()
+KTEST(test_split_path)
 {
 	size_t fails = 0;
 	size_t tests = 0;
@@ -1824,8 +1864,6 @@ int test_split_path()
 		{ "a//", 0, ".", "a" },
 		{ "///a///", 0, "/", "a" },
 	};
-
-	log_info(TESTING_HEADER, "Path Splitter");
 
 	/* Run the table-driven tests. */
 	for (size_t t = 0; t < sizeof(cases) / sizeof(cases[0]); ++t) {
@@ -2004,9 +2042,6 @@ int test_split_path()
 		 tests - fails,
 		 tests);
 
-	kassert(fails == 0, "Some tests failed!");
-
-	log_info(TESTING_FOOTER, "Path Splitter");
-
 	return (int)fails;
 }
+#endif

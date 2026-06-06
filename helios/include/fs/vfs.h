@@ -317,6 +317,3 @@ struct vfs_inode* inode_ht_check(struct vfs_superblock* sb, size_t id);
 bool dentry_compare(const struct vfs_dentry* d1, const struct vfs_dentry* d2);
 int vfs_get_next_id();
 int vfs_get_id();
-
-void test_tokenizer();
-int test_split_path();

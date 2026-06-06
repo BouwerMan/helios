@@ -34,3 +34,9 @@ jobs:
           name: kernel
           path: helios/build/*.kernel
           if-no-files-found: error
+
+      - name: Clean before test build
+        run: make clean
+
+      - name: Run kernel tests
+        run: make test

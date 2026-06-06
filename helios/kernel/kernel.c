@@ -28,6 +28,7 @@
 #include "fs/vfs.h"
 #include "kernel/helios.h"
 #include "kernel/klog.h"
+#include "kernel/ktest.h"
 #include "kernel/limine_requests.h"
 #include "kernel/panic.h"
 #include "kernel/qemu.h"
@@ -78,7 +79,7 @@ void kernel_main()
 
 	set_log_mode(LOG_KLOG);
 
-	test_split_path();
+	// test_split_path();
 
 	log_info("Mounting initial root filesystem");
 	unpack_tarfs(mod_request.response->modules[0]->address);
@@ -117,9 +118,18 @@ void kernel_main()
 	attach_tty_to_console("tty0");
 	keyboard_init();
 
-	ENABLE_INTERRUPTS();
 	log_info("Successfully got out of bootstrapping hell");
 	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
+
+#if defined(HELIOS_TESTS)
+	ktest_run_all();
+
+	console_flush();
+	klog_flush();
+	qemu_exit(QEMU_EXIT_SUCCESS);
+#endif
+
+	ENABLE_INTERRUPTS();
 
 	int init_res = launch_init();
 	if (init_res < 0) {

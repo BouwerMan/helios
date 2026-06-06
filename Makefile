@@ -17,6 +17,7 @@ QEMU_MEM    := -m 4096M
 QEMU_FLAGS  := $(QEMU_MEM) $(QEMU_MOUNTS) -no-reboot -d cpu_reset -D cpu_reset_log.txt \
 	       -device isa-debug-exit,iobase=0xF4,iosize=0x04
 
+
 ifeq ($(QEMU_USE_DEBUGCON), 1)
 	QEMU_FLAGS += -debugcon stdio
 else
@@ -136,6 +137,28 @@ gdbinit:
 
 qemugdb: iso gdbinit ovmf
 	$(QEMU) $(QEMU_FLAGS) $(QEMU_UEFI) -s -S -cpu qemu64,tsc-frequency=3609600000,+invtsc,vmware-cpuid-freq=on
+
+QEMU_TEST_FLAGS := $(QEMU_FLAGS) $(QEMU_UEFI) -display none \
+		   -cpu qemu64,tsc-frequency=3609600000,vmware-cpuid-freq=on
+TEST_TIMEOUT ?= 60
+
+.PHONY: test test-iso
+test-iso:
+	@$(MAKE) iso CPPFLAGS_TESTS=-DHELIOS_TESTS
+
+test: ovmf test-iso
+	@echo "Running kernel tests in QEMU..."
+	@set +e; \
+	 timeout --foreground $(TEST_TIMEOUT) $(QEMU) $(QEMU_TEST_FLAGS); \
+	 status=$$?; \
+	 set -e; \
+	 case $$status in \
+	   33)  echo "PASS: kernel tests passed"; exit 0 ;; \
+	   35)  echo "FAIL: kernel tests reported failures"; exit 1 ;; \
+	   124) echo "FAIL: timed out after $(TEST_TIMEOUT)s (hang/deadlock)"; exit 1 ;; \
+	   0)   echo "FAIL: qemu shut down without writing port 0xF4 (qemu_exit never reached)"; exit 1 ;; \
+	   *)   echo "FAIL: qemu exited $$status (panic / triple fault / qemu error)"; exit 1 ;; \
+	 esac
 
 .PHONY: clean distclean pristine clean-docs clean-iso
 
