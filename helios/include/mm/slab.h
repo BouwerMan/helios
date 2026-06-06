@@ -175,8 +175,6 @@ void slab_cache_purge_corrupt(struct slab_cache* cache);
 *
 *******************************************************************************/
 
-void slab_test();
-
 /**
  * @brief Dump statistics of a slab cache for debugging purposes.
  *

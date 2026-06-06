@@ -21,6 +21,7 @@
 
 #include "kernel/ktest.h"
 #include "drivers/console.h"
+#include "drivers/serial.h"
 #include "kernel/klog.h"
 #include "kernel/qemu.h"
 #include "kernel/types.h"
@@ -32,25 +33,40 @@ extern const struct ktest __ktests_end[];
 [[noreturn]]
 void ktest_run_all()
 {
+	log_info("\nRunning kernel tests...");
+	DISABLE_INTERRUPTS();
+	set_log_mode(LOG_KLOG);
+	console_flush();
+	klog_flush();
+
 	u32 run = 0, failed = 0;
 
-	log_info("Running kernel tests...");
-
 	for (const struct ktest* t = __ktests_start; t < __ktests_end; t++) {
+		write_serial_string("test ");
+		write_serial_string(t->name);
+		write_serial_string(" ... ");
+
 		run++;
-		log_info(TESTING_HEADER, t->name);
 		int rc = t->fn();
-		if (rc) {
-			failed++;
-			log_error("KTEST FAIL: %s (rc=%d)", t->name, rc);
+		if (rc == 0) {
+			write_serial_string(LOG_COLOR_GREEN
+					    "ok\n" LOG_COLOR_RESET);
+			klog_discard_to_head(); // drop this test's captured records
 		} else {
-			log_info(TESTING_FOOTER, t->name);
+			failed++;
+			write_serial_string(LOG_COLOR_RED
+					    "FAILED\n" LOG_COLOR_RESET);
+			klog_flush(); // replay just this test's records
 		}
 	}
 
-	log_info("KTEST SUMMARY: %u run, %u failed", run, failed);
+	char buf[64];
+	int n = snprintf(buf,
+			 sizeof buf,
+			 "\n%u passed, %u failed\n",
+			 run - failed,
+			 failed);
+	write_serial_n(buf, (size_t)n);
 
-	console_flush();
-	klog_flush();
 	qemu_exit(failed ? QEMU_EXIT_FAILURE : QEMU_EXIT_SUCCESS);
 }

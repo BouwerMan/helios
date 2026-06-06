@@ -549,3 +549,13 @@ int klog_ring_init(struct klog_ring* rb, void* buf, u32 size_pow2)
 
 	return 0;
 }
+
+// klog.c — safe ONLY with the consumer quiesced (interrupts disabled),
+// since it mutates the shared g_klog_cursor.
+void klog_discard_to_head(void)
+{
+	g_klog_cursor.bytes =
+		(u64)atomic64_load_relaxed(&g_klog_ring.head_bytes);
+	g_klog_cursor.last_seq =
+		(u64)atomic64_load_relaxed(&g_klog_ring.next_seq);
+}
