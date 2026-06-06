@@ -103,10 +103,6 @@ void __arch_entry()
 	log_init("Initializing virtual memory management");
 	vmm_init();
 
-	log_info(TESTING_HEADER, "VMM Pruning");
-	vmm_test_prune_single_mapping();
-	log_info(TESTING_FOOTER, "VMM Pruning");
-
 	// Initialize kernel stack and jump to kernel_main
 
 	log_init("Initializing kernel stack and jumping to kernel_main");

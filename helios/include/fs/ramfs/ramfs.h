@@ -104,5 +104,3 @@ int ramfs_create(struct vfs_inode* dir,
 struct vfs_inode* ramfs_alloc_inode(struct vfs_superblock* sb);
 void ramfs_destroy_inode(struct vfs_inode* inode);
 int ramfs_read_inode(struct vfs_inode* inode);
-
-void ramfs_test();

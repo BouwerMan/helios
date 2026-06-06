@@ -396,64 +396,6 @@ int prune_page_tables(uint64_t* pml4, uintptr_t vaddr)
 }
 
 /**
- * Test function to validate the pruning of a single mapping in the page table.
- *
- * Steps:
- * 1. Allocates a fresh address space (PML4 table).
- * 2. Maps a test virtual address to a physical page.
- * 3. Unmaps the virtual address.
- * 4. Prunes the page tables to remove unused entries.
- * 5. Verifies that the PML4 entry is cleared after pruning.
- * 6. Cleans up allocated resources.
- *
- * This function logs the success or failure of each step and ensures that
- * the page table pruning logic works as expected.
- */
-void vmm_test_prune_single_mapping(void)
-{
-	// 1. Allocate a fresh address space
-	uint64_t* pml4 = _alloc_page_table(AF_KERNEL);
-
-	// 2. Choose a test virtual address and physical page
-	uintptr_t vaddr = 0x00007FFFFFFFE000; // Arbitrary, canonical, aligned
-	uintptr_t paddr = (uintptr_t)HHDM_TO_PHYS(get_free_page(AF_KERNEL));
-
-	log_info("Mapping page: virt=0x%lx -> phys=0x%lx", vaddr, paddr);
-	int result = vmm_map_page((pgd_t*)pml4,
-				  vaddr,
-				  paddr,
-				  PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK);
-	if (result != 0) {
-		log_error("Failed to map test page");
-		return;
-	}
-
-	// 3. Unmap the virtual address
-	log_info("Unmapping page: 0x%lx", vaddr);
-	result = vmm_unmap_page((pgd_t*)pml4, vaddr);
-	if (result != 0) {
-		log_error("Failed to unmap test page");
-		return;
-	}
-
-	// 4. Prune page tables
-	log_info("Pruning page tables for vaddr 0x%lx", vaddr);
-	prune_page_tables(pml4, vaddr);
-
-	// 5. Verify that the PML4 entry is now 0
-	size_t pml4_i = get_table_index(0, vaddr);
-	if (pml4[pml4_i] == 0) {
-		log_info("✅ PML4 entry cleared — pruning successful");
-	} else {
-		log_error("❌ PML4 entry still set: 0x%lx", pml4[pml4_i]);
-	}
-
-	// 6. Cleanup
-	free_page((void*)PHYS_TO_HHDM(paddr));
-	_free_page_table(pml4);
-}
-
-/**
  * get_phys_addr - Resolve a virtual address to a physical address
  * @pml4: Top-level page table used for the walk
  * @vaddr: Virtual address to translate
@@ -1613,3 +1555,70 @@ static void page_fault_fail(struct registers* r)
 	// This calls console_flush()
 	panic("Page Fault");
 }
+
+#if defined(HELIOS_TESTS)
+#include "kernel/ktest.h"
+/**
+ * Test function to validate the pruning of a single mapping in the page table.
+ *
+ * Steps:
+ * 1. Allocates a fresh address space (PML4 table).
+ * 2. Maps a test virtual address to a physical page.
+ * 3. Unmaps the virtual address.
+ * 4. Prunes the page tables to remove unused entries.
+ * 5. Verifies that the PML4 entry is cleared after pruning.
+ * 6. Cleans up allocated resources.
+ *
+ * This function logs the success or failure of each step and ensures that
+ * the page table pruning logic works as expected.
+ */
+KTEST(test_prune_single_mapping)
+{
+	// 1. Allocate a fresh address space
+	uint64_t* pml4 = _alloc_page_table(AF_KERNEL);
+
+	// 2. Choose a test virtual address and physical page
+	uintptr_t vaddr = 0x00007FFFFFFFE000; // Arbitrary, canonical, aligned
+	uintptr_t paddr = (uintptr_t)HHDM_TO_PHYS(get_free_page(AF_KERNEL));
+
+	log_info("Mapping page: virt=0x%lx -> phys=0x%lx", vaddr, paddr);
+	int result = vmm_map_page((pgd_t*)pml4,
+				  vaddr,
+				  paddr,
+				  PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK);
+	if (result != 0) {
+		log_error("Failed to map test page");
+		_free_page_table(pml4);
+		return 1;
+	}
+
+	// 3. Unmap the virtual address
+	log_info("Unmapping page: 0x%lx", vaddr);
+	result = vmm_unmap_page((pgd_t*)pml4, vaddr);
+	if (result != 0) {
+		log_error("Failed to unmap test page");
+		free_page((void*)PHYS_TO_HHDM(paddr));
+		_free_page_table(pml4);
+		return 1;
+	}
+
+	// 4. Prune page tables
+	log_info("Pruning page tables for vaddr 0x%lx", vaddr);
+	prune_page_tables(pml4, vaddr);
+
+	// 5. Verify that the PML4 entry is now 0
+	size_t pml4_i = get_table_index(0, vaddr);
+	int rc = 0;
+	if (pml4[pml4_i] == 0) {
+		log_info("PML4 entry cleared — pruning successful");
+	} else {
+		log_error("PML4 entry still set: 0x%lx", pml4[pml4_i]);
+		rc = 1;
+	}
+
+	// 6. Cleanup
+	free_page((void*)PHYS_TO_HHDM(paddr));
+	_free_page_table(pml4);
+	return rc;
+}
+#endif

@@ -596,81 +596,6 @@ int ramfs_readdir(struct vfs_file* file, struct dirent* dirent, off_t offset)
 	return 0;
 }
 
-void test_ramfs_readpage()
-{
-	log_info("--- Starting ramfs readpage test ---");
-
-	const char* file_path = "/testfile.txt";
-	char write_buffer[PAGE_SIZE * 2]; // Create 2 pages of data
-
-	// Fill page 0 with 'A's and page 1 with 'B's
-	memset(write_buffer, 'A', PAGE_SIZE);
-	memset(write_buffer + PAGE_SIZE, 'B', PAGE_SIZE);
-
-	int fd = vfs_open(file_path, O_CREAT | O_RDWR);
-	if (fd < 0) {
-		panic("Failed to create testfile!");
-	}
-	vfs_write(fd, write_buffer, sizeof(write_buffer));
-
-	// Get file and inode
-	struct vfs_file* file = get_file(fd);
-	struct vfs_inode* inode = file->dentry->inode;
-	log_info("Test file created with inode %p", (void*)inode);
-
-	// Allocate destination page
-	struct page* dest_page = alloc_page(AF_KERNEL);
-	if (!dest_page) {
-		panic("Failed to allocate destination page!");
-	}
-	void* dest_vaddr = (void*)PHYS_TO_HHDM(page_to_phys(dest_page));
-
-	// Set the page's metadata to request the SECOND page of the file
-	dest_page->index = 1;		     // We want the page full of 'B's
-	dest_page->mapping = inode->mapping; // Point it to the correct mapping
-
-	log_info("Calling readpage for file index %lu...", dest_page->index);
-
-	int result = inode->mapping->imops->readpage(inode, dest_page);
-	if (result < 0) {
-		panic("readpage_test: readpage returned an error!");
-	}
-
-	// Verify the contents
-	bool success = true;
-	for (size_t i = 0; i < PAGE_SIZE; i++) {
-		if (((char*)dest_vaddr)[i] != 'B') {
-			log_error(
-				"Verification failed at byte %zu! Expected 'B', got '%c'",
-				i,
-				((char*)dest_vaddr)[i]);
-			success = false;
-			break;
-		}
-	}
-
-	if (success) {
-		log_info("SUCCESS: Page contents verified correctly!");
-	} else {
-		panic("readpage_test: Page contents were incorrect!");
-	}
-
-	// Clean up
-	free_page(dest_vaddr);
-	vfs_close(fd);
-
-	log_info("--- ramfs readpage test finished ---");
-}
-
-void ramfs_test()
-{
-	log_info(TESTING_HEADER, "Ramfs");
-
-	test_ramfs_readpage();
-
-	log_info(TESTING_FOOTER, "Ramfs");
-}
-
 /*******************************************************************************
  * Private Function Definitions
  *******************************************************************************/
@@ -818,3 +743,82 @@ static struct vfs_inode* _alloc_inode_raw(struct vfs_superblock* sb)
 
 	return inode;
 }
+
+#if defined(HELIOS_TESTS)
+#include "kernel/ktest.h"
+
+KTEST(test_ramfs_readpage)
+{
+	log_info("--- Starting ramfs readpage test ---");
+
+	const char* file_path = "/testfile.txt";
+	char write_buffer[PAGE_SIZE * 2]; // Create 2 pages of data
+
+	// Fill page 0 with 'A's and page 1 with 'B's
+	memset(write_buffer, 'A', PAGE_SIZE);
+	memset(write_buffer + PAGE_SIZE, 'B', PAGE_SIZE);
+
+	int fd = vfs_open(file_path, O_CREAT | O_RDWR);
+	if (fd < 0) {
+		log_error("Failed to open file '%s': %s",
+			  file_path,
+			  __get_error_string(-fd));
+		return 1;
+	}
+	vfs_write(fd, write_buffer, sizeof(write_buffer));
+
+	// Get file and inode
+	struct vfs_file* file = get_file(fd);
+	struct vfs_inode* inode = file->dentry->inode;
+	log_info("Test file created with inode %p", (void*)inode);
+
+	// Allocate destination page
+	struct page* dest_page = alloc_page(AF_KERNEL);
+	if (!dest_page) {
+		log_error("Failed to allocate destination page");
+		return 1;
+	}
+	void* dest_vaddr = (void*)PHYS_TO_HHDM(page_to_phys(dest_page));
+
+	// Set the page's metadata to request the SECOND page of the file
+	dest_page->index = 1;		     // We want the page full of 'B's
+	dest_page->mapping = inode->mapping; // Point it to the correct mapping
+
+	log_info("Calling readpage for file index %lu...", dest_page->index);
+
+	int result = inode->mapping->imops->readpage(inode, dest_page);
+	if (result < 0) {
+		log_error("readpage failed with error: %s",
+			  __get_error_string(-result));
+		return 1;
+	}
+
+	// Verify the contents
+	bool success = true;
+	for (size_t i = 0; i < PAGE_SIZE; i++) {
+		if (((char*)dest_vaddr)[i] != 'B') {
+			log_error(
+				"Verification failed at byte %zu! Expected 'B', got '%c'",
+				i,
+				((char*)dest_vaddr)[i]);
+			success = false;
+			break;
+		}
+	}
+
+	if (success) {
+		log_info("SUCCESS: Page contents verified correctly!");
+	} else {
+		log_error("FAILURE: Page contents were incorrect!");
+		return 1;
+	}
+
+	// Clean up
+	free_page(dest_vaddr);
+	vfs_close(fd);
+
+	log_info("--- ramfs readpage test finished ---");
+	return 0;
+}
+
+#endif

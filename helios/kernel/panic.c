@@ -1,7 +1,7 @@
 /**
  * @file kernel/panic.c
  *
- * Copyright (C) 2025  Dylan Parks
+ * Copyright (C) 2026  Dylan Parks
  *
  * This file is part of HeliOS
  *
@@ -20,9 +20,9 @@
  */
 
 #include "kernel/panic.h"
+#include "arch/qemu.h"
 #include "drivers/console.h"
 #include "drivers/screen.h"
-#include "kernel/helios.h"
 #include "kernel/klog.h"
 #include "lib/log.h"
 
@@ -35,7 +35,7 @@ void panic(const char* message)
 	set_log_mode(LOG_DIRECT);
 	set_color(COLOR_RED, COLOR_BLACK);
 	log_error("KERNEL PANIC!\n%s", message);
-	QEMU_SHUTDOWN();
+	qemu_exit(QEMU_EXIT_FAILURE);
 	for (;;)
 		__asm__ volatile("hlt");
 }

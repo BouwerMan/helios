@@ -1,0 +1,45 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential bison flex \
+            libgmp-dev libmpc-dev libmpfr-dev \
+            texinfo libisl-dev \
+            nasm xorriso qemu-system-x86
+
+      - name: Restore toolchain
+        id: toolchain
+        uses: actions/cache@v5
+        with:
+          path: tools/
+          key: toolchain-u24-${{ hashFiles('scripts/install_cross.sh', 'scripts/patches/**') }}
+
+      - name: Build toolchain
+        if: steps.toolchain.outputs.cache-hit != 'true'
+        run: ./scripts/install_cross.sh
+
+      - name: Put toolchain on PATH
+        run: echo "$PWD/tools/bin" >> "$GITHUB_PATH"
+
+      - name: Build kernel
+        run: make
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: kernel
+          path: helios/build/*.kernel
+          if-no-files-found: error
+
+      - name: Clean before test build
+        run: make clean
+
+      - name: Run kernel tests
+        run: make test

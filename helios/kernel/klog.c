@@ -19,6 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <stdatomic.h>
 #include <uapi/helios/errno.h>
 
 #include "drivers/serial.h"
@@ -40,6 +41,17 @@ static atomic64_t klog_dropped_records = ATOMIC64_INIT(0);
 
 struct klog_ring g_klog_ring = { 0 };
 struct klog_cursor g_klog_cursor = { 0 };
+static atomic_t klog_drain_paused = { 0 };
+
+void klog_pause_drain(void)
+{
+	atomic_store_release(&klog_drain_paused, 1);
+}
+void klog_resume_drain(void)
+{
+	atomic_store_release(&klog_drain_paused, 0);
+	softirq_raise(SOFTIRQ_KLOG);
+}
 
 static inline u32 klog_len_from_sf(u32 sf)
 {
@@ -441,6 +453,10 @@ void klog_flush()
 
 static softirq_ret_t klog_softirq_action(size_t* item_budget, u64 ns_budget)
 {
+	if (atomic_load_acquire(&klog_drain_paused)) {
+		return SOFTIRQ_DONE;
+	}
+
 	static constexpr size_t CHUNK_MIN = 1;
 	static constexpr size_t CHUNK_MAX = 64;
 	size_t chunk = 16;
@@ -548,4 +564,14 @@ int klog_ring_init(struct klog_ring* rb, void* buf, u32 size_pow2)
 	memset(rb->buf, 0, size_pow2);
 
 	return 0;
+}
+
+// klog.c — safe ONLY with the consumer quiesced (interrupts disabled),
+// since it mutates the shared g_klog_cursor.
+void klog_discard_to_head(void)
+{
+	g_klog_cursor.bytes =
+		(u64)atomic64_load_relaxed(&g_klog_ring.head_bytes);
+	g_klog_cursor.last_seq =
+		(u64)atomic64_load_relaxed(&g_klog_ring.next_seq);
 }

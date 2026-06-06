@@ -213,6 +213,29 @@ void buddy_dump_free_lists()
 	spin_unlock_irqrestore(&allocator->lock, flags);
 }
 
+size_t buddy_free_page_count()
+{
+	size_t count = 0;
+	for (size_t i = 0; i < MEM_NUM_ZONES; i++) {
+		struct buddy_allocator* allocator = regions[i];
+		unsigned long flags;
+		spin_lock_irqsave(&allocator->lock, &flags);
+
+		size_t zone_count = 0;
+		for (size_t order = allocator->min_order;
+		     order <= allocator->max_order;
+		     order++) {
+			struct list_head* head = &allocator->free_lists[order];
+			zone_count += list_count_nodes(head) * (1UL << order);
+		}
+
+		count += zone_count;
+		spin_unlock_irqrestore(&allocator->lock, flags);
+		log_debug("Zone %zu has %zu free pages", i, zone_count);
+	}
+	return count;
+}
+
 /**
  * @brief Allocates a contiguous block of memory pages.
  *
@@ -659,3 +682,208 @@ static void free_pages_core(struct buddy_allocator* allocator,
 
 	spin_unlock_irqrestore(&allocator->lock, flags);
 }
+
+#define HELIOS_TESTS
+#if defined(HELIOS_TESTS)
+#include "kernel/ktest.h"
+
+/* --- test-local helpers --------------------------------------------------- */
+
+static long ktest_free_pages(void)
+{
+	return (long)buddy_free_page_count();
+}
+
+/* Assert the free-page count is unchanged across a test. A delta means the
+ * test or the allocator leaked. No-op while ktest_free_pages() returns < 0. */
+static int ktest_check_leak(long before)
+{
+	if (before < 0) return 0;
+	long after = ktest_free_pages();
+	if (after != before) {
+		log_error("page leak: free %ld -> %ld (delta %ld)",
+			  before,
+			  after,
+			  after - before);
+		return 1;
+	}
+	return 0;
+}
+
+/* Free pg (order order) without going through the ref-count path.
+ * Only safe for pages the test owns with no other live references. */
+static void __ktest_free(struct page* pg, size_t order)
+{
+	atomic_set(&pg->ref_count, 0);
+	__free_pages(pg, order);
+}
+
+/* Alloc a page, write a pattern, free it, re-alloc, verify writable and
+ * coherent. */
+KTEST_FLAGS(test_page_alloc_roundtrip, KTEST_NO_PREEMPT)
+{
+	long free_before = ktest_free_pages();
+
+	void* p = __get_free_page(AF_NORMAL);
+	if (!p) {
+		log_error("initial alloc failed");
+		return 1;
+	}
+	*(volatile u64*)p = 0xDEADBEEFCAFEBABEULL;
+	free_page(p);
+
+	void* p2 = __get_free_page(AF_NORMAL);
+	if (!p2) {
+		log_error("re-alloc after free failed");
+		return 1;
+	}
+	*(volatile u64*)p2 = 0x0123456789ABCDEFULL;
+	int rc = (*(volatile u64*)p2 != 0x0123456789ABCDEFULL);
+	if (rc) log_error("memory read-back mismatch after realloc");
+	free_page(p2);
+
+	if (!rc) rc = ktest_check_leak(free_before);
+	return rc;
+}
+
+/* alloc_page must set ref_count to exactly 1. */
+KTEST_FLAGS(test_page_alloc_refcount, KTEST_NO_PREEMPT)
+{
+	long free_before = ktest_free_pages();
+
+	struct page* pg = alloc_page(AF_NORMAL);
+	if (!pg) {
+		log_error("alloc_page failed");
+		return 1;
+	}
+	int ref = atomic_read(&pg->ref_count);
+	int rc = (ref != 1);
+	if (rc) log_error("expected ref_count=1 after alloc, got %d", ref);
+	put_page(pg);
+
+	if (!rc) rc = ktest_check_leak(free_before);
+	return rc;
+}
+
+/* An order-N block's physical address must be 2^N pages aligned. */
+KTEST_FLAGS(test_page_alloc_order_alignment, KTEST_NO_PREEMPT)
+{
+	long free_before = ktest_free_pages();
+	int rc = 0;
+	for (size_t order = 0; order <= 4; order++) {
+		struct page* pg = alloc_pages(AF_NORMAL, order);
+		if (!pg) {
+			log_error("alloc_pages order %zu failed", order);
+			rc = 1;
+			continue;
+		}
+		uptr phys = page_to_phys(pg);
+		size_t align = PAGE_SIZE << order;
+		if (phys % align != 0) {
+			log_error("order %zu: phys=0x%lx not aligned to 0x%zx",
+				  order,
+				  phys,
+				  align);
+			rc = 1;
+		}
+		__ktest_free(pg, order);
+	}
+	if (!rc) rc = ktest_check_leak(free_before);
+	return rc;
+}
+
+/* Drain the DMA zone, confirm NULL on empty, free one block, confirm
+ * recovery. */
+KTEST_FLAGS(test_page_alloc_exhaustion, KTEST_NO_PREEMPT)
+{
+	static constexpr size_t ORDER = MAX_ORDER - 1;
+	static constexpr size_t CAP = 32;
+	long free_before = ktest_free_pages();
+
+	struct page* blocks[CAP];
+	size_t count = 0;
+	int rc = 0;
+
+	while (count < CAP) {
+		struct page* p = alloc_pages(AF_DMA, ORDER);
+		if (!p) break;
+		blocks[count++] = p;
+	}
+
+	if (count == 0) {
+		log_warn("DMA zone has no order-%zu blocks; skipping", ORDER);
+		return 0;
+	}
+
+	if (count == CAP) {
+		/* Hit the array cap before the zone emptied -- can't conclude
+		 * NULL-on-empty. Clean up and skip rather than false-fail. */
+		log_warn("DMA zone exceeds CAP=%zu blocks; skipping assertion",
+			 CAP);
+		for (size_t i = 0; i < count; i++)
+			__ktest_free(blocks[i], ORDER);
+		return 0;
+	}
+
+	struct page* extra = alloc_pages(AF_DMA, ORDER);
+	if (extra) {
+		log_error("expected NULL after draining DMA zone (count=%zu)",
+			  count);
+		__ktest_free(extra, ORDER);
+		rc = 1;
+	}
+
+	__ktest_free(blocks[--count], ORDER);
+	struct page* recovered = alloc_pages(AF_DMA, ORDER);
+	if (!recovered) {
+		log_error("alloc failed after freeing one DMA block");
+		rc = 1;
+	} else {
+		blocks[count++] = recovered;
+	}
+
+	for (size_t i = 0; i < count; i++)
+		__ktest_free(blocks[i], ORDER);
+	if (!rc) rc = ktest_check_leak(free_before);
+	return rc;
+}
+
+/* Allocate 64 pages; all physical frame numbers must be distinct. */
+KTEST_FLAGS(test_page_alloc_uniqueness, KTEST_NO_PREEMPT)
+{
+	static constexpr size_t N = 64;
+	long free_before = ktest_free_pages();
+	struct page* pages[N];
+	size_t got = 0;
+	int rc = 0;
+
+	for (size_t i = 0; i < N; i++) {
+		pages[i] = alloc_page(AF_NORMAL);
+		if (!pages[i]) {
+			log_error("alloc_page failed at %zu/%zu", i, N);
+			rc = 1;
+			break;
+		}
+		got++;
+	}
+
+	for (size_t i = 0; i < got; i++) {
+		pfn_t pfn_i = page_to_pfn(pages[i]);
+		for (size_t j = i + 1; j < got; j++) {
+			if (pfn_i == page_to_pfn(pages[j])) {
+				log_error("duplicate PFN %lx at %zu and %zu",
+					  pfn_i,
+					  i,
+					  j);
+				rc = 1;
+			}
+		}
+	}
+
+	for (size_t i = 0; i < got; i++)
+		put_page(pages[i]);
+	if (!rc) rc = ktest_check_leak(free_before);
+	return rc;
+}
+
+#endif /* HELIOS_TESTS */

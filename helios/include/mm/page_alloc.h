@@ -16,6 +16,8 @@
 #include "mm/page_alloc_flags.h"
 #include "mm/zones.h"
 
+extern size_t total_mem_len;
+
 static constexpr int MAX_ORDER = 10; // 2^10 pages (1024 pages), or 4MiB blocks
 
 struct buddy_allocator {
@@ -173,3 +175,5 @@ static inline void __free_page(struct page* page)
 {
 	__free_pages(page, 0);
 }
+
+size_t buddy_free_page_count();

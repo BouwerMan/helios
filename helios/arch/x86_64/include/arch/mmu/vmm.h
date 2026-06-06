@@ -158,6 +158,3 @@ void vmm_write_region(struct address_space* vas,
 /* Maintenance / queries */
 int prune_page_tables(uint64_t* pml4, uintptr_t vaddr);
 paddr_t get_phys_addr(pgd_t* pml4, vaddr_t vaddr);
-
-/* Debug/Test */
-void vmm_test_prune_single_mapping(void);

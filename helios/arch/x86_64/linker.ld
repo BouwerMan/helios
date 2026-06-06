@@ -76,6 +76,13 @@ SECTIONS
 		*(.rodata .rodata.*)
 	} :rodata
 
+	.ktests : {
+		. = ALIGN(8);
+		__ktests_start = .;
+		KEEP(*(.ktests))
+		__ktests_end = .;
+	} :rodata
+
 	/* Move to the next memory page for .data */
 	. = ALIGN(CONSTANT(MAXPAGESIZE));
 
