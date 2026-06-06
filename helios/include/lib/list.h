@@ -308,6 +308,15 @@ static inline void list_splice_init(struct list_head* list,
 	for ((pos) = (head)->next; !list_is_head((head), pos); \
 	     (pos) = (pos)->next)
 
+static inline size_t list_count_nodes(struct list_head* head)
+{
+	struct list_head* pos;
+	size_t count = 0;
+	list_for_each (pos, head)
+		count++;
+	return count;
+}
+
 /**
  * list_for_each_entry	-	iterate over list of given type
  * @pos:	the type * to use as a loop cursor.

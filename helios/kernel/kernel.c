@@ -123,6 +123,14 @@ void kernel_main()
 	ENABLE_INTERRUPTS();
 	log_info("Successfully got out of bootstrapping hell");
 	log_info("Welcome to %s. Version: %s", KERNEL_NAME, KERNEL_VERSION);
+	size_t free_pages = buddy_free_page_count();
+	size_t total_mib = total_mem_len / (1024UL * 1024UL);
+	size_t free_mib = pages_to_bytes(free_pages) / (1024UL * 1024UL);
+	size_t used_mib = total_mib - free_mib;
+	log_info("Current free memory: %lu MiB out of %lu MiB. Used: %lu MiB",
+		 free_mib,
+		 total_mib,
+		 used_mib);
 
 #if defined(HELIOS_TESTS)
 	ktest_run_all();

@@ -32,7 +32,7 @@
 */
 
 #undef LOG_LEVEL
-#define LOG_LEVEL 1
+#define LOG_LEVEL 0
 #define FORCE_LOG_REDEF
 #include <lib/log.h>
 #undef FORCE_LOG_REDEF
@@ -55,8 +55,9 @@
 
 struct page* mem_map;
 
-pfn_t max_pfn = 0;	 // Exclusive
-const pfn_t min_pfn = 0; // Always 0
+size_t total_mem_len = 0; // Total length of usable memory.
+pfn_t max_pfn = 0;	  // Exclusive
+const pfn_t min_pfn = 0;  // Always 0
 static size_t free_page_count;
 static size_t total_page_count;
 
@@ -155,7 +156,6 @@ void bootmem_init()
 {
 	struct limine_memmap_response* mmap = memmap_request.response;
 	log_debug("Reading Memory Map");
-	size_t total_len = 0; // Total length of usable memory.
 
 	// First pass: Calculate the highest address and total usable memory length.
 	for (size_t i = 0; i < mmap->entry_count; i++) {
@@ -174,13 +174,13 @@ void bootmem_init()
 		 */
 
 		uptr end = entry->base + entry->length;
-		total_len += entry->length;
+		total_mem_len += entry->length;
 		// max_pfn = (end - PAGE_SIZE) >> PAGE_SHIFT;
 		max_pfn = MAX(max_pfn, end >> PAGE_SHIFT);
 	}
 	log_debug("Highest address: 0x%lx, Total memory length: %zx",
 		  pfn_to_phys(max_pfn),
-		  total_len);
+		  total_mem_len);
 
 	total_page_count = max_pfn - min_pfn;
 

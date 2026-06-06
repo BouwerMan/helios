@@ -77,6 +77,7 @@ SECTIONS
 	} :rodata
 
 	.ktests : {
+		. = ALIGN(8);
 		__ktests_start = .;
 		KEEP(*(.ktests))
 		__ktests_end = .;

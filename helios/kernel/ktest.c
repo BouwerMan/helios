@@ -30,6 +30,18 @@
 extern const struct ktest __ktests_start[];
 extern const struct ktest __ktests_end[];
 
+static unsigned long ktest_irq_save(void)
+{
+	unsigned long flags;
+	__asm__ volatile("pushf; pop %0; cli" : "=r"(flags) : : "memory");
+	return flags;
+}
+static void ktest_irq_restore(unsigned long flags)
+{
+	if (flags & (1UL << 9)) /* EFLAGS.IF */
+		__asm__ volatile("sti" : : : "memory");
+}
+
 [[noreturn]]
 void ktest_run_all()
 {
@@ -52,8 +64,13 @@ void ktest_run_all()
 		write_serial_string(t->name);
 		write_serial_string(" ... ");
 
-		run++;
+		unsigned long fl = 0;
+		bool irq_off = (t->flags & KTEST_NO_PREEMPT);
+		if (irq_off) fl = ktest_irq_save();
 		int rc = t->fn();
+		if (irq_off) ktest_irq_restore(fl);
+
+		run++;
 		if (rc == 0) {
 			write_serial_string(LOG_COLOR_GREEN
 					    "ok\n" LOG_COLOR_RESET);
@@ -75,4 +92,14 @@ void ktest_run_all()
 	write_serial_n(buf, (size_t)n);
 
 	qemu_exit(failed ? QEMU_EXIT_FAILURE : QEMU_EXIT_SUCCESS);
+}
+
+static int test_ktest_self(void);
+[[gnu ::used, gnu ::section(".ktests")]] static const struct ktest
+	__ktest_desc_test_ktest_self = { .name = "test_ktest_self",
+					 .fn = (test_ktest_self),
+					 .flags = (0) };
+static int test_ktest_self(void)
+{
+	return 0;
 }
