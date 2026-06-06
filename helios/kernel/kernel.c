@@ -28,10 +28,8 @@
 #include "fs/vfs.h"
 #include "kernel/helios.h"
 #include "kernel/klog.h"
-#include "kernel/ktest.h"
 #include "kernel/limine_requests.h"
 #include "kernel/panic.h"
-#include "kernel/qemu.h"
 #include "kernel/softirq.h"
 #include "kernel/syscall.h"
 #include "kernel/tasks/scheduler.h"
@@ -39,6 +37,10 @@
 #include "lib/log.h"
 #include "limine.h"
 #include "mm/kmalloc.h"
+
+#if defined(HELIOS_TESTS)
+#include "kernel/ktest.h"
+#endif
 
 struct limine_framebuffer* framebuffer;
 

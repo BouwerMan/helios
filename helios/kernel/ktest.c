@@ -20,10 +20,10 @@
  */
 
 #include "kernel/ktest.h"
+#include "arch/qemu.h"
 #include "drivers/console.h"
 #include "drivers/serial.h"
 #include "kernel/klog.h"
-#include "kernel/qemu.h"
 #include "kernel/types.h"
 #include "lib/log.h"
 
@@ -36,7 +36,9 @@ void ktest_run_all()
 	// Temporarily disable interrupts to make the output ordered in a coherent way.
 	DISABLE_INTERRUPTS();
 
-	log_info("\nRunning kernel tests...");
+	iptr num_tests = __ktests_end - __ktests_start;
+	log_info("\n\nRunning %ld kernel tests", num_tests);
+
 	console_flush();
 	klog_flush();
 	klog_pause_drain(); // Stop auto emitting

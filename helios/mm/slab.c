@@ -872,7 +872,6 @@ static bool check_redzone(const void* obj_start, size_t size)
 }
 #endif
 
-#define HELIOS_TESTS
 #if defined(HELIOS_TESTS)
 #include "kernel/ktest.h"
 
