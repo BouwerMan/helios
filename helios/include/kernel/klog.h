@@ -100,3 +100,6 @@ bool klog_try_write(struct klog_ring* rb,
 void klog_flush();
 
 void klog_discard_to_head(void);
+
+void klog_pause_drain(void);
+void klog_resume_drain(void);

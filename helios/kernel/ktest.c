@@ -33,11 +33,15 @@ extern const struct ktest __ktests_end[];
 [[noreturn]]
 void ktest_run_all()
 {
-	log_info("\nRunning kernel tests...");
+	// Temporarily disable interrupts to make the output ordered in a coherent way.
 	DISABLE_INTERRUPTS();
-	set_log_mode(LOG_KLOG);
+
+	log_info("\nRunning kernel tests...");
 	console_flush();
 	klog_flush();
+	klog_pause_drain(); // Stop auto emitting
+
+	ENABLE_INTERRUPTS();
 
 	u32 run = 0, failed = 0;
 

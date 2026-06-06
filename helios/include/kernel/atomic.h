@@ -39,6 +39,16 @@ static inline void atomic64_fetch_or_release(atomic64_t* v, long mask)
 	__atomic_fetch_or(&v->counter, mask, __ATOMIC_RELEASE);
 }
 
+static inline void atomic_store_release(atomic_t* v, int i)
+{
+	__atomic_store_n(&v->counter, i, __ATOMIC_RELEASE);
+}
+
+static inline int atomic_load_acquire(const atomic_t* v)
+{
+	return __atomic_load_n(&v->counter, __ATOMIC_ACQUIRE);
+}
+
 static inline void smp_store_release_u32(unsigned int* p, unsigned int v)
 {
 	__atomic_store_n(p, v, __ATOMIC_RELEASE);
