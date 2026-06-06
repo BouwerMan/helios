@@ -144,12 +144,6 @@ static bool check_poison(const void* obj_start, size_t size);
 static bool check_redzone(const void* obj_start, size_t size);
 #endif
 
-static void test_use_before_alloc(struct slab_cache* cache);
-static void test_buffer_overflow(struct slab_cache* cache);
-static void test_buffer_underflow(struct slab_cache* cache);
-static void test_valid_usage(struct slab_cache* cache);
-static void test_object_alignment(struct slab_cache* cache);
-
 /*******************************************************************************
 * Public Function Definitions
 *******************************************************************************/
@@ -590,46 +584,6 @@ void slab_dump_stats(struct slab_cache* cache)
 	log_info("Used Objects: %lu", cache->used_objects);
 }
 
-void slab_test()
-{
-	log_info(TESTING_HEADER, "Slab Allocator");
-
-	struct slab_cache test_cache = { 0 };
-	(void)slab_cache_init(&test_cache,
-			      "Test cache",
-			      sizeof(uint64_t),
-			      0,
-			      NULL,
-			      NULL);
-	log_debug("Test cache slab size: %d pages", SLAB_SIZE_PAGES);
-
-	test_use_before_alloc(&test_cache);
-	test_buffer_overflow(&test_cache);
-	test_buffer_underflow(&test_cache);
-	test_valid_usage(&test_cache);
-	test_object_alignment(&test_cache);
-
-	slab_cache_purge_corrupt(&test_cache);
-
-	uint64_t* data = slab_alloc(&test_cache);
-	*data = 12345;
-	log_info("Got data at %p, set value to %lu", (void*)data, *data);
-	uint64_t* data2 = slab_alloc(&test_cache);
-	*data2 = 54321;
-	log_info("Got data2 at %p, set value to %lu", (void*)data2, *data2);
-	size_t slab_bytes = SLAB_SIZE_PAGES * PAGE_SIZE;
-	size_t mask = ~(slab_bytes - 1);
-	log_debug("Slab base for data: %lx", (uintptr_t)data & mask);
-	slab_dump_stats(&test_cache);
-	slab_free(&test_cache, data2);
-
-	slab_cache_destroy(&test_cache);
-	(void)slab_alloc(&test_cache);
-	slab_dump_stats(&test_cache);
-
-	log_info(TESTING_FOOTER, "Slab Allocator");
-}
-
 /*******************************************************************************
 * Private Function Definitions
 *******************************************************************************/
@@ -918,177 +872,135 @@ static bool check_redzone(const void* obj_start, size_t size)
 }
 #endif
 
-/**
- * @brief Test for use-before-initialization in a slab cache.
- *
- * This function simulates a use-before-initialization scenario by accessing
- * an object from the slab cache before it is properly allocated. It ensures
- * that the slab cache's debugging mechanisms detect and report the corruption.
- *
- * The test performs the following steps:
- * 1. Ensures the cache has at least one slab by growing it if necessary.
- * 2. Accesses an object from the free stack and writes to it before allocation.
- * 3. Allocates the object using `slab_alloc` and reinserts it manually.
- * 4. Verifies that the slab is marked as corrupted due to the use-before-init.
- * 5. Resets the debug error flag for further tests.
- *
- * @param cache Pointer to the slab_cache to test.
- */
-static void test_use_before_alloc(struct slab_cache* cache)
+#define HELIOS_TESTS
+#if defined(HELIOS_TESTS)
+#include "kernel/ktest.h"
+
+#define SLAB_TEST_CACHE_INIT(name)                            \
+	struct slab_cache name = { 0 };                       \
+	do {                                                  \
+		int __res = slab_cache_init(&(name),          \
+					    "ktest",          \
+					    sizeof(uint64_t), \
+					    0,                \
+					    NULL,             \
+					    NULL);            \
+		if (__res < 0) return __res;                  \
+	} while (0)
+
+#if SLAB_DEBUG
+
+KTEST(test_slab_use_before_alloc)
 {
-	log_info("Testing use-before-init in slab cache");
-	if (list_empty(&cache->empty)) {
-		(void)slab_grow(cache); // Ensure we have at least one slab
+	SLAB_TEST_CACHE_INIT(cache);
+
+	if (list_empty(&cache.empty)) {
+		(void)slab_grow(&cache);
 	}
-	struct slab* slab = list_entry(cache->empty.next, struct slab, link);
-	kassert(slab->free_top > 0);
+	struct slab* slab = list_entry(cache.empty.next, struct slab, link);
 	void* poisoned_obj =
 		(void*)((uintptr_t)slab->free_stack[slab->free_top - 1]);
-
-	// simulate use-before-init:
 	((uint8_t*)poisoned_obj)[0] = 0xAA;
-	void* obj = slab_alloc(cache);
 
-	// reinsert manually for test
-	slab_free(cache, obj);
+	void* obj = slab_alloc(&cache);
+	slab_free(&cache, obj);
 
-	kassert(slab->debug_error == true,
-		"Slab should be marked as corrupted after use-before-init");
-	log_info("Use-before-init test passed.");
-	slab->debug_error = false; // Reset for further tests
+	int rc = slab->debug_error ? 0 : 1;
+	if (rc) log_error("Slab not marked corrupted after use-before-init");
+
+	slab_cache_purge_corrupt(&cache);
+	slab_cache_destroy(&cache);
+	return rc;
 }
 
-/**
- * @brief Test for buffer overflow detection in a slab cache.
- *
- * This function simulates a buffer overflow scenario by writing beyond the
- * allocated object's boundary into the redzone. It ensures that the slab
- * cache's debugging mechanisms detect and report the corruption.
- *
- * The test performs the following steps:
- * 1. Allocates an object from the slab cache.
- * 2. Writes past the end of the object into the redzone.
- * 3. Frees the object, expecting the slab cache to detect the overflow.
- * 4. Verifies that the slab is marked as corrupted due to the overflow.
- * 5. Resets the debug error flag for further tests.
- *
- * @param cache Pointer to the slab_cache to test.
- */
-static void test_buffer_overflow(struct slab_cache* cache)
+KTEST(test_slab_buffer_overflow)
 {
-	log_info("Testing buffer overflow detection in slab cache");
-	void* obj = slab_alloc(cache);
+	SLAB_TEST_CACHE_INIT(cache);
+
+	void* obj = slab_alloc(&cache);
 	struct slab* slab = slab_from_object(obj);
+	((uint8_t*)obj)[cache.object_size] = 0xAB;
+	slab_free(&cache, obj);
 
-	// Write past the end of the object (into redzone)
-	((uint8_t*)obj)[cache->object_size] = 0xAB;
+	int rc = slab->debug_error ? 0 : 1;
+	if (rc) log_error("Slab not marked corrupted after buffer overflow");
 
-	slab_free(cache, obj); // Should log "Overflow on freed object detected"
-
-	kassert(slab->debug_error == true,
-		"Slab should be marked as corrupted after overflow");
-	log_info("Buffer overflow test passed.");
-	slab->debug_error = false; // Reset for further tests
+	slab_cache_purge_corrupt(&cache);
+	slab_cache_destroy(&cache);
+	return rc;
 }
 
-/**
- * @brief Test for buffer underflow detection in a slab cache.
- *
- * This function simulates a buffer underflow scenario by writing before the
- * allocated object's boundary into the redzone. It ensures that the slab
- * cache's debugging mechanisms detect and report the corruption.
- *
- * The test performs the following steps:
- * 1. Allocates an object from the slab cache.
- * 2. Writes just before the start of the object into the redzone.
- * 3. Frees the object, expecting the slab cache to detect the underflow.
- * 4. Verifies that the slab is marked as corrupted due to the underflow.
- * 5. Resets the debug error flag for further tests.
- *
- * @param cache Pointer to the slab_cache to test.
- */
-static void test_buffer_underflow(struct slab_cache* cache)
+KTEST(test_slab_buffer_underflow)
 {
-	log_info("Testing buffer underflow detection in slab cache");
-	void* obj = slab_alloc(cache);
-	struct slab* slab = slab_from_object(obj);
+	SLAB_TEST_CACHE_INIT(cache);
 
-	// Write just before the object (into the redzone)
+	void* obj = slab_alloc(&cache);
+	struct slab* slab = slab_from_object(obj);
 	((uint8_t*)obj)[-1] = 0xBA;
+	slab_free(&cache, obj);
 
-	slab_free(cache,
-		  obj); // Should log "Underflow on freed object detected"
+	int rc = slab->debug_error ? 0 : 1;
+	if (rc) log_error("Slab not marked corrupted after buffer underflow");
 
-	kassert(slab->debug_error == true,
-		"Slab should be marked as corrupted after underflow");
-	log_info("Buffer underflow test passed.");
-	slab->debug_error = false; // Reset for further tests
+	slab_cache_purge_corrupt(&cache);
+	slab_cache_destroy(&cache);
+	return rc;
 }
 
-/**
- * @brief Test valid usage of a slab cache.
- *
- * This function verifies that the slab cache operates correctly under normal
- * usage conditions. It allocates an object, performs valid operations on it,
- * and then frees it. The test ensures that no warnings or errors are triggered
- * and that the slab is not marked as corrupted.
- *
- * The test performs the following steps:
- * 1. Allocates an object from the slab cache.
- * 2. Writes to the object within its allocated bounds.
- * 3. Frees the object back to the slab cache.
- * 4. Verifies that the slab is not marked as corrupted.
- *
- * @param cache Pointer to the slab_cache to test.
- */
-static void test_valid_usage(struct slab_cache* cache)
+KTEST(test_slab_valid_usage)
 {
-	log_info("Testing valid usage of slab cache");
-	void* obj = slab_alloc(cache);
+	SLAB_TEST_CACHE_INIT(cache);
+
+	void* obj = slab_alloc(&cache);
 	struct slab* slab = slab_from_object(obj);
-	memset(obj, 0, cache->object_size); // Legal usage
+	memset(obj, 0, cache.object_size);
+	slab_free(&cache, obj);
 
-	slab_free(cache, obj); // Should not trigger any warnings or logs
-	kassert(slab->debug_error == false,
-		"Slab should not be marked as corrupted after valid usage");
-	log_info("Valid usage test passed.");
+	int rc = slab->debug_error ? 1 : 0;
+	if (rc) log_error("Slab marked corrupted after valid usage");
+
+	slab_cache_destroy(&cache);
+	return rc;
 }
 
-/**
- * @brief Test object alignment in a slab cache.
- *
- * This function verifies that all objects allocated from the slab cache are
- * properly aligned according to the cache's specified alignment. It allocates
- * multiple objects, checks their alignment, and logs any misaligned objects.
- * If a misalignment is detected, the function triggers an assertion failure.
- *
- * The test performs the following steps:
- * 1. Allocates 32 objects from the slab cache.
- * 2. Checks the alignment of each object's address.
- * 3. Logs an error and asserts if any object is not properly aligned.
- * 4. Frees each allocated object back to the slab cache.
- * 5. Logs a success message if all objects are properly aligned.
- *
- * @param cache Pointer to the slab_cache to test.
- */
-static void test_object_alignment(struct slab_cache* cache)
+#endif // SLAB_DEBUG
+
+KTEST(test_slab_object_alignment)
 {
-	log_info("Testing object alignment in slab cache");
+	SLAB_TEST_CACHE_INIT(cache);
+	int rc = 0;
 
 	for (size_t i = 0; i < 32; i++) {
-		void* obj = slab_alloc(cache);
-		uintptr_t addr = (uintptr_t)obj;
-
-		if (addr % cache->object_align != 0) {
-			log_error("Object at %p is not aligned to %lu",
+		void* obj = slab_alloc(&cache);
+		if ((uintptr_t)obj % cache.object_align != 0) {
+			log_error("Object at %p not aligned to %lu",
 				  obj,
-				  cache->object_align);
-			kassert(false, "Slab object is not properly aligned");
+				  cache.object_align);
+			rc = 1;
 		}
-
-		slab_free(cache, obj);
+		slab_free(&cache, obj);
 	}
 
-	log_info("Object alignment test passed for alignment=%lu",
-		 cache->object_align);
+	slab_cache_destroy(&cache);
+	return rc;
 }
+
+KTEST(test_slab_alloc_free)
+{
+	SLAB_TEST_CACHE_INIT(cache);
+
+	uint64_t* a = slab_alloc(&cache);
+	uint64_t* b = slab_alloc(&cache);
+	*a = 12345;
+	*b = 54321;
+
+	int rc = (*a == 12345 && *b == 54321) ? 0 : 1;
+	if (rc) log_error("Values corrupted after write: a=%lu b=%lu", *a, *b);
+
+	slab_free(&cache, a);
+	slab_free(&cache, b);
+	slab_cache_destroy(&cache);
+	return rc;
+}
+
+#endif // HELIOS_TESTS

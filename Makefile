@@ -144,7 +144,7 @@ TEST_TIMEOUT ?= 60
 
 .PHONY: test test-iso
 test-iso:
-	@$(MAKE) iso CPPFLAGS_TESTS=-DHELIOS_TESTS
+	@$(MAKE) iso CPPFLAGS_TESTS="-DHELIOS_TESTS -DSLAB_DEBUG"
 
 test: ovmf test-iso
 	@echo "Running kernel tests in QEMU..."
