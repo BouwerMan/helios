@@ -5,6 +5,8 @@
 #include <mm/mmap.h>
 #include <mm/page_alloc.h>
 
+// TODO: Figure out a way to propagate errors instead of just nullptr
+
 static inline void* choose_base_addr(void* addr)
 {
 	if (!addr) {
@@ -68,7 +70,20 @@ void* mmap_sys(void* addr,
 		return nullptr; // -EBADF
 	}
 
-	addr = choose_base_addr(addr);
+	if (file->fops && file->fops->mmap) {
+		addr = choose_base_addr(addr);
+		int res = file->fops->mmap(file,
+					   addr,
+					   length,
+					   prot,
+					   flags,
+					   offset);
+		if (res < 0) {
+			log_error("mmap failed: %d", res);
+			return nullptr;
+		}
+		return addr;
+	}
 
 	kunimpl("File-backed mmap");
 
