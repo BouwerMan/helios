@@ -15,8 +15,8 @@ export PATH="$PREFIX/bin:$PATH"
 SRCDIR="$PREFIX/src"
 
 # Define versions for the tools to be built.
-BINUTILS_VERSION=binutils-2.45
-GCC_VERSION=gcc-15.2.0
+BINUTILS_VERSION=binutils-2.46
+GCC_VERSION=gcc-16.1.0
 
 # Set to true to build the C++ compiler, false for C only.
 BUILD_CXX=false
@@ -56,7 +56,7 @@ build_binutils() {
 	local source_dir="$SRCDIR/$BINUTILS_VERSION"
 	local build_dir="$SRCDIR/build-binutils"
 	local branch_name="${BINUTILS_VERSION//./_}-branch"
-	local repo_url="https://sourceware.org/git/binutils-gdb.git"
+	local repo_url="git://sourceware.org/git/binutils-gdb.git"
 
 	# Get or Update Source Code
 	if [ -d "$source_dir" ]; then
