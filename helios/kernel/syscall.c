@@ -276,7 +276,7 @@ _Static_assert(SYSCALL_COUNT == SYS_SYSCALL_COUNT, "SYSCALL_COUNT mismatch");
 
 void syscall_handler(struct registers* r)
 {
-	if (r->rax > SYSCALL_COUNT) return;
+	if (r->rax >= SYSCALL_COUNT) return;
 	sys_handler_t func = syscall_handlers[r->rax];
 	if (func) {
 		struct task* task = get_current_task();
