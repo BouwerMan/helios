@@ -291,7 +291,6 @@ int map_region(struct address_space* vas,
 	if (!mr) {
 		return -ENOMEM;
 	}
-
 	mr->is_private = want_priv;
 
 	if (flags & MAP_ANONYMOUS) {
@@ -315,6 +314,47 @@ int map_region(struct address_space* vas,
 
 	add_region(vas, mr);
 
+	return 0;
+}
+
+int map_device_region(struct address_space* vas,
+		      uptr start,
+		      uptr end,
+		      paddr_t paddr,
+		      unsigned long prot,
+		      unsigned long flags)
+{
+	log_debug("Mapping region: %lx - %lx, prot: %lx, flags: %lx",
+		  start,
+		  end,
+		  prot,
+		  flags);
+
+	if (!is_page_aligned(start) || !is_page_aligned(end) || start >= end) {
+		return -EINVAL;
+	}
+
+	bool want_priv = !!(flags & MAP_PRIVATE);
+	if (want_priv) {
+		log_debug("Devices cannot be mapped as private");
+		return -EINVAL;
+	}
+
+	bool want_shared = !!(flags & MAP_SHARED);
+	if (want_shared) {
+		log_debug("Devices must be shared");
+		return -EINVAL;
+	}
+
+	struct memory_region* mr = alloc_mem_region(start, end, prot, flags);
+	if (!mr) {
+		return -ENOMEM;
+	}
+
+	mr->kind = MR_DEVICE;
+	mr->dev.paddr = paddr;
+
+	add_region(vas, mr);
 	return 0;
 }
 

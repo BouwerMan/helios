@@ -21,3 +21,4 @@ tools/
 compile_commands.json
 
 ovmf/
+issues/

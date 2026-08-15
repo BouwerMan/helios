@@ -63,6 +63,14 @@ struct mr_anon {
 };
 
 /**
+ * struct mr_device - Device-backed bookeeping.
+ * paddr: physical base of the device region
+ */
+struct mr_device {
+	paddr_t paddr;
+};
+
+/**
  * struct memory_region - Represents a virtual memory area (VMA).
  *
  * Semantics for ELF segments:
@@ -93,12 +101,13 @@ struct memory_region {
 	bool is_private;     /* True for MAP_PRIVATE → CoW on first write. */
 
 	union {
-		struct mr_file file; /* Valid when kind == MR_FILE */
-		struct mr_anon anon; /* Valid when kind == MR_ANON */
+		struct mr_file file;  /* Valid when kind == MR_FILE */
+		struct mr_anon anon;  /* Valid when kind == MR_ANON */
+		struct mr_device dev; /* Valid when kind == MR_DEVICE */
 	};
 
-	struct address_space* owner; /* Owning address space. */
-	struct list_head list;	     /* Link in address_space::mr_list. */
+	struct address_space* owner;  /* Owning address space. */
+	struct list_head list;	      /* Link in address_space::mr_list. */
 };
 
 static inline bool is_within_region(struct memory_region* mr, vaddr_t vaddr)
@@ -150,5 +159,12 @@ int map_region(struct address_space* vas,
 	       uptr end,
 	       unsigned long prot,
 	       unsigned long flags);
+
+int map_device_region(struct address_space* vas,
+		      uptr start,
+		      uptr end,
+		      paddr_t paddr,
+		      unsigned long prot,
+		      unsigned long flags);
 
 struct address_space* alloc_address_space();

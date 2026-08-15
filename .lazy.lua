@@ -1,3 +1,4 @@
+vim.g.root_spec = { "cwd" }
 vim.opt.tabstop = 8
 vim.opt.shiftwidth = 8
 
