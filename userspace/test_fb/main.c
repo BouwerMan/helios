@@ -1,4 +1,3 @@
-#include <errno.h>
 #include <fcntl.h>
 #include <helios/fb.h>
 #include <stdio.h>
@@ -7,10 +6,6 @@
 
 int main(void)
 {
-	int ok = 1;
-
-	// ENOTTY: open something real that has no .ioctl handler.
-	// "/" is guaranteed to exist and isn't a chardev.
 	int fd = open("/dev/fb", O_RDONLY);
 	if (fd < 0) {
 		perror("open");
@@ -35,5 +30,5 @@ int main(void)
 
 	close(fd);
 
-	return ok ? 0 : 1;
+	return 0;
 }
