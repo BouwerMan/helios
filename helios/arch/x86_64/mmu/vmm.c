@@ -1642,50 +1642,108 @@ static void page_fault_fail(struct registers* r)
  */
 KTEST(test_prune_single_mapping)
 {
-	// 1. Allocate a fresh address space
-	uint64_t* pml4 = _alloc_page_table(AF_KERNEL);
+	int rc = 1;
 
-	// 2. Choose a test virtual address and physical page
+	uint64_t* pml4 = _alloc_page_table(AF_KERNEL);
+	KTEST_ASSERT_NE(pml4, nullptr);
+
 	uintptr_t vaddr = 0x00007FFFFFFFE000; // Arbitrary, canonical, aligned
-	uintptr_t paddr = (uintptr_t)HHDM_TO_PHYS(get_free_page(AF_KERNEL));
+	void* page = get_free_page(AF_KERNEL);
+	KTEST_ASSERT_NE_GOTO(page, nullptr, err_free_table);
+	uintptr_t paddr = (uintptr_t)HHDM_TO_PHYS(page);
 
 	log_info("Mapping page: virt=0x%lx -> phys=0x%lx", vaddr, paddr);
-	int result = vmm_map_page((pgd_t*)pml4,
-				  vaddr,
-				  paddr,
-				  PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK);
-	if (result != 0) {
-		log_error("Failed to map test page");
-		_free_page_table(pml4);
-		return 1;
-	}
+	KTEST_ASSERT_EQ_GOTO(vmm_map_page((pgd_t*)pml4,
+					  vaddr,
+					  paddr,
+					  PAGE_PRESENT | PAGE_WRITE |
+						  CACHE_WRITE_BACK),
+			     0,
+			     err_free_table);
 
-	// 3. Unmap the virtual address
 	log_info("Unmapping page: 0x%lx", vaddr);
-	result = vmm_unmap_page((pgd_t*)pml4, vaddr);
-	if (result != 0) {
-		log_error("Failed to unmap test page");
-		free_page((void*)PHYS_TO_HHDM(paddr));
-		_free_page_table(pml4);
-		return 1;
-	}
+	KTEST_ASSERT_EQ_GOTO(vmm_unmap_page((pgd_t*)pml4, vaddr),
+			     0,
+			     err_free_page);
 
-	// 4. Prune page tables
 	log_info("Pruning page tables for vaddr 0x%lx", vaddr);
 	prune_page_tables(pml4, vaddr);
 
-	// 5. Verify that the PML4 entry is now 0
 	size_t pml4_i = get_table_index(0, vaddr);
-	int rc = 0;
-	if (pml4[pml4_i] == 0) {
-		log_info("PML4 entry cleared — pruning successful");
-	} else {
-		log_error("PML4 entry still set: 0x%lx", pml4[pml4_i]);
-		rc = 1;
-	}
+	KTEST_ASSERT_EQ_GOTO(pml4[pml4_i], 0, err_free_page);
+	log_info("PML4 entry cleared: pruning successful");
 
-	// 6. Cleanup
+	rc = 0;
+
+err_free_page:
 	free_page((void*)PHYS_TO_HHDM(paddr));
+err_free_table:
+	_free_page_table(pml4);
+	return rc;
+}
+
+KTEST(test_device_region_unmap_no_page_touch)
+{
+	int rc = 1;
+	uint64_t* pml4 = _alloc_page_table(AF_KERNEL);
+	KTEST_ASSERT_NE(pml4, nullptr);
+
+	struct address_space vas = { 0 };
+	list_init(&vas.mr_list);
+	rwsem_init(&vas.vma_lock);
+	spin_init(&vas.pgt_lock);
+	vas_set_pml4(&vas, (pgd_t*)pml4);
+
+	void* page_va = get_free_page(AF_KERNEL);
+	KTEST_ASSERT_NE_GOTO(page_va, nullptr, err_free_table);
+
+	uintptr_t paddr = (uintptr_t)HHDM_TO_PHYS(page_va);
+	struct page* pg = phys_to_page(paddr);
+	int ref_before = atomic_read(&pg->ref_count);
+
+	uintptr_t vaddr = 0x00007FFFFFFFE000;
+	KTEST_ASSERT_EQ_GOTO(map_device_region(&vas,
+					       vaddr,
+					       vaddr + PAGE_SIZE,
+					       paddr,
+					       PROT_READ | PROT_WRITE,
+					       MAP_SHARED),
+			     0,
+			     err_free_page);
+
+	struct memory_region* mr = get_region(&vas, vaddr);
+	KTEST_ASSERT_NE_GOTO(mr, nullptr, err_free_page);
+
+	pte_t* pte = walk_page_table((pgd_t*)pml4, vaddr, false, 0);
+	KTEST_ASSERT_NE_GOTO(pte, nullptr, err_unmap);
+	KTEST_ASSERT_EQ_GOTO(pte->pte & PAGE_PRESENT, PAGE_PRESENT, err_unmap);
+	KTEST_ASSERT_EQ_GOTO(pte->pte & (PTE_PAT | PAGE_PWT),
+			     (PTE_PAT | PAGE_PWT),
+			     err_unmap);
+	KTEST_ASSERT_EQ_GOTO(pte->pte & PAGE_NO_EXECUTE,
+			     PAGE_NO_EXECUTE,
+			     err_unmap);
+	KTEST_ASSERT_EQ_GOTO(atomic_read(&pg->ref_count),
+			     ref_before,
+			     err_unmap);
+
+	unmap_region(&vas, mr);
+
+	pte = walk_page_table((pgd_t*)pml4, vaddr, false, 0);
+	KTEST_ASSERT_TRUE_GOTO(!pte || !(pte->pte & PAGE_PRESENT),
+			       err_free_page);
+	KTEST_ASSERT_EQ_GOTO(atomic_read(&pg->ref_count),
+			     ref_before,
+			     err_free_page);
+
+	rc = 0;
+	goto err_free_page;
+
+err_unmap:
+	unmap_region(&vas, mr);
+err_free_page:
+	free_page(page_va);
+err_free_table:
 	_free_page_table(pml4);
 	return rc;
 }

@@ -94,12 +94,7 @@ void ktest_run_all()
 	qemu_exit(failed ? QEMU_EXIT_FAILURE : QEMU_EXIT_SUCCESS);
 }
 
-static int test_ktest_self(void);
-[[gnu ::used, gnu ::section(".ktests")]] static const struct ktest
-	__ktest_desc_test_ktest_self = { .name = "test_ktest_self",
-					 .fn = (test_ktest_self),
-					 .flags = (0) };
-static int test_ktest_self(void)
+KTEST(test_ktest_self)
 {
 	return 0;
 }
