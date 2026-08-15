@@ -12,6 +12,6 @@ int __ioctl(int fd, unsigned long request, void* arg)
 		return -1;
 	}
 
-	return 0;
+	return (int)ret;
 }
 weak_alias(__ioctl, ioctl);
