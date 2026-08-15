@@ -562,15 +562,10 @@ clean:
  * @dest_vas: Destination address space (child)
  * @src_mr:   Source region in its owner address space (parent)
  * Return: 0 or -errno (-ENOTSUP for devices, -ENOMEM on alloc failure)
- * Context: May sleep. Locks: caller must hold @dest_vas->vma_lock and
- *          @src_mr->owner->vma_lock (read is sufficient for both) for the
- *          whole call; internally uses page-table locks around walks/updates.
- *          This function has exactly one caller (address_space_dup(), which
- *          walks src_vas->mr_list under its own vma_lock read for the whole
- *          loop). It does not take @vma_lock itself, because doing so on
- *          every iteration while the caller also holds it would be a
- *          recursive read acquisition, which is not guaranteed deadlock-safe
- *          against a writer queued in between.
+ * Context: May sleep. Locks: caller must hold @src_mr->owner->vma_lock
+ *          (read). @dest_vas->vma_lock is not held during this call — safe
+ *          only because @dest_vas isn't visible to any other task yet; if
+ *          that ever changes, this needs @dest_vas->vma_lock too.
  * Notes: Present pages are mapped into @dest_vas. For private regions, clears
  *        PAGE_WRITE in both parent and child to arm COW. Non-present pages are
  *        skipped (handled by demand paging later).
