@@ -7,12 +7,14 @@
 #include <drivers/ata/partition.h>
 #include <kernel/semaphores.h>
 #include <kernel/types.h>
+#include <kernel/uaccess.h>
 #include <lib/hashtable.h>
 #include <mm/page.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <uapi/helios/dirent.h>
+#include <uapi/helios/fcntl.h>
 
 static constexpr size_t FS_TYPE_LEN = 8;
 static constexpr size_t VFS_MAX_NAME = 255; // Not including null terminator
@@ -63,23 +65,6 @@ enum VFS_PERMS {
 	VFS_PERM_GALL = VFS_PERM_GR | VFS_PERM_GW | VFS_PERM_GX,
 	VFS_PERM_OALL = VFS_PERM_OR | VFS_PERM_OW | VFS_PERM_OX,
 	VFS_PERM_ALL = VFS_PERM_UALL | VFS_PERM_GALL | VFS_PERM_OALL
-};
-
-enum VFS_OPEN_FLAGS {
-	O_RDONLY = 0x0000,    ///< Open for reading only
-	O_WRONLY = 0x0001,    ///< Open for writing only
-	O_RDWR = 0x0002,      ///< Open for reading and writing
-	O_ACCMODE = 0x0003,   ///< Mask for access mode (internal use)
-
-	O_APPEND = 0x0004,    ///< Writes append to the end of file
-	O_CREAT = 0x0008,     ///< Create file if it does not exist
-	O_TRUNC = 0x0010,     ///< Truncate file to zero length if it exists
-	O_EXCL = 0x0020,      ///< Error if O_CREAT and file exists
-
-	O_DIRECTORY = 0x0040, ///< Fail if the path is not a directory
-	O_NOFOLLOW = 0x0080, ///< Do not follow symlinks (when you support them)
-
-	O_CLOEXEC = 0x0100,  ///< Set close-on-exec (if you do exec)
 };
 
 #ifndef SEEK_SET
@@ -167,7 +152,9 @@ struct file_ops {
 		       struct dirent* dirent,
 		       off_t offset);
 
-	int (*ioctl)(struct vfs_file* file, unsigned long, void*);
+	int (*ioctl)(struct vfs_file* file,
+		     unsigned long request,
+		     void __user* arg);
 
 	short (*poll)(struct vfs_file* file);
 

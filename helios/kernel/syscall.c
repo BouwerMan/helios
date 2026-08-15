@@ -28,6 +28,7 @@
 #include "kernel/syscall.h"
 #include "kernel/tasks/fork.h"
 #include "kernel/tasks/scheduler.h"
+#include "kernel/uaccess.h"
 #include "lib/log.h"
 #include "mm/kmalloc.h"
 #include "mm/mmap.h"
@@ -36,6 +37,27 @@
 static inline void SYSRET(struct registers* r, u64 val)
 {
 	r->rax = val; // Set the return value
+}
+
+// Linux syscall calling convention: arg1-3 in rdi/rsi/rdx. (arg4-6 would be
+// r10/r8/r9 - r10 instead of rcx, which the syscall instruction clobbers
+// with the return RIP - add SYSARG4-6 here if a syscall needs them.)
+[[gnu::always_inline]]
+static inline u64 SYSARG1(struct registers* r)
+{
+	return r->rdi;
+}
+
+[[gnu::always_inline]]
+static inline u64 SYSARG2(struct registers* r)
+{
+	return r->rsi;
+}
+
+[[gnu::always_inline]]
+static inline u64 SYSARG3(struct registers* r)
+{
+	return r->rdx;
 }
 
 long sys_read(struct registers* r)
@@ -222,6 +244,24 @@ long sys_getdents(struct registers* r)
 	return vfs_getdents(dir, dirp, count);
 }
 
+long sys_ioctl(struct registers* r)
+{
+	int fd = (int)SYSARG1(r);
+	unsigned long request = (unsigned long)SYSARG2(r);
+	void __user* arg = (void*)SYSARG3(r);
+
+	struct vfs_file* file = get_file(fd);
+	if (!file) {
+		return -EBADF;
+	}
+
+	if (!file->fops || !file->fops->ioctl) {
+		return -ENOTTY;
+	}
+
+	return file->fops->ioctl(file, request, arg);
+}
+
 long sys_open(struct registers* r)
 {
 	const char* path = (const char*)r->rdi;
@@ -260,18 +300,18 @@ long sys_shutdown(struct registers* r)
 
 typedef long (*sys_handler_t)(struct registers* r);
 static const sys_handler_t syscall_handlers[] = {
-	[SYS_READ] = sys_read,	     [SYS_WRITE] = sys_write,
-	[SYS_MMAP] = sys_mmap,	     [SYS_EXIT] = sys_exit,
-	[SYS_WAITPID] = sys_waitpid, [SYS_FORK] = sys_fork,
-	[SYS_GETPID] = sys_getpid,   [SYS_GETPPID] = sys_getppid,
-	[SYS_EXEC] = sys_exec,	     [SYS_GETCWD] = sys_getcwd,
-	[SYS_CHDIR] = sys_chdir,     [SYS_GETDENTS] = sys_getdents,
-	[SYS_OPEN] = sys_open,	     [SYS_CLOSE] = sys_close,
-	[SYS_ACCESS] = sys_access,   [SYS_SHUTDOWN] = sys_shutdown,
+	[SYS_READ] = sys_read,	       [SYS_WRITE] = sys_write,
+	[SYS_MMAP] = sys_mmap,	       [SYS_EXIT] = sys_exit,
+	[SYS_WAITPID] = sys_waitpid,   [SYS_FORK] = sys_fork,
+	[SYS_GETPID] = sys_getpid,     [SYS_GETPPID] = sys_getppid,
+	[SYS_EXEC] = sys_exec,	       [SYS_GETCWD] = sys_getcwd,
+	[SYS_CHDIR] = sys_chdir,       [SYS_GETDENTS] = sys_getdents,
+	[SYS_IOCTL] = sys_ioctl,       [SYS_OPEN] = sys_open,
+	[SYS_CLOSE] = sys_close,       [SYS_ACCESS] = sys_access,
+	[SYS_SHUTDOWN] = sys_shutdown,
 };
 
-static constexpr int SYSCALL_COUNT =
-	sizeof(syscall_handlers) / sizeof(syscall_handlers[0]);
+static constexpr int SYSCALL_COUNT = ARRAY_SIZE(syscall_handlers);
 _Static_assert(SYSCALL_COUNT == SYS_SYSCALL_COUNT, "SYSCALL_COUNT mismatch");
 
 void syscall_handler(struct registers* r)
