@@ -133,6 +133,7 @@ uint64_t* vmm_create_address_space(void);
 
 /* Region operations */
 int vmm_map_anon_region(struct address_space* vas, struct memory_region* mr);
+int vmm_map_device_region(struct address_space* vas, struct memory_region* mr);
 int vmm_fork_region(struct address_space* dest_vas,
 		    struct memory_region* src_mr);
 int vmm_unmap_region(struct address_space* vas, struct memory_region* mr);

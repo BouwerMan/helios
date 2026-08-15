@@ -17,12 +17,14 @@ static inline void VAS_DUMP(struct address_space* vas)
 
 	struct memory_region* mr;
 	list_for_each_entry (mr, &vas->mr_list, list) {
-		const char* kind = (mr->kind == MR_FILE) ? "FILE" :
-				   (mr->kind == MR_ANON) ? "ANON" :
-							   "DEVICE";
+		const char* kind = (mr->kind == MR_FILE)   ? "FILE" :
+				   (mr->kind == MR_ANON)   ? "ANON" :
+				   (mr->kind == MR_DEVICE) ? "DEVICE" :
+							     "UNKNOWN";
 		const char* share = mr->is_private ? "priv" : "shared";
 
-		if (mr->kind == MR_FILE) {
+		switch (mr->kind) {
+		case MR_FILE:
 			log_debug(
 				"0x%016lx | 0x%016lx | 0x%04lx | 0x%04lx | %-6s | %-6s | "
 				"inode=%p off=[0x%lx..0x%lx) pgoff=%zu delta=%u",
@@ -37,7 +39,8 @@ static inline void VAS_DUMP(struct address_space* vas)
 				(unsigned long)mr->file.file_hi,
 				(size_t)mr->file.pgoff,
 				(unsigned)mr->file.delta);
-		} else if (mr->kind == MR_ANON) {
+			break;
+		case MR_ANON:
 			log_debug(
 				"0x%016lx | 0x%016lx | 0x%04lx | 0x%04lx | %-6s | %-6s | tag=%u",
 				(unsigned long)mr->start,
@@ -47,15 +50,28 @@ static inline void VAS_DUMP(struct address_space* vas)
 				kind,
 				share,
 				(unsigned)mr->anon.tag);
-		} else {
+			break;
+		case MR_DEVICE:
 			log_debug(
-				"0x%016lx | 0x%016lx | 0x%04lx | 0x%04lx | %-6s | %-6s | (device)",
+				"0x%016lx | 0x%016lx | 0x%04lx | 0x%04lx | %-6s | %-6s | paddr=0x%016lx",
+				(unsigned long)mr->start,
+				(unsigned long)mr->end,
+				(unsigned long)mr->prot,
+				(unsigned long)mr->flags,
+				kind,
+				share,
+				(unsigned long)mr->dev.paddr);
+			break;
+		default:
+			log_debug(
+				"0x%016lx | 0x%016lx | 0x%04lx | 0x%04lx | %-6s | %-6s | UNKNOWN",
 				(unsigned long)mr->start,
 				(unsigned long)mr->end,
 				(unsigned long)mr->prot,
 				(unsigned long)mr->flags,
 				kind,
 				share);
+			break;
 		}
 	}
 }
