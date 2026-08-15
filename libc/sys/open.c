@@ -1,9 +1,9 @@
 #include "arch/syscall.h"
 #include "errno.h"
+#include "internal/fcntl.h"
 #include "internal/features.h"
-#include "internal/sys/stat.h"
 
-#include <sys/stat.h>
+#include <fcntl.h>
 
 // TODO: Support mode argument
 int __open(const char* path, int oflag, ...)
