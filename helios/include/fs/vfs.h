@@ -7,6 +7,7 @@
 #include <drivers/ata/partition.h>
 #include <kernel/semaphores.h>
 #include <kernel/types.h>
+#include <kernel/uaccess.h>
 #include <lib/hashtable.h>
 #include <mm/page.h>
 #include <stdbool.h>
@@ -167,7 +168,9 @@ struct file_ops {
 		       struct dirent* dirent,
 		       off_t offset);
 
-	int (*ioctl)(struct vfs_file* file, unsigned long, void*);
+	int (*ioctl)(struct vfs_file* file,
+		     unsigned long request,
+		     void __user* arg);
 
 	short (*poll)(struct vfs_file* file);
 
