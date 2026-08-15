@@ -3,20 +3,9 @@
 
 #include "drivers/device.h"
 #include "kernel/semaphores.h"
+#include "kernel/uaccess.h"
 
-// Not sure what I actually support, but oh well
-enum fb_format {
-	FB_FMT_XRGB8888 = 0, // 32bpp, little-endian, X R G B
-};
-
-/* Capabilities bitmask for feature discovery. */
-enum fb_caps {
-	FB_CAP_MMAP = 1u << 0,	     // supports mmap of VRAM
-	FB_CAP_PAN = 1u << 1,	     // y/x panning or buffer index
-	FB_CAP_VBLANK_IRQ = 1u << 2, // can wait for vsync/poll
-	FB_CAP_SET_MODE = 1u << 3,   // can change resolution/format
-	FB_CAP_FLUSH_RECT = 1u << 4, // needs/accepts explicit flush
-};
+#include <uapi/helios/fb.h>
 
 struct fb_device {
 	u32 width; // visible pixels
@@ -39,6 +28,8 @@ struct fb_device {
 void fb_init();
 
 ssize_t fb_write(struct vfs_file* file,
-		 const char* buffer,
+		 const char __user* buffer,
 		 size_t count,
 		 off_t* offset);
+
+int fb_ioctl(struct vfs_file* file, unsigned long request, void __user* arg);
