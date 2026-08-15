@@ -375,8 +375,14 @@ int map_device_region(struct address_space* vas,
 	}
 
 	bool want_shared = !!(flags & MAP_SHARED);
-	if (want_shared) {
+	if (!want_shared) {
 		log_debug("Devices must be shared");
+		return -EINVAL;
+	}
+
+	bool want_exec = !!(prot & PROT_EXEC);
+	if (want_exec) {
+		log_debug("Devices are not executable");
 		return -EINVAL;
 	}
 
@@ -392,16 +398,14 @@ int map_device_region(struct address_space* vas,
 	add_region(vas, mr);
 	up_write(&vas->vma_lock);
 
-	// TODO: Add vmm_map_device_region
-
-	// int err = vmm_map_device_region(vas, mr);
-	// if (err < 0) {
-	// 	down_write(&vas->vma_lock);
-	// 	remove_region(mr);
-	// 	up_write(&vas->vma_lock);
-	// 	destroy_mem_region(mr);
-	// 	return err;
-	// }
+	int err = vmm_map_device_region(vas, mr);
+	if (err < 0) {
+		down_write(&vas->vma_lock);
+		remove_region(mr);
+		up_write(&vas->vma_lock);
+		destroy_mem_region(mr);
+		return err;
+	}
 
 	return 0;
 }

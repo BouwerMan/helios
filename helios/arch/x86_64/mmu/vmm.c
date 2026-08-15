@@ -498,6 +498,13 @@ clean:
 	return err;
 }
 
+/**
+ * vmm_map_device_region - Map a region for MMIO
+ * @vas: Target address space
+ * @mr:  Region with [start,end) and protections
+ * Return: 0 or -errno
+ * Context: May sleep. Locks: acquires @vas->vma_lock (read) and @vas->pgt_lock.
+ */
 int vmm_map_device_region(struct address_space* vas, struct memory_region* mr)
 {
 	if (!vas || !mr) {
@@ -505,7 +512,49 @@ int vmm_map_device_region(struct address_space* vas, struct memory_region* mr)
 	}
 
 	kassert(mr->kind == MR_DEVICE);
-	return -ENOTSUP;
+
+	int err = 0;
+
+	vaddr_t v = mr->start;
+	paddr_t p = mr->dev.paddr;
+	for (; v < mr->end; v += PAGE_SIZE, p += PAGE_SIZE) {
+		down_read(&vas->vma_lock);
+		// Make sure things aren't shifting around on us
+		if (!is_within_region(mr, v)) {
+			up_read(&vas->vma_lock);
+			log_error(
+				"virtual address moved outside of memory region");
+			err = -EFAULT;
+			goto clean;
+		}
+
+		flags_t flags = flags_from_mr(mr) | CACHE_WRITE_COMBINING;
+		kassert(flags & PAGE_NO_EXECUTE);
+
+		unsigned long irqf;
+		spin_lock_irqsave(&vas->pgt_lock, &irqf);
+
+		vmm_map_frame_alias(vas->pml4, v, p, flags);
+
+		spin_unlock_irqrestore(&vas->pgt_lock, irqf);
+		up_read(&vas->vma_lock);
+	}
+
+	return 0;
+
+clean:
+	for (vaddr_t u = mr->start; u < v; u += PAGE_SIZE) {
+		unsigned long spinflags;
+		spin_lock_irqsave(&vas->pgt_lock, &spinflags);
+		pte_t* pte = walk_page_table(vas->pml4, u, false, 0);
+
+		if (pte && pte->pte & PAGE_PRESENT) {
+			pte->pte = 0;
+			invalidate(u);
+		}
+		spin_unlock_irqrestore(&vas->pgt_lock, spinflags);
+	}
+	return err;
 }
 
 /**
@@ -648,13 +697,26 @@ int vmm_unmap_region(struct address_space* vas, struct memory_region* mr)
 	for (vaddr_t v = mr->start; v < mr->end; v += PAGE_SIZE) {
 		unsigned long spinflags;
 		spin_lock_irqsave(&vas->pgt_lock, &spinflags);
-		int err = vmm_unmap_page(vas->pml4, v);
-		spin_unlock_irqrestore(&vas->pgt_lock, spinflags);
 
-		if (err < 0) {
-			up_read(&vas->vma_lock);
-			return err;
+		// If it is a device we just need to clear the PTE, otherwise
+		// we have to do all the funny ref count managing that
+		// vmm_unmap_page does
+		if (mr->kind == MR_DEVICE) {
+			pte_t* pte = walk_page_table(vas->pml4, v, false, 0);
+			if (pte && pte->pte & PAGE_PRESENT) {
+				pte->pte = 0;
+				invalidate(v);
+			}
+		} else {
+			int err = vmm_unmap_page(vas->pml4, v);
+			if (err < 0) {
+				spin_unlock_irqrestore(&vas->pgt_lock,
+						       spinflags);
+				up_read(&vas->vma_lock);
+				return err;
+			}
 		}
+		spin_unlock_irqrestore(&vas->pgt_lock, spinflags);
 	}
 
 	up_read(&vas->vma_lock);
