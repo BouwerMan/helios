@@ -51,7 +51,7 @@ static struct file_ops devfs_fops = {
 	.readdir = devfs_readdir,
 };
 
-static struct sb_ops devfs_sb_ops = {};
+static struct sb_ops devfs_sb_ops = { };
 
 /*******************************************************************************
  * Private Function Prototypes
@@ -471,7 +471,6 @@ int devnode_open(struct vfs_inode* inode, struct vfs_file* file)
 		return rc;
 	}
 
-	inode->fops = fops;
 	file->fops = fops;
 	file->private_data = drv;
 

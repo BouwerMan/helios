@@ -144,7 +144,7 @@ struct file_ops {
 			size_t count,
 			off_t* offset);
 	ssize_t (*write)(struct vfs_file* file,
-			 const char* buffer,
+			 const char __user* buffer,
 			 size_t count,
 			 off_t* offset);
 

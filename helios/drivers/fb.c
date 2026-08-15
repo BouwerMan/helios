@@ -7,15 +7,16 @@
 #include "kernel/semaphores.h"
 #include "lib/log.h"
 #include "lib/string.h"
+#include "uapi/helios/fb.h"
 
 #include <uapi/helios/errno.h>
 
-struct fb_device fbdev = { 0 };
+struct fb_device g_fbdev = { 0 };
 
 static struct file_ops fb_fops = {
 	.read = nullptr,
 	.write = fb_write,
-	.ioctl = nullptr,
+	.ioctl = fb_ioctl,
 	.mmap = nullptr,
 	.open = nullptr,
 };
@@ -31,18 +32,18 @@ void fb_init()
 	struct limine_framebuffer* fb =
 		framebuffer_request.response->framebuffers[0];
 
-	sem_init(&fbdev.sem, 1);
+	sem_init(&g_fbdev.sem, 1);
 
-	fbdev.width = (u32)fb->width;
-	fbdev.height = (u32)fb->height;
-	fbdev.pitch = (u32)fb->pitch;
-	fbdev.bpp = (u32)fb->bpp;
-	fbdev.format = FB_FMT_XRGB8888; // TODO: support more formats
+	g_fbdev.width = (u32)fb->width;
+	g_fbdev.height = (u32)fb->height;
+	g_fbdev.pitch = (u32)fb->pitch;
+	g_fbdev.bpp = (u32)fb->bpp;
+	g_fbdev.format = FB_FMT_XRGB8888; // TODO: support more formats
 
-	fbdev.vram_paddr = HHDM_TO_PHYS(fb->address);
-	fbdev.vram_len = fb->pitch * fb->height;
+	g_fbdev.vram_paddr = HHDM_TO_PHYS(fb->address);
+	g_fbdev.vram_len = fb->pitch * fb->height;
 
-	fbdev.caps = 0;
+	g_fbdev.caps = 0;
 
 	/*
 	 * Now we init the fb character device
@@ -55,18 +56,18 @@ void fb_init()
 		panic("Cannot continue without framebuffer");
 	}
 
-	fbdev.cdev.name = strdup("fb");
-	if (!fbdev.cdev.name) {
+	g_fbdev.cdev.name = strdup("fb");
+	if (!g_fbdev.cdev.name) {
 		log_error("Failed to allocate fb chrdev name");
 		panic("Cannot continue without framebuffer");
 	}
 
-	fbdev.cdev.base = base;
-	fbdev.cdev.count = 1;
-	fbdev.cdev.fops = &fb_fops;
-	fbdev.cdev.drvdata = &fbdev;
+	g_fbdev.cdev.base = base;
+	g_fbdev.cdev.count = 1;
+	g_fbdev.cdev.fops = &fb_fops;
+	g_fbdev.cdev.drvdata = &g_fbdev;
 
-	chrdev_add(&fbdev.cdev, fbdev.cdev.base, fbdev.cdev.count);
+	chrdev_add(&g_fbdev.cdev, g_fbdev.cdev.base, g_fbdev.cdev.count);
 
 	struct vfs_superblock* devfs_sb = vfs_get_sb("/dev");
 	if (!devfs_sb) {
@@ -75,8 +76,8 @@ void fb_init()
 	}
 
 	devfs_map_name(devfs_sb,
-		       fbdev.cdev.name,
-		       fbdev.cdev.base,
+		       g_fbdev.cdev.name,
+		       g_fbdev.cdev.base,
 		       FILETYPE_CHAR_DEV,
 		       0666,
 		       0);
@@ -84,19 +85,20 @@ void fb_init()
 	log_info("Framebuffer initialized");
 }
 
-ssize_t
-fb_write(struct vfs_file* file, const char* buffer, size_t count, off_t* offset)
+ssize_t fb_write(struct vfs_file* file,
+		 const char __user* buffer,
+		 size_t count,
+		 off_t* offset)
 {
-	// TODO: Get fbdev from cdev->drvdata
-	(void)file;
 	(void)offset;
 
-	if (count > fbdev.vram_len) {
-		count = fbdev.vram_len;
+	struct fb_device* fbdev = file->private_data;
+
+	if (count > fbdev->vram_len) {
+		count = fbdev->vram_len;
 	}
-	// TODO: Should probably map the vram_paddr in the process instead of
-	// straight hhdm
-	memcpy((void*)PHYS_TO_HHDM(fbdev.vram_paddr), buffer, count);
+
+	copy_from_user((void*)PHYS_TO_HHDM(fbdev->vram_paddr), buffer, count);
 
 	return (ssize_t)count;
 }
@@ -110,4 +112,35 @@ int fb_mmap(struct vfs_file* file, void* addr, size_t len, int prot, off_t off)
 	(void)off;
 
 	return -ENOSYS;
+}
+
+static void fb_get_screeninfo(struct fb_device* fbdev,
+			      struct fb_screeninfo* info)
+{
+	info->width = fbdev->width;
+	info->height = fbdev->height;
+	info->pitch = fbdev->pitch;
+	info->bpp = fbdev->bpp;
+	info->format = (uint32_t)fbdev->format;
+	info->caps = fbdev->caps;
+	info->vram_len = fbdev->vram_len;
+}
+
+int fb_ioctl(struct vfs_file* file, unsigned long request, void __user* arg)
+{
+	kassert(file != nullptr);
+
+	struct fb_device* fbdev = file->private_data;
+	kassert(fbdev != nullptr);
+
+	switch (request) {
+	case FBIOGET_SCREENINFO: {
+		struct fb_screeninfo info = { 0 };
+		fb_get_screeninfo(fbdev, &info);
+		return (int)copy_to_user(arg,
+					 &info,
+					 sizeof(struct fb_screeninfo));
+	}
+	default: return -ENOTTY; // Invalid request
+	}
 }
