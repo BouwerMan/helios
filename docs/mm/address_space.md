@@ -109,7 +109,8 @@ same thing at runtime (`mm/mmap.c`; file-backed mmap is not implemented yet).
 | Function                  | Role                                                                        |
 | ------------------------- | --------------------------------------------------------------------------- |
 | `map_region()`            | Validate + allocate + insert a region. **Metadata only** — no PTEs created. |
-| `unmap_region()`          | The inverse, and the one region call that *does* reach the VMM: it calls `vmm_unmap_region()` before unlinking and freeing the descriptor. |
+| `map_device_region()`     | Like `map_region()`, but for `MR_DEVICE`: also eagerly maps PTEs via `vmm_map_device_region()`, since device regions are never demand-paged. Rejects `MAP_PRIVATE`. |
+| `unmap_region()`          | The inverse, and the one region call that *does* reach the VMM: unlinks the region first, then calls `vmm_unmap_region()` to clear its PTEs, then frees the descriptor — unlinking first keeps a racing fault from repopulating a page mid-teardown. |
 | `get_region()`            | Find the VMA covering an address (linear list walk).                        |
 | `check_access()`          | Verify a VMA covers the address and permits the access (`-EFAULT`/`-EACCES`). |
 | `add_region()` / `remove_region()` | Raw list insert/unlink; callers hold `vma_lock` for writing.      |
@@ -135,8 +136,8 @@ The arch layer exposes two tiers in `arch/mmu/vmm.h`:
 * `vmm_protect_page()` — swap PTE permission bits in place (used to arm/disarm CoW).
 * `get_phys_addr()` — non-allocating VA→PA translation, 0 if not present.
 
-**Region-aware operations** (take an `address_space` + `memory_region`, do their own
-locking):
+**Region-aware operations** (take an `address_space` + `memory_region`, and — with one
+exception — do their own locking):
 
 * `vmm_install_page()` — the choke point for mapping a prepared page into a VMA. Checks
   the address is inside the region, derives PTE flags from `mr->prot`
@@ -148,7 +149,12 @@ locking):
 * `vmm_fork_region()` — mirror one region's *present* pages into a child address space.
   For private regions it clears `PAGE_WRITE` in both parent and child, arming CoW on both
   sides. Non-present pages are simply skipped — they'll be demand-paged in whichever
-  address space touches them first.
+  address space touches them first. **The exception**: unlike its siblings, this one does
+  *not* take `vma_lock` itself. It has exactly one caller, `address_space_dup()`, which
+  needs the lock held across its whole `mr_list` walk (not just one call) — so the caller
+  holds `src->vma_lock` (read) for the duration and `vmm_fork_region()` documents that as
+  a precondition instead of re-acquiring it per call, which would be a recursive read
+  acquisition on the same rwsem.
 * `vmm_unmap_region()` / `vmm_map_anon_region()` — loop the page primitives over
   `[mr->start, mr->end)`.
 * `vmm_write_region()` — kernel-side byte writes into a user VAS (used by exec to place
@@ -210,9 +216,9 @@ SIGSEGV instead is a TODO).
 Two locks per address space, with distinct jobs:
 
 * `vma_lock` (rwsem, may sleep): guards `mr_list`. Readers: fault path, `check_access()`,
-  populate/fork/unmap loops. Writers: anything adding or removing regions
-  (`map_region()`, `unmap_region()`, exec teardown). Functions that say "caller must hold
-  vma_lock" (`get_region()`, `add_region()`, `remove_region()`) do not lock internally.
+  populate/fork/unmap loops. Writers: anything adding or removing regions.
+  `get_region()`, `add_region()`, `remove_region()` are unlocked primitives — "caller must
+  hold vma_lock" for those means whichever entry point is mutating the list around them.
 * `pgt_lock` (spinlock, IRQ-save): guards actual PTE/table edits under `pml4`. Held only
   around short non-sleeping sections — allocations and file I/O happen *outside* it,
   which is why the populate paths re-check for a racing mapping (`get_phys_addr()` /
@@ -221,10 +227,25 @@ Two locks per address space, with distinct jobs:
 Ordering: take `vma_lock` before `pgt_lock`. Never sleep (allocate, do I/O) while holding
 `pgt_lock`.
 
-Known gaps, as of this writing: `mm/address_space.c` has a standing TODO to actually take
-`vma_lock` in its mutating entry points (e.g. `address_space_dup()` walks the parent list
-unlocked), `vmm_write_region()` is unlocked, and TLB invalidation is local-CPU only — no
-shootdown IPIs yet.
+**Where each lock is actually taken.** The generic layer (`map_region()`,
+`map_device_region()`, `unmap_region()`) owns `vma_lock` for write, but only around the
+`add_region()`/`remove_region()` call itself — allocation, validation, and freeing the
+descriptor happen unlocked, since none of that touches `vas`. Critically, the write lock
+is always released *before* calling down into any `vmm_*` function, because the
+region-aware arch tier (`vmm_map_page`-adjacent: `vmm_install_page()`,
+`vmm_unmap_region()`, `vmm_fork_region()`, and `vmm_map_device_region()` once it lands)
+reacquires `vma_lock` itself, for read, around its own `pgt_lock` section. Holding the
+write lock across such a call would self-deadlock on the non-reentrant rwsem. This is also
+why `unmap_region()` unlinks the region (write lock) *before* calling
+`vmm_unmap_region()` to clear its PTEs, rather than after: unlinking first means a
+concurrent fault can no longer find the region via `get_region()`, so it can't
+`vmm_populate_one()` a fresh page into memory this call is in the middle of tearing down.
+
+Known gaps, as of this writing: `vmm_write_region()` is unlocked, and TLB invalidation is
+local-CPU only — no shootdown IPIs yet. Note also that nothing in this kernel shares an
+`address_space` between tasks yet (no `CLONE_VM`-equivalent) — so today, `vma_lock` has no
+live concurrent writer to guard against for a given `vas`; it's there for correctness under
+interrupts/preemption and to not paint the codebase into a corner if that changes.
 
 ## Lifecycle summary
 

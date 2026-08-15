@@ -498,13 +498,30 @@ clean:
 	return err;
 }
 
+int vmm_map_device_region(struct address_space* vas, struct memory_region* mr)
+{
+	if (!vas || !mr) {
+		return -EINVAL;
+	}
+
+	kassert(mr->kind == MR_DEVICE);
+	return -ENOTSUP;
+}
+
 /**
  * vmm_fork_region - Mirror a region into @dest_vas (COW for private)
  * @dest_vas: Destination address space (child)
  * @src_mr:   Source region in its owner address space (parent)
  * Return: 0 or -errno (-ENOTSUP for devices, -ENOMEM on alloc failure)
- * Context: May sleep. Locks: takes @src_vas/@dest_vas vma read locks; uses
- *          page-table locks around walks/updates.
+ * Context: May sleep. Locks: caller must hold @dest_vas->vma_lock and
+ *          @src_mr->owner->vma_lock (read is sufficient for both) for the
+ *          whole call; internally uses page-table locks around walks/updates.
+ *          This function has exactly one caller (address_space_dup(), which
+ *          walks src_vas->mr_list under its own vma_lock read for the whole
+ *          loop). It does not take @vma_lock itself, because doing so on
+ *          every iteration while the caller also holds it would be a
+ *          recursive read acquisition, which is not guaranteed deadlock-safe
+ *          against a writer queued in between.
  * Notes: Present pages are mapped into @dest_vas. For private regions, clears
  *        PAGE_WRITE in both parent and child to arm COW. Non-present pages are
  *        skipped (handled by demand paging later).
@@ -528,22 +545,15 @@ int vmm_fork_region(struct address_space* dest_vas,
 		return -EINVAL;
 	}
 
-	down_read(&dest_vas->vma_lock);
-	down_read(&src_vas->vma_lock);
-
 	size_t num_pages = (src_mr->end - src_mr->start) >> PAGE_SHIFT;
 	// temporary guard: 4GB limit @ 4K pages
 	if (num_pages > (1UL << 20)) {
-		up_read(&src_vas->vma_lock);
-		up_read(&dest_vas->vma_lock);
 		return -ENOMEM;
 	}
 
 	size_t prot_idx = 0;
 	bool* protected = kzalloc(num_pages);
 	if (!protected) {
-		up_read(&src_vas->vma_lock);
-		up_read(&dest_vas->vma_lock);
 		return -ENOMEM;
 	}
 
@@ -586,8 +596,6 @@ int vmm_fork_region(struct address_space* dest_vas,
 	}
 
 	kfree(protected);
-	up_read(&src_vas->vma_lock);
-	up_read(&dest_vas->vma_lock);
 	return 0;
 
 clean:
@@ -622,8 +630,6 @@ clean:
 	}
 
 	kfree(protected);
-	up_read(&src_vas->vma_lock);
-	up_read(&dest_vas->vma_lock);
 	return err;
 }
 
