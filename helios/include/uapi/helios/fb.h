@@ -50,6 +50,16 @@ enum fb_caps {
 	FB_CAP_FLUSH_RECT = 1u << 4, // needs/accepts explicit flush
 };
 
+static inline const char* __get_fb_format_name(uint32_t fmt)
+{
+	enum fb_format _fmt = (enum fb_format)fmt;
+
+	switch (_fmt) {
+	case FB_FMT_XRGB8888: return "XRGB8888";
+	default:	      return "UNKNOWN";
+	}
+}
+
 #define FBIOGET_SCREENINFO 0x4600
 
 #ifdef __cplusplus
