@@ -89,6 +89,7 @@ struct terminal_attrs {
 // Represents the actual box where the cursor is drawn.
 // Not where the next character will be written.
 struct term_cursor {
+	bool active;
 	bool visible;
 	struct timer timer;
 
@@ -200,6 +201,7 @@ void term_init()
 
 	spin_unlock_irqrestore(&g_terminal.lock, flags);
 
+	g_terminal.cursor.active = true;
 	timer_schedule(&g_terminal.cursor.timer, 500, cursor_callback, nullptr);
 }
 
@@ -410,6 +412,17 @@ void __term_putchar(char c)
 	}
 
 	__place_cursor_block(g_terminal.write_x, g_terminal.write_y);
+}
+
+void term_pause_cursor()
+{
+	g_terminal.cursor.active = false;
+}
+
+void term_resume_cursor()
+{
+	g_terminal.cursor.active = true;
+	timer_reschedule(&g_terminal.cursor.timer, 500);
 }
 
 static void handle_escape_char(char c)
@@ -648,13 +661,20 @@ static void cursor_callback(void* data)
 
 	struct term_cursor* cursor = &g_terminal.cursor;
 
-	if (cursor->visible) {
-		__hide_cursor();
+	if (cursor->active) {
+
+		if (cursor->visible) {
+			__hide_cursor();
+		} else {
+			__show_cursor(g_terminal.write_x, g_terminal.write_y);
+		}
 	} else {
-		__show_cursor(g_terminal.write_x, g_terminal.write_y);
+		__hide_cursor();
 	}
 
 	spin_unlock_irqrestore(&g_terminal.lock, flags);
 
-	timer_reschedule(&cursor->timer, 500);
+	if (cursor->active) {
+		timer_reschedule(&cursor->timer, 500);
+	}
 }

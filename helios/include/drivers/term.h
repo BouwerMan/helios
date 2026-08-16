@@ -15,3 +15,6 @@ void term_putchar(char c);
 
 // Direct putchar without any parsing
 void __term_putchar(char c);
+
+void term_pause_cursor();
+void term_resume_cursor();
