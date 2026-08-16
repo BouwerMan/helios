@@ -94,8 +94,12 @@ void timer_schedule(struct timer* timer,
 
 void timer_cancel(struct timer* timer)
 {
-	(void)timer;
-	kassert(false, "Not implemented");
+	if (!timer->active) return;
+	unsigned long flags;
+	spin_lock_irqsave(&ts.lock, &flags);
+	timer->active = false;
+	list_del(&timer->list);
+	spin_unlock_irqrestore(&ts.lock, flags);
 }
 
 /**
@@ -110,8 +114,8 @@ void timer_reschedule(struct timer* timer, u64 new_delay_ms)
 
 void timer_destroy(struct timer* timer)
 {
-	(void)timer;
-	kassert(false, "Not implemented");
+	if (timer->active) timer_cancel(timer);
+	kfree(timer);
 }
 
 /**
