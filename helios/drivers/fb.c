@@ -5,11 +5,15 @@
 #include "kernel/limine_requests.h"
 #include "kernel/panic.h"
 #include "kernel/semaphores.h"
+#include "kernel/tasks/scheduler.h"
 #include "lib/log.h"
 #include "lib/string.h"
-#include "uapi/helios/fb.h"
+#include "mm/address_space.h"
+#include "mm/page.h"
 
 #include <uapi/helios/errno.h>
+#include <uapi/helios/fb.h>
+#include <uapi/helios/mman.h>
 
 struct fb_device g_fbdev = { 0 };
 
@@ -17,7 +21,7 @@ static struct file_ops fb_fops = {
 	.read = nullptr,
 	.write = fb_write,
 	.ioctl = fb_ioctl,
-	.mmap = nullptr,
+	.mmap = fb_mmap,
 	.open = nullptr,
 };
 
@@ -43,7 +47,7 @@ void fb_init()
 	g_fbdev.vram_paddr = HHDM_TO_PHYS(fb->address);
 	g_fbdev.vram_len = fb->pitch * fb->height;
 
-	g_fbdev.caps = 0;
+	g_fbdev.caps = FB_CAP_MMAP;
 
 	/*
 	 * Now we init the fb character device
@@ -103,20 +107,39 @@ ssize_t fb_write(struct vfs_file* file,
 	return (ssize_t)count;
 }
 
-int fb_mmap(struct vfs_file* file, void* addr, size_t len, int prot, off_t off)
+int fb_mmap(struct vfs_file* file,
+	    void* addr,
+	    size_t len,
+	    int prot,
+	    int flags,
+	    off_t off)
 {
-	(void)file;
-	(void)addr;
-	(void)len;
-	(void)prot;
-	(void)off;
+	kassert(file != nullptr);
 
-	return -ENOSYS;
+	struct fb_device* fbdev = file->private_data;
+	kassert(fbdev != nullptr);
+
+	if (!is_page_aligned((uptr)off) ||
+	    (size_t)off + len < fbdev->vram_len || flags & MAP_PRIVATE) {
+		return -EFAULT;
+	}
+
+	struct address_space* vas = get_current_task()->vas;
+	uptr start = align_down_page((uptr)addr);
+	uptr end = align_up_page(start + len);
+	int res = map_device_region(vas,
+				    start,
+				    end,
+				    fbdev->vram_paddr,
+				    (ulong)prot,
+				    (ulong)flags);
+	return res;
 }
 
 static void fb_get_screeninfo(struct fb_device* fbdev,
 			      struct fb_screeninfo* info)
 {
+	sem_wait(&fbdev->sem);
 	info->width = fbdev->width;
 	info->height = fbdev->height;
 	info->pitch = fbdev->pitch;
@@ -124,6 +147,7 @@ static void fb_get_screeninfo(struct fb_device* fbdev,
 	info->format = (uint32_t)fbdev->format;
 	info->caps = fbdev->caps;
 	info->vram_len = fbdev->vram_len;
+	sem_signal(&fbdev->sem);
 }
 
 int fb_ioctl(struct vfs_file* file, unsigned long request, void __user* arg)
