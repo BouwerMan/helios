@@ -119,9 +119,14 @@ int fb_mmap(struct vfs_file* file,
 	struct fb_device* fbdev = file->private_data;
 	kassert(fbdev != nullptr);
 
-	if (!is_page_aligned((uptr)off) ||
-	    (size_t)off + len < fbdev->vram_len || flags & MAP_PRIVATE) {
-		return -EFAULT;
+	sem_wait(&fbdev->sem);
+	size_t vram_len = fbdev->vram_len;
+	paddr_t vram_paddr = fbdev->vram_paddr;
+	sem_signal(&fbdev->sem);
+
+	if (!is_page_aligned((uptr)off) || off < 0 ||
+	    (size_t)off + len > vram_len || flags & MAP_PRIVATE) {
+		return -EINVAL;
 	}
 
 	struct address_space* vas = get_current_task()->vas;
@@ -130,7 +135,7 @@ int fb_mmap(struct vfs_file* file,
 	int res = map_device_region(vas,
 				    start,
 				    end,
-				    fbdev->vram_paddr,
+				    vram_paddr + (paddr_t)off,
 				    (ulong)prot,
 				    (ulong)flags);
 	return res;
