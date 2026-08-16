@@ -26,6 +26,11 @@
 extern "C" {
 #endif
 
+enum fb_ioctl_request {
+	FBIOGET_SCREENINFO = 0x4600,
+	FBIOSET_MODE = 0x4601,
+};
+
 struct fb_screeninfo {
 	uint32_t width;	   /* visible pixels */
 	uint32_t height;
@@ -50,17 +55,41 @@ enum fb_caps {
 	FB_CAP_FLUSH_RECT = 1u << 4, // needs/accepts explicit flush
 };
 
+enum fb_mode {
+	FB_MODE_TEXT = 0,
+	FB_MODE_GRAPHICS = 1,
+};
+
+static inline const char* __get_fb_ioctl_request_name(unsigned long req)
+{
+	enum fb_ioctl_request _req = (enum fb_ioctl_request)req;
+	switch (_req) {
+	case FBIOGET_SCREENINFO: return "FBIOGET_SCREENINFO";
+	case FBIOSET_MODE:	 return "FBIOSET_MODE";
+	}
+	return "UNKNOWN";
+}
+
 static inline const char* __get_fb_format_name(uint32_t fmt)
 {
 	enum fb_format _fmt = (enum fb_format)fmt;
 
 	switch (_fmt) {
 	case FB_FMT_XRGB8888: return "XRGB8888";
-	default:	      return "UNKNOWN";
 	}
+	return "UNKNOWN";
 }
 
-#define FBIOGET_SCREENINFO 0x4600
+static inline const char* __get_fb_mode_name(uint32_t mode)
+{
+	enum fb_mode _mode = (enum fb_mode)mode;
+
+	switch (_mode) {
+	case FB_MODE_TEXT:     return "FB_MODE_TEXT";
+	case FB_MODE_GRAPHICS: return "FB_MODE_GRAPHICS";
+	}
+	return "UNKNOWN";
+}
 
 #ifdef __cplusplus
 }
