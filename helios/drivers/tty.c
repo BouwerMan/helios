@@ -195,17 +195,16 @@ void tty_add_input_char(struct tty* tty, char c)
 {
 	struct ring_buffer* rb = &tty->input_buffer;
 
-	unsigned long flags;
-	spin_lock_irqsave(&rb->lock, &flags);
-
-	// Quick ring buffer insertion
-	rb->buffer[rb->head] = c;
-	rb->head = (rb->head + 1) % rb->size;
-	if (rb->head == rb->tail) {
-		rb->tail = (rb->tail + 1) % rb->size; // Overwrite old data
+	scoped_spin_guard(&rb->lock)
+	{
+		// Quick ring buffer insertion
+		rb->buffer[rb->head] = c;
+		rb->head = (rb->head + 1) % rb->size;
+		if (rb->head == rb->tail) {
+			rb->tail =
+				(rb->tail + 1) % rb->size; // Overwrite old data
+		}
 	}
-
-	spin_unlock_irqrestore(&rb->lock, flags);
 
 	// Wake any waiting readers
 	waitqueue_wake_all(&rb->readers);
@@ -226,8 +225,7 @@ ssize_t __read_from_tty(struct tty* tty, char* buffer, size_t count)
 	}
 
 	// Read available data from the ring buffer
-	unsigned long flags;
-	spin_lock_irqsave(&rb->lock, &flags);
+	spin_guard(&rb->lock);
 
 	size_t bytes_read = 0;
 	while (rb->head != rb->tail && bytes_read < count) {
@@ -236,7 +234,6 @@ ssize_t __read_from_tty(struct tty* tty, char* buffer, size_t count)
 		bytes_read++;
 	}
 
-	spin_unlock_irqrestore(&rb->lock, flags);
 	return (ssize_t)bytes_read;
 }
 
@@ -315,8 +312,7 @@ static ssize_t
 tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_t count)
 {
 	size_t i = 0;
-	unsigned long flags;
-	spin_lock_irqsave(&rb->lock, &flags);
+	spin_guard(&rb->lock);
 
 	// TODO: Make sure there is room
 
@@ -328,8 +324,6 @@ tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_t count)
 			rb->tail = (rb->tail + 1) % rb->size;
 		}
 	}
-
-	spin_unlock_irqrestore(&rb->lock, flags);
 
 	return (ssize_t)i;
 }
