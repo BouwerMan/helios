@@ -277,6 +277,7 @@ void scheduler_init(void)
 	list_init(&squeue.ready_list);
 	list_init(&squeue.blocked_list);
 	list_init(&squeue.terminated_list);
+	spin_init(&squeue.lock);
 
 	int res = slab_cache_init(squeue.cache,
 				  "Scheduler Tasks",
