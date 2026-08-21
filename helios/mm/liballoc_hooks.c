@@ -15,7 +15,7 @@ void liballoc_init()
 // Locks memory structures by disabling interrupts (really basic way)
 int liballoc_lock()
 {
-	spin_lock_irqsave(&lock, &flags);
+	flags = spin_lock_irqsave(&lock);
 	return 0;
 }
 
