@@ -204,9 +204,7 @@ int slab_cache_init(struct slab_cache* cache,
 	memset(cache, 0, sizeof(struct slab_cache));
 
 	spin_init(&cache->lock);
-
-	unsigned long flags;
-	spin_lock_irqsave(&cache->lock, &flags);
+	spin_guard(&cache->lock);
 
 	cache->object_size = object_size;
 
@@ -264,7 +262,6 @@ int slab_cache_init(struct slab_cache* cache,
 		cache->header_size,
 		cache->objects_per_slab);
 
-	spin_unlock_irqrestore(&cache->lock, flags);
 	return 0;
 }
 
@@ -294,8 +291,7 @@ void* slab_alloc(struct slab_cache* cache)
 	struct slab* slab = NULL;
 	int res = 0;
 
-	unsigned long flags;
-	spin_lock_irqsave(&cache->lock, &flags);
+	spin_guard(&cache->lock);
 
 	log_debug("Asked to allocate from cache %s(%p) by caller %p",
 		  cache->name,
@@ -317,8 +313,7 @@ retry:
 	} else {
 		log_error("Could not create more slabs, slab_grow returned: %d",
 			  res);
-		spin_unlock_irqrestore(&cache->lock, flags);
-		return NULL;
+		return nullptr;
 	}
 
 	log_debug("Chose slab %p", (void*)slab);
@@ -351,7 +346,6 @@ retry:
 
 	memset(obj_start, 0, cache->object_size);
 
-	spin_unlock_irqrestore(&cache->lock, flags);
 	return obj_start;
 }
 
@@ -388,14 +382,12 @@ void slab_free(struct slab_cache* cache, void* object)
 		return;
 	}
 
-	unsigned long flags;
-	spin_lock_irqsave(&cache->lock, &flags);
+	spin_guard(&cache->lock);
 
 	struct slab* slab = slab_from_object(object);
 	if (slab->parent != cache) {
 		log_error(
 			"Somehow got the wrong slab (parent doesn't match the cache), good luck debugging this one");
-		spin_unlock_irqrestore(&cache->lock, flags);
 		return;
 	}
 
@@ -403,7 +395,6 @@ void slab_free(struct slab_cache* cache, void* object)
 		log_error("Free top overflow for slab %p in cache %s",
 			  (void*)slab,
 			  cache->name);
-		spin_unlock_irqrestore(&cache->lock, flags);
 		return;
 	}
 
@@ -415,7 +406,6 @@ void slab_free(struct slab_cache* cache, void* object)
 
 	if (!quarantine) {
 		slab_quarantine(slab);
-		spin_unlock_irqrestore(&cache->lock, flags);
 		return;
 	}
 
@@ -450,8 +440,6 @@ void slab_free(struct slab_cache* cache, void* object)
 		  (void*)slab,
 		  slab->free_top,
 		  cache->objects_per_slab);
-
-	spin_unlock_irqrestore(&cache->lock, flags);
 }
 
 /**
