@@ -4,7 +4,6 @@
 #include "kernel/timer.h"
 #include "lib/log.h"
 #include "lib/string.h"
-#include "mm/kmalloc.h"
 #include "mm/page.h"
 
 // https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797?permalink_comment_id=4102710
@@ -160,8 +159,7 @@ void term_init()
 {
 	spin_init(&g_terminal.lock);
 
-	unsigned long flags;
-	spin_lock_irqsave(&g_terminal.lock, &flags);
+	spin_guard(&g_terminal.lock);
 
 	struct screen_info* sc = get_screen_info();
 	g_terminal.sc = sc;
@@ -198,8 +196,6 @@ void term_init()
 	       ' ',
 	       g_terminal.rows * g_terminal.cols * sizeof(char));
 
-	spin_unlock_irqrestore(&g_terminal.lock, flags);
-
 	timer_schedule(&g_terminal.cursor.timer, 500, cursor_callback, nullptr);
 }
 
@@ -222,8 +218,7 @@ void term_putchar(char c)
 {
 	if (g_terminal.sc == nullptr) return;
 
-	unsigned long flags;
-	spin_lock_irqsave(&g_terminal.lock, &flags);
+	spin_guard(&g_terminal.lock);
 
 	switch (g_terminal.state) {
 	case PARSER_NORMAL: {
@@ -253,8 +248,6 @@ void term_putchar(char c)
 		break;
 	}
 	}
-
-	spin_unlock_irqrestore(&g_terminal.lock, flags);
 }
 
 void __hide_cursor()
@@ -365,14 +358,11 @@ static void erase_to_end_of_screen(size_t x, size_t y)
 
 void term_clear()
 {
-	unsigned long flags;
-	spin_lock_irqsave(&g_terminal.lock, &flags);
+	spin_guard(&g_terminal.lock);
 
 	g_terminal.write_x = 0;
 	g_terminal.write_y = 0;
 	erase_to_end_of_screen(0, 0);
-
-	spin_unlock_irqrestore(&g_terminal.lock, flags);
 }
 
 // Expects to be called with g_terminal.lock held
@@ -402,7 +392,6 @@ void __term_putchar(char c)
 		g_terminal.write_y++;
 	}
 	if (g_terminal.write_y >= (int)g_terminal.rows) {
-		// TODO: Scroll region and scroll screen_buffer
 		scroll();
 		screen_buffer_scroll();
 		g_terminal.write_y = g_terminal.write_y - 1;
@@ -416,6 +405,7 @@ static void handle_escape_char(char c)
 {
 	switch (c) {
 	case '[': g_terminal.state = PARSER_CSI; break;
+	default:  break;
 	}
 }
 
@@ -487,6 +477,7 @@ static void process_sgr_param(int param)
 		g_terminal.current_attrs.bg_color =
 			g_terminal.default_attrs.bg_color;
 		return;
+	default: break;
 	}
 
 	// Handle foreground colors (30-37)
@@ -514,6 +505,7 @@ static void handle_erase_seq()
 				       (size_t)g_terminal.cursor.y);
 		break;
 	case '2': erase_to_end_of_screen(0, 0); break;
+	default:  break;
 	}
 }
 
@@ -643,8 +635,7 @@ static void cursor_callback(void* data)
 {
 	(void)data;
 
-	unsigned long flags;
-	spin_lock_irqsave(&g_terminal.lock, &flags);
+	spin_lock(&g_terminal.lock);
 
 	struct term_cursor* cursor = &g_terminal.cursor;
 
@@ -653,8 +644,6 @@ static void cursor_callback(void* data)
 	} else {
 		__show_cursor(g_terminal.write_x, g_terminal.write_y);
 	}
-
-	spin_unlock_irqrestore(&g_terminal.lock, flags);
 
 	timer_reschedule(&cursor->timer, 500);
 }
