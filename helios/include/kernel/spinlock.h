@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include "kernel/compiler_attributes.h"
 #include "kernel/helios.h"
 
 typedef struct {
@@ -123,19 +124,6 @@ static inline void spin_unlock_irqrestore(spinlock_t* lock, ulong flags)
 
 	if (likely(flags & EFLAGS_IF)) __asm__ volatile("sti" : : : "memory");
 }
-
-#ifndef __cleanup
-#define __cleanup(func) __attribute__((cleanup(func)))
-#endif
-
-#ifndef __CONCAT
-#define __CONCAT_(a, b) a##b
-#define __CONCAT(a, b)	__CONCAT_(a, b)
-#endif
-
-#ifndef __UNIQUE_ID
-#define __UNIQUE_ID(prefix) __CONCAT(__CONCAT(__uid_, prefix), __COUNTER__)
-#endif
 
 typedef struct {
 	spinlock_t* lock;
