@@ -56,13 +56,16 @@ static struct work_item* take_from_queue()
 static void worker_thread_entry(void)
 {
 	while (true) {
+		waitqueue_prepare_wait(&g_work_queue.wq);
+
 		struct work_item* work = take_from_queue();
 
 		if (work) {
+			waitqueue_cancel_wait(&g_work_queue.wq);
 			work->func(work->data);
 			kfree(work);
 		} else {
-			yield_blocked();
+			waitqueue_commit_sleep(&g_work_queue.wq);
 		}
 	}
 }
@@ -74,6 +77,7 @@ void work_queue_init()
 {
 	list_init(&g_work_queue.queue);
 	spin_init(&g_work_queue.lock);
+	waitqueue_init(&g_work_queue.wq);
 	wq_task = kthread_create("Worker Queue task",
 				 (entry_func)worker_thread_entry);
 	kthread_run(wq_task);
@@ -106,10 +110,7 @@ int add_work_item(work_func_t func, void* data)
 		list_add_tail(&g_work_queue.queue, &item->list);
 	}
 
-	// TODO: make this a proper wake queue
-	if (wq_task->state == BLOCKED) {
-		task_wake(wq_task);
-	}
+	waitqueue_wake_one(&g_work_queue.wq);
 
 	return 0;
 }

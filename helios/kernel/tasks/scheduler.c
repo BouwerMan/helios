@@ -106,7 +106,7 @@ static struct task* get_next_task()
 {
 	if (list_empty(&squeue.ready_list)) {
 		// Nothing is ready
-		return squeue.current_task;
+		return squeue.idle_task;
 	} else if (squeue.current_task == squeue.idle_task) {
 		// If we were the idle task and there is a ready task, pick it
 		struct task* next = list_first_entry(&squeue.ready_list,
