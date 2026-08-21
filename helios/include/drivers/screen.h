@@ -52,8 +52,9 @@ struct screen_info {
 	size_t bytesperline;
 	struct limine_framebuffer* fb;
 	char* fb_buffer;
-	PSF_font* font; // Font info
+	PSF_font* font;	 // Font info
 	spinlock_t lock;
+	bool fb_enabled; // Should we draw to framebuffer?
 };
 
 void screen_init(uint32_t fg_color, uint32_t bg_color);
@@ -86,3 +87,6 @@ void screen_putchar(char c);
 struct screen_info* get_screen_info();
 
 void screen_draw_cursor_at(size_t cx, size_t cy);
+
+void screen_enable();
+void screen_disable();

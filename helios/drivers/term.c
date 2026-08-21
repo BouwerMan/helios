@@ -414,6 +414,35 @@ void __term_putchar(char c)
 	__place_cursor_block(g_terminal.write_x, g_terminal.write_y);
 }
 
+/**
+ * term_resume_text - Changes term to text mode
+ */
+void term_resume_text()
+{
+	for (size_t row = 0; row < g_terminal.rows; row++) {
+		for (size_t col = 0; col < g_terminal.cols; col++) {
+			size_t index = row * g_terminal.cols + col;
+			char c = g_terminal.screen_buffer[index].character;
+			struct terminal_attrs* attrs =
+				&g_terminal.screen_buffer[index].attrs;
+			screen_putchar_at((u16)c,
+					  col,
+					  row,
+					  attrs->fg_color,
+					  attrs->bg_color);
+		}
+	}
+	term_resume_cursor();
+}
+
+/**
+ * term_pause_text - Basically pauses all term output
+ */
+void term_pause_text()
+{
+	term_pause_cursor();
+}
+
 void term_pause_cursor()
 {
 	g_terminal.cursor.active = false;
@@ -421,6 +450,8 @@ void term_pause_cursor()
 
 void term_resume_cursor()
 {
+	// Early return so we don't spuriously reschedule
+	if (g_terminal.cursor.active == true) return;
 	g_terminal.cursor.active = true;
 	timer_reschedule(&g_terminal.cursor.timer, 500);
 }

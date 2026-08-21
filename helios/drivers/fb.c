@@ -1,5 +1,6 @@
 #include "drivers/fb.h"
 #include "drivers/device.h"
+#include "drivers/screen.h"
 #include "drivers/term.h"
 #include "fs/devfs/devfs.h"
 #include "fs/vfs.h"
@@ -172,12 +173,21 @@ static int fb_set_mode(struct fb_device* fbdev, enum fb_mode mode)
 {
 	switch (mode) {
 	case FB_MODE_TEXT:
+		// Early return if we are already in the same mode
+		if (fbdev->mode == mode) {
+			return 0;
+		}
 		fbdev->mode = mode;
-		term_resume_cursor();
+		screen_enable();
+		term_resume_text();
 		return 0;
 	case FB_MODE_GRAPHICS:
+		if (fbdev->mode == mode) {
+			return 0;
+		}
 		fbdev->mode = mode;
-		term_pause_cursor();
+		term_pause_text();
+		screen_disable();
 		return 0;
 	default: return -EINVAL;
 	}

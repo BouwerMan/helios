@@ -316,6 +316,9 @@ _Static_assert(SYSCALL_COUNT == SYS_SYSCALL_COUNT, "SYSCALL_COUNT mismatch");
 
 void syscall_handler(struct registers* r)
 {
+	log_debug("Handling syscall %lu from task '%s'",
+		  r->rax,
+		  get_current_task()->name);
 	if (r->rax >= SYSCALL_COUNT) return;
 	sys_handler_t func = syscall_handlers[r->rax];
 	if (func) {

@@ -75,6 +75,14 @@ int main(void)
 		row_start += info.pitch;
 	}
 
+	mode = FB_MODE_TEXT;
+	res = ioctl(fd, FBIOSET_MODE, &mode);
+	if (res < 0) {
+		perror("ioctl");
+		close(fd);
+		return errno;
+	}
 	close(fd);
+
 	return 0;
 }
