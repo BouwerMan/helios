@@ -37,35 +37,41 @@ static struct work_queue g_work_queue;
  */
 static struct work_item* take_from_queue()
 {
-	unsigned long flags;
-	spin_lock_irqsave(&g_work_queue.lock, &flags);
+	spin_guard(&g_work_queue.lock);
 	struct work_item* item = nullptr;
 
 	if (list_empty(&g_work_queue.queue)) {
-		goto release;
+		return item;
 	}
 
 	item = list_first_entry(&g_work_queue.queue, struct work_item, list);
 	list_del(&item->list);
 
-release:
-	spin_unlock_irqrestore(&g_work_queue.lock, flags);
 	return item;
 }
 
 /**
  * worker_thread_entry() - Main entry point for worker threads
+ *
+ * The loop obeys the wait protocol of waitqueue(9): it calls
+ * waitqueue_prepare_wait() before it examines the queue. A wake that
+ * arrives after the prepare call sets WAIT_WOKEN, and
+ * waitqueue_commit_sleep() then returns immediately. Thus no enqueued
+ * work item is lost.
  */
 static void worker_thread_entry(void)
 {
 	while (true) {
+		waitqueue_prepare_wait(&g_work_queue.wq);
+
 		struct work_item* work = take_from_queue();
 
 		if (work) {
+			waitqueue_cancel_wait(&g_work_queue.wq);
 			work->func(work->data);
 			kfree(work);
 		} else {
-			yield_blocked();
+			waitqueue_commit_sleep(&g_work_queue.wq);
 		}
 	}
 }
@@ -77,6 +83,7 @@ void work_queue_init()
 {
 	list_init(&g_work_queue.queue);
 	spin_init(&g_work_queue.lock);
+	waitqueue_init(&g_work_queue.wq);
 	wq_task = kthread_create("Worker Queue task",
 				 (entry_func)worker_thread_entry);
 	kthread_run(wq_task);
@@ -104,15 +111,12 @@ int add_work_item(work_func_t func, void* data)
 	item->func = func;
 	item->data = data;
 
-	unsigned long flags;
-	spin_lock_irqsave(&g_work_queue.lock, &flags);
-	list_add_tail(&g_work_queue.queue, &item->list);
-	spin_unlock_irqrestore(&g_work_queue.lock, flags);
-
-	// TODO: make this a proper wake queue
-	if (wq_task->state == BLOCKED) {
-		task_wake(wq_task);
+	scoped_spin_guard(&g_work_queue.lock)
+	{
+		list_add_tail(&g_work_queue.queue, &item->list);
 	}
+
+	waitqueue_wake_one(&g_work_queue.wq);
 
 	return 0;
 }

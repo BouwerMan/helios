@@ -36,7 +36,6 @@
 #include "kernel/tasks/scheduler.h"
 #include "kernel/timer.h"
 #include "lib/list.h"
-#include "lib/string.h"
 #include "mm/address_space.h"
 #include "mm/kmalloc.h"
 #include "mm/page.h"
@@ -106,8 +105,9 @@ struct scheduler_queue* get_scheduler_queue()
 static struct task* get_next_task()
 {
 	if (list_empty(&squeue.ready_list)) {
-		// Nothing is ready
-		return squeue.current_task;
+		// No task is ready. Run the idle task. Do not run the
+		// current task: it can be on the blocked list.
+		return squeue.idle_task;
 	} else if (squeue.current_task == squeue.idle_task) {
 		// If we were the idle task and there is a ready task, pick it
 		struct task* next = list_first_entry(&squeue.ready_list,
@@ -277,6 +277,7 @@ void scheduler_init(void)
 	list_init(&squeue.ready_list);
 	list_init(&squeue.blocked_list);
 	list_init(&squeue.terminated_list);
+	spin_init(&squeue.lock);
 
 	int res = slab_cache_init(squeue.cache,
 				  "Scheduler Tasks",
@@ -596,8 +597,11 @@ void task_wake(struct task* task)
 {
 	disable_preemption();
 
-	task->state = READY;
-	list_move_tail(&task->sched_list, &squeue.ready_list);
+	scoped_spin_guard(&squeue.lock)
+	{
+		task->state = READY;
+		list_move_tail(&task->sched_list, &squeue.ready_list);
+	}
 
 	enable_preemption();
 }
@@ -606,7 +610,10 @@ void task_block(struct task* task)
 {
 	disable_preemption();
 
-	__task_block(task, &squeue.blocked_list);
+	scoped_spin_guard(&squeue.lock)
+	{
+		__task_block(task, &squeue.blocked_list);
+	}
 
 	enable_preemption();
 }
@@ -690,15 +697,12 @@ void yield_blocked()
 	yield();
 }
 
-void __wq_add_to_list(struct waitqueue* wqueue, struct task* task)
-{
-	if (list_empty(&task->wait_list)) {
-		list_add_tail(&task->wait_list, &wqueue->waiters_list);
-	} else {
-		list_move_tail(&task->wait_list, &wqueue->waiters_list);
-	}
-}
-
+/**
+ * waitqueue_init() - Initialize a waitqueue to the empty state.
+ * @wqueue: Target waitqueue. Can be NULL.
+ *
+ * Call this function before the first use of @wqueue.
+ */
 void waitqueue_init(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;
@@ -706,6 +710,12 @@ void waitqueue_init(struct waitqueue* wqueue)
 	spin_init(&wqueue->waiters_lock);
 }
 
+/**
+ * waitqueue_has_waiters() - Tell if a waitqueue has waiters.
+ * @wqueue: Target waitqueue. Can be NULL.
+ *
+ * Return: true if one or more tasks are on the queue, false if not.
+ */
 bool waitqueue_has_waiters(struct waitqueue* wqueue)
 {
 	if (!wqueue) return false;
@@ -713,23 +723,34 @@ bool waitqueue_has_waiters(struct waitqueue* wqueue)
 }
 
 /**
- * Adds current task to waitqueue without blocking it.
+ * waitqueue_prepare_wait() - Put the current task on a waitqueue.
+ * @wqueue: Target waitqueue.
+ *
+ * The task gets the WAIT_PREPARING state and does not sleep. Call this
+ * function before you examine the wait condition. See waitqueue(9).
+ *
+ * Context: Process context only.
  */
 void waitqueue_prepare_wait(struct waitqueue* wqueue)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
+	spin_guard(&wqueue->waiters_lock);
 
 	struct task* task = get_current_task();
 	task->wait_state = WAIT_PREPARING;
 	task->wait = wqueue;
-	list_add_tail(&task->wait_list, &wqueue->waiters_list);
-
-	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
+	list_add_tail(&wqueue->waiters_list, &task->wait_list);
 }
 
 /**
- * Actually blocks the task
+ * waitqueue_commit_sleep() - Sleep after waitqueue_prepare_wait().
+ * @wqueue: Target waitqueue.
+ *
+ * If a wake signal arrived after waitqueue_prepare_wait(), the function
+ * returns immediately. If not, the task blocks until a wake signal
+ * arrives. The function can return before the wait condition is true;
+ * examine the condition in a loop. See waitqueue(9).
+ *
+ * Context: Process context only. Can sleep. Do not hold a spinlock.
  */
 void waitqueue_commit_sleep(struct waitqueue* wqueue)
 {
@@ -737,59 +758,79 @@ void waitqueue_commit_sleep(struct waitqueue* wqueue)
 
 	struct task* task = get_current_task();
 
-	unsigned long flags;
-	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
+	scoped_spin_guard(&wqueue->waiters_lock)
+	{
+		if (task->wait_state == WAIT_WOKEN) {
+			list_del(&task->wait_list);
+			task->wait_state = WAIT_NONE;
+			task->wait = nullptr;
+			enable_preemption();
+			return;
+		}
 
-	if (task->wait_state == WAIT_WOKEN) {
-		list_del(&task->wait_list);
-		task->wait_state = WAIT_NONE;
-		task->wait = nullptr;
-		spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
-		enable_preemption();
-		return;
+		__task_block(task, &squeue.blocked_list);
+		task->wait_state = WAIT_SLEEPING;
+		task->wait = wqueue;
 	}
 
-	__task_block(task, &squeue.blocked_list);
-	task->wait_state = WAIT_SLEEPING;
-	task->wait = wqueue;
-
-	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
 	enable_preemption();
 	yield();
 }
 
 /**
- * Removes from waitqueue without blocking
+ * waitqueue_cancel_wait() - Remove the current task from a waitqueue.
+ * @wqueue: Target waitqueue.
+ *
+ * Use this function when the wait condition became true between
+ * waitqueue_prepare_wait() and waitqueue_commit_sleep(). The task does
+ * not sleep.
+ *
+ * Context: Process context only.
  */
 void waitqueue_cancel_wait(struct waitqueue* wqueue)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
+	spin_guard(&wqueue->waiters_lock);
 
 	struct task* task = get_current_task();
 
 	list_del(&task->wait_list);
 	task->wait_state = WAIT_NONE;
 	task->wait = nullptr;
-
-	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
 }
 
+/**
+ * waitqueue_sleep() - Sleep with no examination of a wait condition.
+ * @wqueue: Target waitqueue.
+ *
+ * A wake signal that arrives before this call is lost. Use this
+ * function only if a lost wake signal is acceptable. See waitqueue(9).
+ *
+ * Context: Process context only. Can sleep.
+ */
 void waitqueue_sleep(struct waitqueue* wqueue)
 {
 	waitqueue_prepare_wait(wqueue);
 	waitqueue_commit_sleep(wqueue);
 }
 
+/**
+ * waitqueue_wake_one() - Wake the first waiter on a waitqueue.
+ * @wqueue: Target waitqueue. Can be NULL.
+ *
+ * A waiter in the WAIT_PREPARING state gets the WAIT_WOKEN state and
+ * leaves the queue. A waiter in the WAIT_SLEEPING state leaves the
+ * queue and becomes ready to run. A call on an empty queue does
+ * nothing.
+ *
+ * Context: Any. Safe in interrupt context.
+ */
 void waitqueue_wake_one(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;
-
-	ulong flags;
-	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
+	spin_guard(&wqueue->waiters_lock);
 
 	if (list_empty(&wqueue->waiters_list)) {
-		goto cleanup;
+		return;
 	}
 
 	struct task* next =
@@ -798,22 +839,25 @@ void waitqueue_wake_one(struct waitqueue* wqueue)
 	switch (next->wait_state) {
 	case WAIT_PREPARING:
 		next->wait_state = WAIT_WOKEN;
-		// list_del(&next->wait_list);
-		goto cleanup;
+		list_del(&next->wait_list);
+		return;
 	case WAIT_SLEEPING:
 		next->wait = nullptr;
 		next->wait_state = WAIT_NONE;
 		list_del(&next->wait_list);
 		task_wake(next);
-		goto cleanup;
+		return;
 	case WAIT_WOKEN:
 	case WAIT_NONE:
 	}
-
-cleanup:
-	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
 }
 
+/**
+ * waitqueue_wake_all() - Wake all waiters on a waitqueue.
+ * @wqueue: Target waitqueue. Can be NULL.
+ *
+ * Context: Any. Safe in interrupt context.
+ */
 void waitqueue_wake_all(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;

@@ -93,6 +93,7 @@ struct task {
 struct scheduler_queue {
 	volatile bool
 		need_reschedule; // Must be first for interrupt handler access
+	spinlock_t lock;	 // Locks the lists
 	struct list_head ready_list;
 	struct list_head blocked_list;
 	struct list_head terminated_list;

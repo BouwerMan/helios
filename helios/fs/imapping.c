@@ -30,12 +30,13 @@ struct page* imap_lookup(struct inode_mapping* mapping, pgoff_t index)
 		return nullptr;
 	}
 
-	unsigned long flags;
-	spin_lock_irqsave(&mapping->lock, &flags);
+	struct page* page;
+	scoped_spin_guard(&mapping->lock)
+	{
 
-	struct page* page = __imap_lookup(mapping, index);
+		page = __imap_lookup(mapping, index);
+	}
 
-	spin_unlock_irqrestore(&mapping->lock, flags);
 	return get_page(page);
 }
 
@@ -45,35 +46,34 @@ struct page* imap_lookup_or_create(struct inode_mapping* mapping, pgoff_t index)
 		return nullptr;
 	}
 
-	unsigned long flags;
-	spin_lock_irqsave(&mapping->lock, &flags);
-
-	struct page* page = __imap_lookup(mapping, index);
-	if (page) {
-		get_page(page);
-		goto ret_page;
+	struct page* page;
+	scoped_spin_guard(&mapping->lock)
+	{
+		page = __imap_lookup(mapping, index);
+		if (page) {
+			get_page(page);
+			return page;
+		}
 	}
-
-	spin_unlock_irqrestore(&mapping->lock, flags);
 
 	// Since alloc_page might sleep, we have to drop the lock
 	page = alloc_page(AF_KERNEL);
 
-	spin_lock_irqsave(&mapping->lock, &flags);
+	spin_guard(&mapping->lock);
 	struct page* temp = __imap_lookup(mapping, index);
 	if (temp) {
 		if (!page) {
-			goto ret_page;
+			return page;
 		}
 		// TODO: Fix this shitty page_alloc API
 		free_page((void*)PHYS_TO_HHDM(page_to_phys(page)));
 		page = temp;
 		get_page(page);
-		goto ret_page;
+		return page;
 	}
 
 	if (!page) {
-		goto ret_page;
+		return page;
 	}
 
 	lock_page(page);
@@ -94,8 +94,6 @@ struct page* imap_lookup_or_create(struct inode_mapping* mapping, pgoff_t index)
 	// This the lookup ref we return to the caller
 	get_page(page);
 
-ret_page:
-	spin_unlock_irqrestore(&mapping->lock, flags);
 	return page;
 }
 
@@ -108,14 +106,12 @@ int imap_insert(struct inode_mapping* mapping, struct page* page)
 		return -EINVAL;
 	}
 
-	unsigned long flags;
-	spin_lock_irqsave(&mapping->lock, &flags);
+	spin_guard(&mapping->lock);
 
 	get_page(page);
 	page->flags |= PG_MAPPED;
 	hash_add(mapping->page_cache, &page->map_node, page->index);
 
-	spin_unlock_irqrestore(&mapping->lock, flags);
 	return 0;
 }
 
@@ -129,13 +125,10 @@ void imap_remove(struct inode_mapping* mapping, struct page* page)
 		  page->index,
 		  mapping->owner->id);
 
-	unsigned long flags;
-	spin_lock_irqsave(&mapping->lock, &flags);
+	spin_guard(&mapping->lock);
 
 	hash_del(&page->map_node);
 	page->flags &= ~PG_MAPPED;
 
 	put_page(page);
-
-	spin_unlock_irqrestore(&mapping->lock, flags);
 }

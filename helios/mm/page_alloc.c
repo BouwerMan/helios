@@ -189,8 +189,7 @@ void page_alloc_init()
 void buddy_dump_free_lists()
 {
 	struct buddy_allocator* allocator = &norm_alr;
-	unsigned long flags;
-	spin_lock_irqsave(&allocator->lock, &flags);
+	spin_guard(&allocator->lock);
 
 	for (size_t order = allocator->min_order; order <= allocator->max_order;
 	     order++) {
@@ -209,8 +208,6 @@ void buddy_dump_free_lists()
 			log_info("  -> pfn: 0x%lx, phys: 0x%lx", pfn, phys);
 		}
 	}
-
-	spin_unlock_irqrestore(&allocator->lock, flags);
 }
 
 size_t buddy_free_page_count()
@@ -218,8 +215,7 @@ size_t buddy_free_page_count()
 	size_t count = 0;
 	for (size_t i = 0; i < MEM_NUM_ZONES; i++) {
 		struct buddy_allocator* allocator = regions[i];
-		unsigned long flags;
-		spin_lock_irqsave(&allocator->lock, &flags);
+		spin_guard(&allocator->lock);
 
 		size_t zone_count = 0;
 		for (size_t order = allocator->min_order;
@@ -230,7 +226,6 @@ size_t buddy_free_page_count()
 		}
 
 		count += zone_count;
-		spin_unlock_irqrestore(&allocator->lock, flags);
 		log_debug("Zone %zu has %zu free pages", i, zone_count);
 	}
 	return count;
@@ -444,16 +439,13 @@ void free_pages(void* addr, size_t pages)
 static void allocator_init(struct buddy_allocator* allocator)
 {
 	spin_init(&allocator->lock);
-	unsigned long flags;
-	spin_lock_irqsave(&allocator->lock, &flags);
+	spin_guard(&allocator->lock);
 
 	for (size_t order = 0; order <= MAX_ORDER; order++) {
 		list_init(&allocator->free_lists[order]);
 	}
 	allocator->max_order = MAX_ORDER;
 	allocator->min_order = 0;
-
-	spin_unlock_irqrestore(&allocator->lock, flags);
 }
 
 /**
@@ -675,12 +667,9 @@ static void free_pages_core(struct buddy_allocator* allocator,
 		return;
 	}
 
-	unsigned long flags;
-	spin_lock_irqsave(&allocator->lock, &flags);
+	spin_guard(&allocator->lock);
 
 	combine_blocks(allocator, page, order);
-
-	spin_unlock_irqrestore(&allocator->lock, flags);
 }
 
 #define HELIOS_TESTS

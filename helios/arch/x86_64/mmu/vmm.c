@@ -30,13 +30,6 @@
 * We will have a mapping of the entire physical memory space at hhdm_offset.
 */
 
-#include "kernel/spinlock.h"
-#include "mm/kmalloc.h"
-#include <stddef.h>
-#include <stdint.h>
-#include <uapi/helios/errno.h>
-#include <uapi/helios/mman.h>
-
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
 #define FORCE_LOG_REDEF
@@ -51,12 +44,19 @@
 #include "kernel/helios.h"
 #include "kernel/klog.h"
 #include "kernel/panic.h"
+#include "kernel/spinlock.h"
 #include "kernel/tasks/scheduler.h"
 #include "lib/string.h"
 #include "mm/address_space.h"
 #include "mm/address_space_dump.h"
+#include "mm/kmalloc.h"
 #include "mm/page.h"
 #include "mm/page_alloc.h"
+
+#include <stddef.h>
+#include <stdint.h>
+#include <uapi/helios/errno.h>
+#include <uapi/helios/mman.h>
 
 extern char __kernel_start[], __kernel_end[];
 
@@ -462,7 +462,7 @@ int vmm_map_anon_region(struct address_space* vas, struct memory_region* mr)
 		paddr_t paddr = page_to_phys(page);
 
 		unsigned long irqf;
-		spin_lock_irqsave(&vas->pgt_lock, &irqf);
+		irqf = spin_lock_irqsave(&vas->pgt_lock);
 
 		// Mapped by someone else?
 		if (get_phys_addr(vas->pml4, v)) {
@@ -491,7 +491,7 @@ int vmm_map_anon_region(struct address_space* vas, struct memory_region* mr)
 clean:
 	for (vaddr_t u = mr->start; u < v; u += PAGE_SIZE) {
 		unsigned long spinflags;
-		spin_lock_irqsave(&vas->pgt_lock, &spinflags);
+		spinflags = spin_lock_irqsave(&vas->pgt_lock);
 		(void)vmm_unmap_page(vas->pml4, u);
 		spin_unlock_irqrestore(&vas->pgt_lock, spinflags);
 	}
@@ -532,7 +532,7 @@ int vmm_map_device_region(struct address_space* vas, struct memory_region* mr)
 		kassert(flags & PAGE_NO_EXECUTE);
 
 		unsigned long irqf;
-		spin_lock_irqsave(&vas->pgt_lock, &irqf);
+		irqf = spin_lock_irqsave(&vas->pgt_lock);
 
 		vmm_map_frame_alias(vas->pml4, v, p, flags);
 
@@ -545,7 +545,7 @@ int vmm_map_device_region(struct address_space* vas, struct memory_region* mr)
 clean:
 	for (vaddr_t u = mr->start; u < v; u += PAGE_SIZE) {
 		unsigned long spinflags;
-		spin_lock_irqsave(&vas->pgt_lock, &spinflags);
+		spinflags = spin_lock_irqsave(&vas->pgt_lock);
 		pte_t* pte = walk_page_table(vas->pml4, u, false, 0);
 
 		if (pte && pte->pte & PAGE_PRESENT) {
@@ -605,7 +605,7 @@ int vmm_fork_region(struct address_space* dest_vas,
 
 	for (v = src_mr->start; v < src_mr->end; v += PAGE_SIZE, prot_idx++) {
 		unsigned long irqf;
-		spin_lock_irqsave(&src_vas->pgt_lock, &irqf);
+		irqf = spin_lock_irqsave(&src_vas->pgt_lock);
 		pte_t* src_pte = walk_page_table(src_vas->pml4, v, false, 0);
 		u64 snapshot = src_pte ? src_pte->pte : 0;
 		spin_unlock_irqrestore(&src_vas->pgt_lock, irqf);
@@ -613,14 +613,14 @@ int vmm_fork_region(struct address_space* dest_vas,
 		if (!(snapshot & PAGE_PRESENT)) continue; // demand-paged later
 
 		bool priv = src_mr->is_private;
-		paddr_t p = src_pte->pte & X86_PTE_ADDR_MASK;
-		flags_t current_flags = src_pte->pte &
+		paddr_t p = snapshot & X86_PTE_ADDR_MASK;
+		flags_t current_flags = snapshot &
 					(X86_PTE_LOWFLAGS | X86_PTE_NX);
 		flags_t new_flags = priv ? (current_flags & ~PAGE_WRITE) :
 					   current_flags;
 
 		/* Map into child */
-		spin_lock_irqsave(&src_vas->pgt_lock, &irqf);
+		irqf = spin_lock_irqsave(&src_vas->pgt_lock);
 		err = vmm_map_page(dest_vas->pml4, v, p, new_flags);
 		spin_unlock_irqrestore(&src_vas->pgt_lock, irqf);
 		if (err < 0) {
@@ -649,14 +649,15 @@ clean:
 	prot_idx = 0;
 	for (v = src_mr->start; v < cleanup_end; v += PAGE_SIZE, prot_idx++) {
 		unsigned long irqf;
-		spin_lock_irqsave(&src_vas->pgt_lock, &irqf);
+		irqf = spin_lock_irqsave(&src_vas->pgt_lock);
 
 		// Find the original flags to restore them
 		pte_t* src_pte = walk_page_table(src_vas->pml4, v, false, 0);
+		u64 snapshot = src_pte ? src_pte->pte : 0;
 		spin_unlock_irqrestore(&src_vas->pgt_lock, irqf);
 
-		if (src_pte && (src_pte->pte & PAGE_PRESENT)) {
-			flags_t original_flags = (src_pte->pte & FLAGS_MASK) |
+		if (snapshot & PAGE_PRESENT) {
+			flags_t original_flags = (snapshot & FLAGS_MASK) |
 						 PAGE_WRITE;
 			// Restore parent write permissions if we removed them
 			if (protected[prot_idx]) {
@@ -664,7 +665,7 @@ clean:
 			}
 		}
 
-		spin_lock_irqsave(&src_vas->pgt_lock, &irqf);
+		irqf = spin_lock_irqsave(&src_vas->pgt_lock);
 		int res = vmm_unmap_page(dest_vas->pml4, v);
 		spin_unlock_irqrestore(&src_vas->pgt_lock, irqf);
 
@@ -691,7 +692,7 @@ int vmm_unmap_region(struct address_space* vas, struct memory_region* mr)
 
 	for (vaddr_t v = mr->start; v < mr->end; v += PAGE_SIZE) {
 		unsigned long spinflags;
-		spin_lock_irqsave(&vas->pgt_lock, &spinflags);
+		spinflags = spin_lock_irqsave(&vas->pgt_lock);
 
 		// If it is a device we just need to clear the PTE, otherwise
 		// we have to do all the funny ref count managing that
@@ -732,7 +733,7 @@ int vmm_protect_page(struct address_space* vas, vaddr_t vaddr, flags_t new_prot)
 	if (!vas) return -EINVAL;
 
 	unsigned long spinflags;
-	spin_lock_irqsave(&vas->pgt_lock, &spinflags);
+	spinflags = spin_lock_irqsave(&vas->pgt_lock);
 
 	pte_t* pte = walk_page_table(vas->pml4, vaddr, false, 0);
 	if (!pte || !(pte->pte & PAGE_PRESENT)) {
@@ -790,7 +791,7 @@ int vmm_install_page(struct address_space* vas,
 	}
 
 	unsigned long spinflags;
-	spin_lock_irqsave(&vas->pgt_lock, &spinflags);
+	spinflags = spin_lock_irqsave(&vas->pgt_lock);
 
 	// Check for race condition where page got mapped already
 	paddr_t existing = get_phys_addr(vas->pml4, vaddr);

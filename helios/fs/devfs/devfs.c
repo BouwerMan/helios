@@ -148,8 +148,7 @@ int devfs_readdir(struct vfs_file* file, struct dirent* dirent, off_t offset)
 	struct vfs_superblock* sb = pdentry->inode->sb;
 	struct devfs_sb_info* info = DEVFS_SB_INFO(sb);
 
-	unsigned long lflags;
-	spin_lock_irqsave(&info->lock, &lflags);
+	spin_guard(&info->lock);
 
 	off_t cur_off = 0;
 	struct devfs_entry* entry;
@@ -172,11 +171,9 @@ int devfs_readdir(struct vfs_file* file, struct dirent* dirent, off_t offset)
 		dirent->d_name[255] = '\0';
 
 		dirent->d_off = cur_off + 1;
-		spin_unlock_irqrestore(&info->lock, lflags);
 		return 1;
 	}
 
-	spin_unlock_irqrestore(&info->lock, lflags);
 	return 0;
 }
 
@@ -204,8 +201,7 @@ struct vfs_dentry* devfs_lookup(struct vfs_inode* dir_inode,
 	}
 	struct devfs_sb_info* info = DEVFS_SB_INFO(dir_inode->sb);
 
-	unsigned long lflags;
-	spin_lock_irqsave(&info->lock, &lflags);
+	spin_guard(&info->lock);
 
 	struct devfs_entry* entry;
 	int rc = __resolve_name(dir_inode->sb,
@@ -216,14 +212,12 @@ struct vfs_dentry* devfs_lookup(struct vfs_inode* dir_inode,
 				&entry);
 	if (rc < 0) {
 		log_warn("Device '%s' not found in devfs", child->name);
-		spin_unlock_irqrestore(&info->lock, lflags);
 		return nullptr; // Not found
 	}
 
 	if (entry->inode) {
 		// Cached inode exists; reuse it.
 		child->inode = entry->inode;
-		spin_unlock_irqrestore(&info->lock, lflags);
 		dentry_add(child);
 		return child;
 	}
@@ -235,7 +229,6 @@ struct vfs_dentry* devfs_lookup(struct vfs_inode* dir_inode,
 	entry->inode = iget(inode); // Cache it for next time
 
 	child->inode = inode;
-	spin_unlock_irqrestore(&info->lock, lflags);
 	dentry_add(child);
 	return child;
 }
@@ -318,8 +311,7 @@ int devfs_map_name(struct vfs_superblock* sb,
 	struct devfs_sb_info* info = DEVFS_SB_INFO(sb);
 	u32 hash = devfs_hash_name(name);
 
-	unsigned long lflags;
-	spin_lock_irqsave(&info->lock, &lflags);
+	spin_guard(&info->lock);
 
 	if (__resolve_name(sb, name, nullptr, nullptr, nullptr, nullptr) == 0) {
 		if (flags & DEVFS_F_REPLACE) {
@@ -328,7 +320,6 @@ int devfs_map_name(struct vfs_superblock* sb,
 		} else {
 			kfree(entry->name);
 			kfree(entry);
-			spin_unlock_irqrestore(&info->lock, lflags);
 			return -EEXIST;
 		}
 	}
@@ -337,7 +328,6 @@ int devfs_map_name(struct vfs_superblock* sb,
 	hash_add(info->buckets, &entry->hnode, hash);
 	list_add_tail(&info->order, &entry->olist);
 
-	spin_unlock_irqrestore(&info->lock, lflags);
 	log_debug("Mapped device '%s' to %u,%u (ino %zu)",
 		  entry->name,
 		  MAJOR(entry->rdev),
@@ -352,20 +342,23 @@ int devfs_map_name(struct vfs_superblock* sb,
  */
 int devfs_unmap_name(struct vfs_superblock* sb, const char* name)
 {
-	unsigned long lflags;
-	spin_lock_irqsave(&DEVFS_SB_INFO(sb)->lock, &lflags);
-
 	struct devfs_entry* entry;
-	int rc = __resolve_name(sb, name, nullptr, nullptr, nullptr, &entry);
-	if (rc < 0) {
-		spin_unlock_irqrestore(&DEVFS_SB_INFO(sb)->lock, lflags);
-		return rc;
+
+	scoped_spin_guard(&DEVFS_SB_INFO(sb)->lock)
+	{
+		int rc = __resolve_name(sb,
+					name,
+					nullptr,
+					nullptr,
+					nullptr,
+					&entry);
+		if (rc < 0) {
+			return rc;
+		}
+
+		hash_del(&entry->hnode);
+		list_del(&entry->olist);
 	}
-
-	hash_del(&entry->hnode);
-	list_del(&entry->olist);
-
-	spin_unlock_irqrestore(&DEVFS_SB_INFO(sb)->lock, lflags);
 
 	if (!entry->inode) {
 		// TODO: More aggressive cleanup if cached inode exists
@@ -395,13 +388,11 @@ int devfs_resolve_name(struct vfs_superblock* sb,
 
 	struct devfs_sb_info* info = DEVFS_SB_INFO(sb);
 
-	unsigned long lflags;
-	spin_lock_irqsave(&info->lock, &lflags);
+	spin_guard(&info->lock);
 
 	int rc =
 		__resolve_name(sb, name, out_rdev, out_type, out_mode, out_ent);
 
-	spin_unlock_irqrestore(&info->lock, lflags);
 	return rc;
 }
 

@@ -20,12 +20,12 @@
  */
 
 #include "drivers/screen.h"
-#include "drivers/term.h"
+
 #include "kernel/helios.h"
 #include "kernel/limine_requests.h"
 #include "kernel/spinlock.h"
-#include "lib/log.h"
 #include "lib/string.h"
+#include <stddef.h>
 
 /*******************************************************************************
 * Global Variable Definitions
@@ -109,8 +109,6 @@ void screen_init(uint32_t fg_color, uint32_t bg_color)
 	sc.char_height = sc.font->height;
 	sc.bytesperline = (sc.font->width + 7) / 8;
 	spin_init(&sc.lock);
-
-	// term_init();
 }
 
 struct screen_info* get_screen_info()
@@ -148,13 +146,9 @@ void __screen_clear()
  */
 void set_color(uint32_t fg, uint32_t bg)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&sc.lock, &flags);
-	// spinlock_acquire(&sc.lock);
+	spin_guard(&sc.lock);
 	sc.fgc = fg;
 	sc.bgc = bg;
-	// spinlock_release(&sc.lock);
-	spin_unlock_irqrestore(&sc.lock, flags);
 }
 
 /**
@@ -181,9 +175,7 @@ void screen_putstring(const char* s)
  */
 void screen_putchar(char c)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&sc.lock, &flags);
-	// spinlock_acquire(&sc.lock);
+	spin_guard(&sc.lock);
 
 	switch (c) {
 	case '\n':
@@ -194,9 +186,7 @@ void screen_putchar(char c)
 		if (sc.cx == 0) break;
 		screen_putchar_at(' ', --sc.cx, sc.cy, sc.fgc, sc.bgc);
 		break;
-	case '\t':
-		sc.cx = (sc.cx + 4) & ~3ULL;
-		break;
+	case '\t': sc.cx = (sc.cx + 4) & ~3ULL; break;
 	default:
 		screen_putchar_at((uint16_t)c, sc.cx++, sc.cy, sc.fgc, sc.bgc);
 		break;
@@ -211,9 +201,6 @@ void screen_putchar(char c)
 		sc.cy = sc.cy - 1;
 		sc.cx = 0;
 	}
-
-	// spinlock_release(&sc.lock);
-	spin_unlock_irqrestore(&sc.lock, flags);
 }
 
 void scroll()
@@ -258,7 +245,7 @@ void screen_putchar_at(uint16_t c,
 	uint32_t glyph_index = (c > 0 && c < numglyphs) ? c : 0;
 
 	unsigned char* glyph = (unsigned char*)sc.font + sc.font->headersize +
-			       glyph_index * sc.font->bytesperglyph;
+			       (size_t)glyph_index * sc.font->bytesperglyph;
 	size_t pixel_x = cx * sc.char_width;
 	size_t pixel_y = cy * sc.char_height;
 	size_t fb_offset = (pixel_y * sc.scanline) + (pixel_x * sizeof(PIXEL));

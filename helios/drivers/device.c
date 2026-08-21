@@ -73,8 +73,7 @@ int alloc_chrdev_region(dev_t* base_out, unsigned count, const char* name)
 		return -EINVAL;
 	}
 
-	unsigned long flags;
-	spin_lock_irqsave(&chrdevs_lock, &flags);
+	spin_guard(&chrdevs_lock);
 
 	// For now, we basically do 1 major per call of this function
 
@@ -92,21 +91,14 @@ int alloc_chrdev_region(dev_t* base_out, unsigned count, const char* name)
 	next_major = (u16)(chosen + 1);
 
 	struct major_info* m = &chrdevs_by_major[chosen];
-	if (m->used) {
-		spin_unlock_irqrestore(&chrdevs_lock, flags);
-		return -ENOSPC;
-	}
+	if (m->used) return -ENOSPC;
 
 	m->label = strdup(name ? name : "unknown");
-	if (!m->label) {
-		spin_unlock_irqrestore(&chrdevs_lock, flags);
-		return -ENOMEM;
-	}
+	if (!m->label) return -ENOMEM;
 
 	m->used = true;
 	*base_out = MKDEV(chosen, 0);
 
-	spin_unlock_irqrestore(&chrdevs_lock, flags);
 	return 0;
 }
 
@@ -122,14 +114,12 @@ void release_chrdev_region(dev_t base, unsigned count)
 {
 	(void)count; // This doesn't mean anything yet
 
-	unsigned long flags;
-	spin_lock_irqsave(&chrdevs_lock, &flags);
+	spin_guard(&chrdevs_lock);
 
 	u16 major = MAJOR(base);
 	struct major_info* m = &chrdevs_by_major[major];
 	if (!m->used) {
 		log_warn("release_chrdev_region: major %u not in use", major);
-		spin_unlock_irqrestore(&chrdevs_lock, flags);
 		return;
 	}
 
@@ -142,8 +132,6 @@ void release_chrdev_region(dev_t base, unsigned count)
 	m->used = false;
 	kfree((void*)m->label);
 	m->label = nullptr;
-
-	spin_unlock_irqrestore(&chrdevs_lock, flags);
 }
 
 /**
@@ -176,14 +164,10 @@ int chrdev_add(struct chrdev* cdev, dev_t base, unsigned count)
 	u16 minor_start = MINOR(base);
 	u16 minor_end = minor_start + (u16)count; // exclusive
 
-	unsigned long flags;
-	spin_lock_irqsave(&chrdevs_lock, &flags);
+	spin_guard(&chrdevs_lock);
 
 	struct major_info* m = &chrdevs_by_major[major];
-	if (!m->used) {
-		spin_unlock_irqrestore(&chrdevs_lock, flags);
-		return -ENOENT;
-	}
+	if (!m->used) return -ENOENT;
 
 	struct chrdev* exist;
 	hlist_for_each_entry (exist, &m->devlist, hnode) {
@@ -192,18 +176,13 @@ int chrdev_add(struct chrdev* cdev, dev_t base, unsigned count)
 		u32 n_start = (u32)minor_start;
 		u32 n_end = (u32)minor_end;
 
-		if (n_start < e_end && n_end > e_start) {
-			spin_unlock_irqrestore(&chrdevs_lock, flags);
-			return -EBUSY;
-		}
+		if (n_start < e_end && n_end > e_start) return -EBUSY;
 	}
 
 	cdev->base = base;
 	cdev->count = (u16)count;
 
 	hlist_add_head(&m->devlist, &cdev->hnode);
-
-	spin_unlock_irqrestore(&chrdevs_lock, flags);
 
 	return 0;
 }
@@ -222,12 +201,9 @@ void chrdev_del(struct chrdev* cdev)
 {
 	if (!cdev) return;
 
-	unsigned long flags;
-	spin_lock_irqsave(&chrdevs_lock, &flags);
+	spin_guard(&chrdevs_lock);
 
 	hlist_del_init(&cdev->hnode);
-
-	spin_unlock_irqrestore(&chrdevs_lock, flags);
 }
 
 /**
@@ -256,14 +232,10 @@ int chrdev_lookup(dev_t dev,
 		  dev_t* base_out,
 		  size_t* count_out)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&chrdevs_lock, &flags);
+	spin_guard(&chrdevs_lock);
 
 	struct chrdev* cdev = chrdev_find(dev);
-	if (!cdev) {
-		spin_unlock_irqrestore(&chrdevs_lock, flags);
-		return -ENODEV;
-	}
+	if (!cdev) return -ENODEV;
 
 	if (fops_out) {
 		*fops_out = cdev->fops;
@@ -278,7 +250,6 @@ int chrdev_lookup(dev_t dev,
 		*count_out = cdev->count;
 	}
 
-	spin_unlock_irqrestore(&chrdevs_lock, flags);
 	return 0;
 }
 
