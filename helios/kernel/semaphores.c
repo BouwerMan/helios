@@ -51,8 +51,7 @@ void sem_init(semaphore_t* sem, int initial_count)
 void sem_wait(semaphore_t* sem)
 {
 	while (true) {
-		unsigned long flags;
-		spin_lock_irqsave(&sem->guard_lock, &flags);
+		ulong flags = spin_lock_irqsave(&sem->guard_lock);
 
 		if (atomic_read(&sem->count) > 0) {
 			// Permit is available, take it and go.
@@ -81,8 +80,7 @@ void sem_wait(semaphore_t* sem)
  */
 void sem_signal(semaphore_t* sem)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&sem->guard_lock, &flags);
+	spin_guard(&sem->guard_lock);
 
 #ifdef SEMAPHORE_DEBUG
 	sem->owner = nullptr;
@@ -94,8 +92,6 @@ void sem_signal(semaphore_t* sem)
 	if (!waitqueue_empty(&sem->waiters)) {
 		waitqueue_wake_one(&sem->waiters);
 	}
-
-	spin_unlock_irqrestore(&sem->guard_lock, flags);
 }
 
 /**
@@ -129,8 +125,7 @@ void rwsem_init(rwsem_t* s)
  */
 void down_read(rwsem_t* s)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&s->guard, &flags);
+	ulong flags = spin_lock_irqsave(&s->guard);
 
 	while (s->writer_active || s->writer_count > 0) {
 		waitqueue_prepare_wait(&s->readers);
@@ -138,7 +133,7 @@ void down_read(rwsem_t* s)
 		waitqueue_commit_sleep(&s->readers);
 
 		// Relock before rechecking condition
-		spin_lock_irqsave(&s->guard, &flags);
+		flags = spin_lock_irqsave(&s->guard);
 	}
 
 	kassert(!s->writer_active, "Writer active in down_read");
@@ -160,15 +155,12 @@ void down_read(rwsem_t* s)
  */
 void up_read(rwsem_t* s)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&s->guard, &flags);
+	spin_guard(&s->guard);
 
 	s->reader_count--;
 	if (s->reader_count == 0 && s->writer_count > 0) {
 		waitqueue_wake_one(&s->writers);
 	}
-
-	spin_unlock_irqrestore(&s->guard, flags);
 }
 
 /**
@@ -183,8 +175,7 @@ void up_read(rwsem_t* s)
  */
 void down_write(rwsem_t* s)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&s->guard, &flags);
+	ulong flags = spin_lock_irqsave(&s->guard);
 
 	while (s->writer_active || s->reader_count > 0) {
 		s->writer_count++;
@@ -193,7 +184,7 @@ void down_write(rwsem_t* s)
 		waitqueue_commit_sleep(&s->writers);
 
 		// Relock before rechecking condition
-		spin_lock_irqsave(&s->guard, &flags);
+		flags = spin_lock_irqsave(&s->guard);
 		s->writer_count--;
 	}
 
@@ -213,8 +204,7 @@ void down_write(rwsem_t* s)
  */
 void up_write(rwsem_t* s)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&s->guard, &flags);
+	spin_guard(&s->guard);
 
 	s->writer_active = false;
 
@@ -223,8 +213,6 @@ void up_write(rwsem_t* s)
 	} else if (s->reader_count == 0 && !waitqueue_empty(&s->readers)) {
 		waitqueue_wake_all(&s->readers);
 	}
-
-	spin_unlock_irqrestore(&s->guard, flags);
 }
 
 void downgrade_write(rwsem_t* s)
