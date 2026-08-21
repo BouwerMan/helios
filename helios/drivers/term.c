@@ -154,6 +154,7 @@ static void handle_escape_char(char c);
 static void process_sgr_param(int param);
 static void handle_csi_char(char c);
 static void handle_sgr_seq();
+static void __screen_buffer_putchar_at(char c, size_t x, size_t y);
 
 static void cursor_callback(void* data);
 
@@ -195,9 +196,11 @@ void term_init()
 				PAGE_SIZE);
 	g_terminal.screen_buffer = get_free_pages(AF_KERNEL, pages);
 
-	memset(g_terminal.screen_buffer,
-	       ' ',
-	       g_terminal.rows * g_terminal.cols * sizeof(char));
+	for (size_t r = 0; r < g_terminal.rows; r++) {
+		for (size_t c = 0; c < g_terminal.cols; c++) {
+			__screen_buffer_putchar_at(' ', c, r);
+		}
+	}
 
 	spin_unlock_irqrestore(&g_terminal.lock, flags);
 
@@ -318,15 +321,14 @@ static void screen_buffer_scroll()
 	for (size_t row = 0; row < g_terminal.rows - 1; row++) {
 		memcpy(&g_terminal.screen_buffer[row * g_terminal.cols],
 		       &g_terminal.screen_buffer[(row + 1) * g_terminal.cols],
-		       g_terminal.cols);
+		       g_terminal.cols * sizeof(struct screen_cell));
 	}
-	memset(&g_terminal
-			.screen_buffer[(g_terminal.rows - 1) * g_terminal.cols],
-	       ' ',
-	       g_terminal.cols);
+	for (size_t c = 0; c < g_terminal.cols; c++) {
+		__screen_buffer_putchar_at(' ', c, g_terminal.rows - 1);
+	}
 }
 
-void __screen_buffer_putchar_at(char c, size_t x, size_t y)
+static void __screen_buffer_putchar_at(char c, size_t x, size_t y)
 {
 	if (x >= g_terminal.cols || y >= g_terminal.rows) return;
 
