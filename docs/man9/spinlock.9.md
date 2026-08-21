@@ -20,56 +20,59 @@ spinlock - test-and-set spinlocks for x86-64
 
 # DESCRIPTION
 
-A spinlock is a two-state lock (0 = unlocked, 1 = locked) acquired by
-busy-waiting. Holding one is expensive: never sleep, block, or call into
-anything that might, while a spinlock is held, and keep critical sections
-as short as possible.
+A spinlock is a lock with two states: 0 = unlocked, 1 = locked. A CPU
+that waits for a spinlock spins in a busy loop.
 
-These locks are **not recursive**: acquiring a lock you already hold
-deadlocks the CPU unconditionally.
+A held spinlock is costly. Do not sleep while you hold a spinlock. Do
+not call a function that can sleep. Keep each critical section short.
 
-These locks are **not fair**: a waiter can be starved indefinitely by other
-CPUs. If starvation ever becomes a real problem, replace the internals with
-a ticket or MCS lock; the API described here does not need to change.
+These locks are **not recursive**. If a CPU tries to acquire a lock that
+it already holds, the CPU deadlocks.
 
-This header is x86-64 specific (EFLAGS, cli/sti, PAUSE).
+These locks are **not fair**. Other CPUs can keep a waiter out of the
+lock for an unknown time. If starvation becomes a problem, replace the
+internal mechanism with a ticket lock or an MCS lock. The API in this
+page does not change.
 
-## Choosing a variant
+This header is specific to x86-64 (EFLAGS, cli/sti, PAUSE).
 
-The danger with a plain `spin_lock()` is self-deadlock against an interrupt
-handler: if CPU A holds the lock and then takes an IRQ whose handler wants
-the same lock, that CPU spins forever waiting on itself. The `_irq` and
-`_irqsave` variants exist to prevent exactly this, by masking interrupts on
-the local CPU for the duration of the critical section.
+## Choice of a variant
 
-- **`spin_lock_irqsave()`** — Default choice. Saves the caller's interrupt
-  state, disables interrupts, and restores the prior state on unlock.
-  Correct whether or not interrupts were already off, so it composes
-  safely.
+A plain `spin_lock()` can deadlock against an interrupt handler. Example:
+CPU A holds the lock. An interrupt occurs on CPU A. The interrupt
+handler tries to acquire the same lock. The CPU then spins forever. The
+`_irq` and `_irqsave` variants prevent this fault. They mask interrupts
+on the local CPU for the full critical section.
 
-- **`spin_lock_irq()`** — Unconditionally enables interrupts on unlock. Only
-  use where you can prove interrupts were enabled on entry, i.e. top-level
-  code that is never reachable from an interrupt handler or from another
-  critical section. Slightly cheaper; easy to get wrong.
+- **`spin_lock_irqsave()`** — This is the default choice. It saves the
+  interrupt state of the caller, disables interrupts, and restores the
+  saved state on unlock. It is correct if interrupts were on at entry,
+  and if they were off. Thus it is safe to nest.
 
-- **`spin_lock()`** — Leaves the interrupt state alone. Only correct if the
-  lock is never taken from interrupt context, or if interrupts are already
-  known to be disabled (for example, you are already inside an interrupt
-  handler). Otherwise it can self-deadlock.
+- **`spin_lock_irq()`** — The unlock enables interrupts in all cases.
+  Use it only where interrupts are on at entry: top-level code that is
+  not reachable from an interrupt handler or from an other critical
+  section. It is a small optimization. Incorrect use is easy.
 
-Prefer the guard macros over calling the lock/unlock pairs by hand. They
-release the lock automatically on every exit path, including early return
-and goto.
+- **`spin_lock()`** — It does not change the interrupt state. Use it
+  only if no interrupt handler takes the lock, or if interrupts are off
+  at entry (for example, in an interrupt handler). In other conditions
+  it can deadlock.
+
+Use the guard macros, not manual lock and unlock pairs. The guards
+release the lock on each exit path. This includes an early return and a
+goto.
 
 ## Scope-based locking
 
-`spin_guard()` and `scoped_spin_guard()` take the lock with
-`spin_lock_irqsave()` semantics and release it automatically when the
-relevant scope ends, via the GNU C cleanup attribute. That covers falling
-off the end of the block, return, and goto out of the block.
+`spin_guard()` and `scoped_spin_guard()` acquire the lock with the
+`spin_lock_irqsave()` procedure. They release it when the applicable
+scope ends. The GNU C cleanup attribute causes the release. The release
+occurs at the end of the block, at a return, and at a goto out of the
+block.
 
-`spin_guard()` is a declaration; place it at the top of the block whose
-extent should match the critical section:
+`spin_guard()` is a declaration. Put it at the top of the block that
+must be the critical section:
 
 	void queue_push(struct task* t)
 	{
@@ -81,64 +84,63 @@ extent should match the critical section:
 		wake_one();
 	}				// and here
 
-To scope the lock more tightly than a whole function, wrap it in a bare
-block, or use `scoped_spin_guard()`, which is a single statement and can be
-used as the body of an `if` or a loop without adding braces:
+To hold the lock for less than a full function, put `spin_guard()` in a
+bare block. As an alternative, use `scoped_spin_guard()`. It is one
+statement and can be the body of an `if` or of a loop without braces:
 
 	scoped_spin_guard(&squeue.lock) {
 		drain_queue();
 	}
 
-**WARNING:** `scoped_spin_guard()` expands to a loop. A `break` or
-`continue` inside the body binds to that hidden loop, not to any enclosing
-loop, and will silently do the wrong thing (the lock is still released
-correctly; only the control flow is wrong). If the critical section needs
-`break` or `continue`, use `spin_guard()` in a bare block instead. `break`
-and `continue` belonging to a loop or switch written inside the body are
-unaffected.
+**WARNING: `scoped_spin_guard()` expands to a loop. A `break` or a
+`continue` in the body binds to that hidden loop, not to an outer loop.
+The control flow is then incorrect, with no diagnostic. The lock release
+stays correct. If the critical section needs `break` or `continue`, use
+`spin_guard()` in a bare block.** A `break` or a `continue` that belongs
+to a loop or to a switch written in the body is not affected.
 
 # RETURN VALUE
 
-`spin_trylock()` returns true if the lock was acquired, false if it was
-already held. On false the caller holds nothing and must not call
-`spin_unlock()`.
+`spin_trylock()` returns true if it acquired the lock. It returns false
+if an other holder had the lock. On false, the caller holds nothing and
+must not call `spin_unlock()`.
 
-`spin_lock_irqsave()` returns the interrupt state to restore on unlock. The
-value is opaque and must be passed to the matching
-`spin_unlock_irqrestore()`.
+`spin_lock_irqsave()` returns the interrupt state. The value is opaque.
+Pass it to the matching `spin_unlock_irqrestore()`.
 
 # LOCKING
 
-When acquiring more than one spinlock, all code must acquire them in the
-same global order, or two CPUs will deadlock against each other. Document
-the order wherever nesting occurs.
+If code takes two or more spinlocks, all code must take them in the same
+global order. If two CPUs take two locks in different orders, the two
+CPUs deadlock. Document the order at each point where locks nest.
 
 # INTERACTIONS
 
-`spin_unlock_irqrestore()` re-enables interrupts only if they were enabled
-when the lock was taken, which is what makes nesting `_irqsave` critical
-sections safe.
+`spin_unlock_irqrestore()` enables interrupts only if they were on when
+the lock was taken. This makes nested `_irqsave` critical sections safe.
 
-`spin_lock_irq()` / `spin_unlock_irq()` do not save or restore state; only
-use them where interrupts are provably enabled on entry and the unlock path
-is unconditional.
+`spin_lock_irq()` and `spin_unlock_irq()` do not save or restore the
+interrupt state. Use them only where interrupts are on at entry and the
+unlock path is unconditional.
 
 # IMPLEMENTATION NOTES
 
-`spinlock_t` wraps the raw value in a struct so the compiler rejects direct
-inspection or assignment (`if (lock)`, `lock = 0`); all access goes through
-the accessors above. The field is deliberately not `volatile`: the
-`__atomic_*` builtins already guarantee the access is emitted and provide
-acquire/release ordering against ordinary memory, so `volatile` would add
-nothing while pessimising every structure that embeds a lock.
+`spinlock_t` puts the raw value in a struct. The compiler then rejects a
+direct examination or assignment (`if (lock)`, `lock = 0`). All access
+goes through the functions above. The field is intentionally not
+`volatile`. The `__atomic_*` builtins make sure that each access is
+emitted, and they give acquire and release order against other memory.
+`volatile` would give no gain, and each structure that contains a lock
+would become slower.
 
-The internal acquire path is a test-and-test-and-set: the outer exchange is
-the actual acquisition attempt; once the lock is seen to be contended, the
-CPU spins on a relaxed load (satisfiable from the local cache line) rather
-than hammering the cache line with exchanges that force it exclusive on
-every iteration. Each spin iteration executes `PAUSE` to de-pipeline the
-spin and yield to the SMT sibling.
+The internal acquire path is a test-and-test-and-set loop. The outer
+exchange is the acquisition attempt. When the lock is contended, the CPU
+spins on a relaxed load. The local cache can satisfy that load. An
+exchange on each iteration would make the cache line exclusive each
+time; the relaxed load prevents this cost. Each spin iteration executes
+`PAUSE`, which slows the spin and gives execution resources to the SMT
+sibling.
 
 # SEE ALSO
 
-scheduler(9)
+waitqueue(9)

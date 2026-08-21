@@ -105,7 +105,8 @@ struct scheduler_queue* get_scheduler_queue()
 static struct task* get_next_task()
 {
 	if (list_empty(&squeue.ready_list)) {
-		// Nothing is ready
+		// No task is ready. Run the idle task. Do not run the
+		// current task: it can be on the blocked list.
 		return squeue.idle_task;
 	} else if (squeue.current_task == squeue.idle_task) {
 		// If we were the idle task and there is a ready task, pick it
@@ -696,15 +697,12 @@ void yield_blocked()
 	yield();
 }
 
-void __wq_add_to_list(struct waitqueue* wqueue, struct task* task)
-{
-	if (list_empty(&task->wait_list)) {
-		list_add_tail(&task->wait_list, &wqueue->waiters_list);
-	} else {
-		list_move_tail(&task->wait_list, &wqueue->waiters_list);
-	}
-}
-
+/**
+ * waitqueue_init() - Initialize a waitqueue to the empty state.
+ * @wqueue: Target waitqueue. Can be NULL.
+ *
+ * Call this function before the first use of @wqueue.
+ */
 void waitqueue_init(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;
@@ -712,6 +710,12 @@ void waitqueue_init(struct waitqueue* wqueue)
 	spin_init(&wqueue->waiters_lock);
 }
 
+/**
+ * waitqueue_has_waiters() - Tell if a waitqueue has waiters.
+ * @wqueue: Target waitqueue. Can be NULL.
+ *
+ * Return: true if one or more tasks are on the queue, false if not.
+ */
 bool waitqueue_has_waiters(struct waitqueue* wqueue)
 {
 	if (!wqueue) return false;
@@ -719,7 +723,13 @@ bool waitqueue_has_waiters(struct waitqueue* wqueue)
 }
 
 /**
- * Adds current task to waitqueue without blocking it.
+ * waitqueue_prepare_wait() - Put the current task on a waitqueue.
+ * @wqueue: Target waitqueue.
+ *
+ * The task gets the WAIT_PREPARING state and does not sleep. Call this
+ * function before you examine the wait condition. See waitqueue(9).
+ *
+ * Context: Process context only.
  */
 void waitqueue_prepare_wait(struct waitqueue* wqueue)
 {
@@ -732,7 +742,15 @@ void waitqueue_prepare_wait(struct waitqueue* wqueue)
 }
 
 /**
- * Actually blocks the task
+ * waitqueue_commit_sleep() - Sleep after waitqueue_prepare_wait().
+ * @wqueue: Target waitqueue.
+ *
+ * If a wake signal arrived after waitqueue_prepare_wait(), the function
+ * returns immediately. If not, the task blocks until a wake signal
+ * arrives. The function can return before the wait condition is true;
+ * examine the condition in a loop. See waitqueue(9).
+ *
+ * Context: Process context only. Can sleep. Do not hold a spinlock.
  */
 void waitqueue_commit_sleep(struct waitqueue* wqueue)
 {
@@ -760,7 +778,14 @@ void waitqueue_commit_sleep(struct waitqueue* wqueue)
 }
 
 /**
- * Removes from waitqueue without blocking
+ * waitqueue_cancel_wait() - Remove the current task from a waitqueue.
+ * @wqueue: Target waitqueue.
+ *
+ * Use this function when the wait condition became true between
+ * waitqueue_prepare_wait() and waitqueue_commit_sleep(). The task does
+ * not sleep.
+ *
+ * Context: Process context only.
  */
 void waitqueue_cancel_wait(struct waitqueue* wqueue)
 {
@@ -773,12 +798,32 @@ void waitqueue_cancel_wait(struct waitqueue* wqueue)
 	task->wait = nullptr;
 }
 
+/**
+ * waitqueue_sleep() - Sleep with no examination of a wait condition.
+ * @wqueue: Target waitqueue.
+ *
+ * A wake signal that arrives before this call is lost. Use this
+ * function only if a lost wake signal is acceptable. See waitqueue(9).
+ *
+ * Context: Process context only. Can sleep.
+ */
 void waitqueue_sleep(struct waitqueue* wqueue)
 {
 	waitqueue_prepare_wait(wqueue);
 	waitqueue_commit_sleep(wqueue);
 }
 
+/**
+ * waitqueue_wake_one() - Wake the first waiter on a waitqueue.
+ * @wqueue: Target waitqueue. Can be NULL.
+ *
+ * A waiter in the WAIT_PREPARING state gets the WAIT_WOKEN state and
+ * leaves the queue. A waiter in the WAIT_SLEEPING state leaves the
+ * queue and becomes ready to run. A call on an empty queue does
+ * nothing.
+ *
+ * Context: Any. Safe in interrupt context.
+ */
 void waitqueue_wake_one(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;
@@ -807,6 +852,12 @@ void waitqueue_wake_one(struct waitqueue* wqueue)
 	}
 }
 
+/**
+ * waitqueue_wake_all() - Wake all waiters on a waitqueue.
+ * @wqueue: Target waitqueue. Can be NULL.
+ *
+ * Context: Any. Safe in interrupt context.
+ */
 void waitqueue_wake_all(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;

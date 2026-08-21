@@ -52,6 +52,12 @@ static struct work_item* take_from_queue()
 
 /**
  * worker_thread_entry() - Main entry point for worker threads
+ *
+ * The loop obeys the wait protocol of waitqueue(9): it calls
+ * waitqueue_prepare_wait() before it examines the queue. A wake that
+ * arrives after the prepare call sets WAIT_WOKEN, and
+ * waitqueue_commit_sleep() then returns immediately. Thus no enqueued
+ * work item is lost.
  */
 static void worker_thread_entry(void)
 {
