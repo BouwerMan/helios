@@ -728,7 +728,7 @@ void waitqueue_prepare_wait(struct waitqueue* wqueue)
 	struct task* task = get_current_task();
 	task->wait_state = WAIT_PREPARING;
 	task->wait = wqueue;
-	list_add_tail(&task->wait_list, &wqueue->waiters_list);
+	list_add_tail(&wqueue->waiters_list, &task->wait_list);
 }
 
 /**
@@ -794,7 +794,7 @@ void waitqueue_wake_one(struct waitqueue* wqueue)
 	switch (next->wait_state) {
 	case WAIT_PREPARING:
 		next->wait_state = WAIT_WOKEN;
-		// list_del(&next->wait_list);
+		list_del(&next->wait_list);
 		return;
 	case WAIT_SLEEPING:
 		next->wait = nullptr;
