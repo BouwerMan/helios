@@ -36,7 +36,6 @@
 #include "kernel/tasks/scheduler.h"
 #include "kernel/timer.h"
 #include "lib/list.h"
-#include "lib/string.h"
 #include "mm/address_space.h"
 #include "mm/kmalloc.h"
 #include "mm/page.h"
@@ -718,15 +717,12 @@ bool waitqueue_has_waiters(struct waitqueue* wqueue)
  */
 void waitqueue_prepare_wait(struct waitqueue* wqueue)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
+	spin_guard(&wqueue->waiters_lock);
 
 	struct task* task = get_current_task();
 	task->wait_state = WAIT_PREPARING;
 	task->wait = wqueue;
 	list_add_tail(&task->wait_list, &wqueue->waiters_list);
-
-	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
 }
 
 /**
@@ -738,23 +734,21 @@ void waitqueue_commit_sleep(struct waitqueue* wqueue)
 
 	struct task* task = get_current_task();
 
-	unsigned long flags;
-	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
+	scoped_spin_guard(&wqueue->waiters_lock)
+	{
+		if (task->wait_state == WAIT_WOKEN) {
+			list_del(&task->wait_list);
+			task->wait_state = WAIT_NONE;
+			task->wait = nullptr;
+			enable_preemption();
+			return;
+		}
 
-	if (task->wait_state == WAIT_WOKEN) {
-		list_del(&task->wait_list);
-		task->wait_state = WAIT_NONE;
-		task->wait = nullptr;
-		spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
-		enable_preemption();
-		return;
+		__task_block(task, &squeue.blocked_list);
+		task->wait_state = WAIT_SLEEPING;
+		task->wait = wqueue;
 	}
 
-	__task_block(task, &squeue.blocked_list);
-	task->wait_state = WAIT_SLEEPING;
-	task->wait = wqueue;
-
-	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
 	enable_preemption();
 	yield();
 }
@@ -764,16 +758,13 @@ void waitqueue_commit_sleep(struct waitqueue* wqueue)
  */
 void waitqueue_cancel_wait(struct waitqueue* wqueue)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
+	spin_guard(&wqueue->waiters_lock);
 
 	struct task* task = get_current_task();
 
 	list_del(&task->wait_list);
 	task->wait_state = WAIT_NONE;
 	task->wait = nullptr;
-
-	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
 }
 
 void waitqueue_sleep(struct waitqueue* wqueue)
@@ -785,12 +776,10 @@ void waitqueue_sleep(struct waitqueue* wqueue)
 void waitqueue_wake_one(struct waitqueue* wqueue)
 {
 	if (!wqueue) return;
-
-	ulong flags;
-	spin_lock_irqsave(&wqueue->waiters_lock, &flags);
+	spin_guard(&wqueue->waiters_lock);
 
 	if (list_empty(&wqueue->waiters_list)) {
-		goto cleanup;
+		return;
 	}
 
 	struct task* next =
@@ -800,19 +789,16 @@ void waitqueue_wake_one(struct waitqueue* wqueue)
 	case WAIT_PREPARING:
 		next->wait_state = WAIT_WOKEN;
 		// list_del(&next->wait_list);
-		goto cleanup;
+		return;
 	case WAIT_SLEEPING:
 		next->wait = nullptr;
 		next->wait_state = WAIT_NONE;
 		list_del(&next->wait_list);
 		task_wake(next);
-		goto cleanup;
+		return;
 	case WAIT_WOKEN:
 	case WAIT_NONE:
 	}
-
-cleanup:
-	spin_unlock_irqrestore(&wqueue->waiters_lock, flags);
 }
 
 void waitqueue_wake_all(struct waitqueue* wqueue)
