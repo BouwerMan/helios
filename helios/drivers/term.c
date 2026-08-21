@@ -159,42 +159,43 @@ void term_init()
 {
 	spin_init(&g_terminal.lock);
 
-	spin_guard(&g_terminal.lock);
+	scoped_spin_guard(&g_terminal.lock)
+	{
+		struct screen_info* sc = get_screen_info();
+		g_terminal.sc = sc;
+		g_terminal.cols = sc->fb->width / (sc->font->width + 1);
+		g_terminal.rows = sc->fb->height / sc->font->height;
 
-	struct screen_info* sc = get_screen_info();
-	g_terminal.sc = sc;
-	g_terminal.cols = sc->fb->width / (sc->font->width + 1);
-	g_terminal.rows = sc->fb->height / sc->font->height;
+		g_terminal.write_x = 0;
+		g_terminal.write_y = 0;
 
-	g_terminal.write_x = 0;
-	g_terminal.write_y = 0;
+		g_terminal.state = PARSER_NORMAL;
+		g_terminal.param_len = 0;
+		g_terminal.param_count = 0;
 
-	g_terminal.state = PARSER_NORMAL;
-	g_terminal.param_len = 0;
-	g_terminal.param_count = 0;
+		g_terminal.current_attrs = default_attrs;
+		g_terminal.default_attrs = default_attrs;
 
-	g_terminal.current_attrs = default_attrs;
-	g_terminal.default_attrs = default_attrs;
+		g_terminal.saved_x = 0;
+		g_terminal.saved_y = 0;
 
-	g_terminal.saved_x = 0;
-	g_terminal.saved_y = 0;
+		g_terminal.scroll_top = 0;
+		g_terminal.scroll_bottom = g_terminal.rows - 1;
 
-	g_terminal.scroll_top = 0;
-	g_terminal.scroll_bottom = g_terminal.rows - 1;
+		g_terminal.mode_flags = 0;
 
-	g_terminal.mode_flags = 0;
+		list_init(&g_terminal.cursor.timer.list);
+		g_terminal.cursor.visible = true;
 
-	list_init(&g_terminal.cursor.timer.list);
-	g_terminal.cursor.visible = true;
+		size_t pages = CEIL_DIV(g_terminal.rows * g_terminal.cols *
+						sizeof(struct screen_cell),
+					PAGE_SIZE);
+		g_terminal.screen_buffer = get_free_pages(AF_KERNEL, pages);
 
-	size_t pages = CEIL_DIV(g_terminal.rows * g_terminal.cols *
-					sizeof(struct screen_cell),
-				PAGE_SIZE);
-	g_terminal.screen_buffer = get_free_pages(AF_KERNEL, pages);
-
-	memset(g_terminal.screen_buffer,
-	       ' ',
-	       g_terminal.rows * g_terminal.cols * sizeof(char));
+		memset(g_terminal.screen_buffer,
+		       ' ',
+		       g_terminal.rows * g_terminal.cols * sizeof(char));
+	}
 
 	timer_schedule(&g_terminal.cursor.timer, 500, cursor_callback, nullptr);
 }
@@ -635,15 +636,16 @@ static void cursor_callback(void* data)
 {
 	(void)data;
 
-	spin_lock(&g_terminal.lock);
+	scoped_spin_guard(&g_terminal.lock)
+	{
+		struct term_cursor* cursor = &g_terminal.cursor;
 
-	struct term_cursor* cursor = &g_terminal.cursor;
-
-	if (cursor->visible) {
-		__hide_cursor();
-	} else {
-		__show_cursor(g_terminal.write_x, g_terminal.write_y);
+		if (cursor->visible) {
+			__hide_cursor();
+		} else {
+			__show_cursor(g_terminal.write_x, g_terminal.write_y);
+		}
 	}
 
-	timer_reschedule(&cursor->timer, 500);
+	timer_reschedule(&g_terminal.cursor.timer, 500);
 }
