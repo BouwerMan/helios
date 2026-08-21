@@ -68,8 +68,7 @@ void timer_schedule(struct timer* timer,
 		return; // Already scheduled
 	}
 
-	unsigned long flags;
-	spin_lock_irqsave(&ts.lock, &flags);
+	spin_guard(&ts.lock);
 
 	timer->expires_at = ts.current_ticks + millis_to_ticks(delay_ms);
 	timer->callback = callback;
@@ -88,8 +87,6 @@ void timer_schedule(struct timer* timer,
 	list_add_tail(insert_point, &timer->list);
 
 	timer->active = true;
-
-	spin_unlock_irqrestore(&ts.lock, flags);
 }
 
 void timer_cancel(struct timer* timer)
@@ -119,8 +116,7 @@ void timer_destroy(struct timer* timer)
  */
 static void timer_tick(void)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&ts.lock, &flags);
+	ulong flags = spin_lock_irqsave(&ts.lock);
 	struct timer* pos = nullptr;
 	struct timer* temp = nullptr;
 
@@ -136,7 +132,7 @@ static void timer_tick(void)
 
 		pos->callback(pos->data);
 
-		spin_lock_irqsave(&ts.lock, &flags);
+		flags = spin_lock_irqsave(&ts.lock);
 	}
 
 	spin_unlock_irqrestore(&ts.lock, flags);
@@ -148,17 +144,15 @@ static void timer_tick(void)
 void timer_handler(void)
 {
 	// Called from IRQ context, source depends on arch (Ex: PIT)
-	unsigned long flags;
-	spin_lock_irqsave(&ts.lock, &flags);
+	scoped_spin_guard(&ts.lock)
+	{
+		struct scheduler_queue* squeue = get_scheduler_queue();
 
-	struct scheduler_queue* squeue = get_scheduler_queue();
-
-	ts.current_ticks++;
-	if (ts.current_ticks % ts_phase == 0) ts.seconds_since_start++;
-	if (ts.current_ticks % SCHEDULER_TIME == 0)
-		squeue->need_reschedule = true;
-
-	spin_unlock_irqrestore(&ts.lock, flags);
+		ts.current_ticks++;
+		if (ts.current_ticks % ts_phase == 0) ts.seconds_since_start++;
+		if (ts.current_ticks % SCHEDULER_TIME == 0)
+			squeue->need_reschedule = true;
+	}
 
 	timer_tick();
 	scheduler_tick();
