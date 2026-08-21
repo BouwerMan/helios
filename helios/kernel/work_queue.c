@@ -37,19 +37,16 @@ static struct work_queue g_work_queue;
  */
 static struct work_item* take_from_queue()
 {
-	unsigned long flags;
-	spin_lock_irqsave(&g_work_queue.lock, &flags);
+	spin_guard(&g_work_queue.lock);
 	struct work_item* item = nullptr;
 
 	if (list_empty(&g_work_queue.queue)) {
-		goto release;
+		return item;
 	}
 
 	item = list_first_entry(&g_work_queue.queue, struct work_item, list);
 	list_del(&item->list);
 
-release:
-	spin_unlock_irqrestore(&g_work_queue.lock, flags);
 	return item;
 }
 
@@ -104,10 +101,10 @@ int add_work_item(work_func_t func, void* data)
 	item->func = func;
 	item->data = data;
 
-	unsigned long flags;
-	spin_lock_irqsave(&g_work_queue.lock, &flags);
-	list_add_tail(&g_work_queue.queue, &item->list);
-	spin_unlock_irqrestore(&g_work_queue.lock, flags);
+	scoped_spin_guard(&g_work_queue.lock)
+	{
+		list_add_tail(&g_work_queue.queue, &item->list);
+	}
 
 	// TODO: make this a proper wake queue
 	if (wq_task->state == BLOCKED) {
