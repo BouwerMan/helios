@@ -596,8 +596,11 @@ void task_wake(struct task* task)
 {
 	disable_preemption();
 
-	task->state = READY;
-	list_move_tail(&task->sched_list, &squeue.ready_list);
+	scoped_spin_guard(&squeue.lock)
+	{
+		task->state = READY;
+		list_move_tail(&task->sched_list, &squeue.ready_list);
+	}
 
 	enable_preemption();
 }
@@ -606,7 +609,10 @@ void task_block(struct task* task)
 {
 	disable_preemption();
 
-	__task_block(task, &squeue.blocked_list);
+	scoped_spin_guard(&squeue.lock)
+	{
+		__task_block(task, &squeue.blocked_list);
+	}
 
 	enable_preemption();
 }
