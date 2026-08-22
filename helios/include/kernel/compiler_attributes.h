@@ -1,6 +1,18 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
+/*
+ * Hardware-register bitfield structs in this codebase assume LSB-first
+ * (little-endian) bit allocation, per the GCC/clang x86 and ARM AAPCS(LE)
+ * ABIs. Fail the build on any target where that assumption does not hold,
+ * instead of silently misreading hardware state.
+ */
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define __LITTLE_ENDIAN_BITFIELD 1
+#else
+#error "Hardware register bitfields assume little-endian bit packing; unsupported target byte order"
+#endif
+
 /* Functions discarded after init */
 #define __init __attribute__((section(".init.text"))) __attribute__((cold))
 

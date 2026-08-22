@@ -1,5 +1,6 @@
 #include "arch/idt.h"
 #include "arch/regs.h"
+#include "drivers/i8042.h"
 #include "drivers/tty.h"
 
 /* KBDUS means US Keyboard Layout. This is a scancode table
@@ -143,7 +144,7 @@ static key_result_t handle_special_keys(unsigned char scancode)
 
 key_result_t process_scancode()
 {
-	unsigned char scancode = inb(0x60);
+	unsigned char scancode = inb(I8042_DATA);
 
 	if (handle_modifier_keys(scancode)) {
 		return make_no_result();

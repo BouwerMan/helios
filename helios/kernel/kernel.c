@@ -21,6 +21,7 @@
 #include "arch/idt.h"
 #include "drivers/console.h"
 #include "drivers/fb.h"
+#include "drivers/i8042.h"
 #include "drivers/kbd.h"
 #include "drivers/term.h"
 #include "drivers/tty.h"
@@ -122,6 +123,10 @@ void kernel_main()
 	console_init();
 	// attach_tty_to_console("ttyS0");
 	attach_tty_to_console("tty0");
+	int i8042 = i8042_init();
+	if (i8042 < 0) {
+		log_warn("Failed to intialize i8042");
+	}
 	keyboard_init();
 
 	ENABLE_INTERRUPTS();
