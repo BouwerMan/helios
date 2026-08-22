@@ -107,7 +107,7 @@ int i8042_init()
 	}
 
 	// Clock should be enabled if port 2 was actually enabled
-	has_aux = !cfg.clk2;
+	WRITE_ONCE(has_aux, !cfg.clk2);
 	if (has_aux) {
 		log_debug("i8042 supports 2 channels");
 
@@ -302,6 +302,16 @@ static inline int __wait_read(void)
 	return -ETIMEDOUT;
 }
 
+/**
+ * @brief Sends a command byte, then a data byte to go with it.
+ *
+ * Many i8042 commands are two bytes long: a command byte to the command
+ * port followed by a data byte to the data port. This sends both in order.
+ *
+ * @param cmd The command byte to send.
+ * @param data The data byte to send after the command.
+ * @return 0 if the controller accepts both bytes. A negative value if either write fails.
+ */
 static int i8042_write_cmd_data(u8 cmd, u8 data)
 {
 	int st = i8042_write_cmd(cmd);

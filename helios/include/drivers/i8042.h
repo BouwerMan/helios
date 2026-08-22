@@ -79,7 +79,7 @@ enum I8042_SELF_TEST_RESULT {
 };
 
 enum I8042_DEVICE_RESET_RESULT {
-	I8042_DEVICE_RESET_ACK = 0xFA,	   /**< The device acknowledged the reset command. */
+	I8042_DEVICE_RESET_ACK = 0xFA,	  /**< The device acknowledged the reset command. */
 	I8042_DEVICE_RESET_PASSED = 0xAA, /**< The device passed its self-test after reset. */
 	I8042_DEVICE_RESET_FAILED = 0xFC, /**< The device failed its self-test after reset. */
 };
