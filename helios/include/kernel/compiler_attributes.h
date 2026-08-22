@@ -11,8 +11,9 @@
 #define __initdata __attribute__((section(".init.data")))
 
 /* Use when a non-init caller must reference an init symbol */
-#define __ref __attribute__((no_sanitize("address"))) /* marker; you can also put it in a .ref.text if you add checks \
-						       */
+#define __ref                                                                                                   \
+	__attribute__((no_sanitize("address"))) /* marker; you can also put it in a .ref.text if you add checks \
+						 */
 
 // Always inline, even if the compiler thinks otherwise
 #ifndef __always_inline
