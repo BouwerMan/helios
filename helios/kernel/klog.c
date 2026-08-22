@@ -125,10 +125,13 @@ static int klog_emit_serial(const struct klog_header* hdr,
 }
 
 /**
- * emit_padding() - publish a PADDING record that fills the tail to end-of-ring
- * @rb:   initialized ring
- * @pos:  masked byte offset within the ring buffer (0 <= pos < rb->size)
- * @len:  number of bytes from @pos to end-of-ring (strictly > 0, 8B-aligned)
+ * @brief Publishes a PADDING record that fills the tail to end-of-ring.
+ *
+ * @param rb Initialized ring.
+ * @param pos Masked byte offset within the ring buffer (0 <= pos <
+ * rb->size).
+ * @param len Number of bytes from pos to end-of-ring. Must be greater than
+ * 0 and 8-byte aligned.
  */
 static inline void emit_padding(struct klog_ring* rb, u32 pos, u32 len)
 {
@@ -143,44 +146,20 @@ static inline void emit_padding(struct klog_ring* rb, u32 pos, u32 len)
 }
 
 /**
- * klog_reserve_bytes() - reserve a contiguous byte range for one record
- * @rb:    initialized ring
- * @len:   total bytes for this record (header + payload + pad), 8B-aligned
- * @start: OUT: unbounded starting byte index (monotonic head before add)
- * @off:   OUT: masked in-buffer offset (== *start & rb->mask)
+ * @brief Reserves a contiguous byte range for one record.
  *
- * Returns: true on success (always, under current algorithm).
+ * @param rb Initialized ring.
+ * @param len Total bytes for this record: header, payload, and padding.
+ * Must be 8-byte aligned.
+ * @param start Set to the unbounded starting byte index of the reservation.
+ * @param off Set to the masked in-buffer offset of the reservation.
  *
- * Purpose:
- *   Multi-producer, lock-free reservation of exactly @len contiguous bytes.
- *   If there is not enough room at the tail to fit @len, the function first
- *   advances the head by the leftover tail and publishes a PADDING record
- *   at @off, then retries; the actual record will land at offset 0.
+ * @return true on success. Under the current algorithm, this function
+ * always succeeds.
  *
- * Algorithm (CAS loop):
- *   1) Snapshot head := atomic64_load_relaxed().
- *   2) Compute pos = head & mask; tail = size - pos.
- *   3) If (tail >= len):
- *        try CAS(head -> head+len). On success, you own [pos, pos+len).
- *      Else if (tail > 0):
- *        try CAS(head -> head+tail). On success, emit_padding(pos, tail) and retry.
- *      Else (tail == 0):
- *        exactly at boundary; retry.
- *
- * Concurrency & ordering:
- *   - CAS is RELAXED: allocation does not publish data.
- *   - PADDING is published with a RELEASE store to size_flags so readers can
- *     skip it safely with ACQUIRE loads.
- *   - Progress is lock-free: on contention, at least one producer succeeds.
- *
- * Preconditions (enforced by assertions):
- *   - rb, start, off are non-null.
- *   - len is 8-byte aligned, len >= sizeof(struct klog_header), len <= rb->size.
- *
- * Postconditions on success:
- *   - *start is the unbounded byte index previously held in head.
- *   - *off   is the masked in-buffer offset of the reservation.
- *   - The reserved region [*off, *off+len) does not straddle end-of-ring.
+ * This is a lock-free reservation and supports multiple producers. If the
+ * tail of the ring cannot fit the record, the function pads the tail and
+ * retries at offset 0.
  */
 static bool
 klog_reserve_bytes(struct klog_ring* rb, u32 len, u64* start, u32* off)

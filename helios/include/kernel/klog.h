@@ -70,12 +70,15 @@ typedef int (*klog_emit_fn)(const struct klog_header* hdr,
 );
 
 /**
- * enum KLOG_DRAIN_STATUS - return codes from klog_drain()
- * @KLOG_DRAIN_OK: drained all available records
- * @KLOG_DRAIN_STOPPED_UNCOMMITTED: hit a not-yet-published record
- * @KLOG_DRAIN_BUDGET_EXHAUSTED: emitted 'budget' records
- * @KLOG_DRAIN_EMIT_BACKPRESSURE: sink asked us to stop (nonzero return)
- * @KLOG_DRAIN_RESYNCED: overrun detected; cursor jumped forward
+ * @brief Return codes from klog_drain().
+ *
+ * @param KLOG_DRAIN_OK Drained all available records.
+ * @param KLOG_DRAIN_STOPPED_UNCOMMITTED Hit a not-yet-published record.
+ * @param KLOG_DRAIN_BUDGET_EXHAUSTED Emitted the requested number of
+ * records.
+ * @param KLOG_DRAIN_EMIT_BACKPRESSURE The sink asked the drain to stop.
+ * @param KLOG_DRAIN_RESYNCED Detected an overrun; the cursor jumped
+ * forward.
  */
 enum KLOG_DRAIN_STATUS {
 	KLOG_DRAIN_OK = 0,

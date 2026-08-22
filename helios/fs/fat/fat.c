@@ -394,19 +394,16 @@ struct vfs_inode* fat_create_inode(struct vfs_superblock* sb)
 }
 
 /**
- * fat_open_file - Opens a file in the FAT filesystem.
- * @inode: Pointer to the VFS inode structure representing the file.
- * @file: Pointer to the VFS file structure where file data will be loaded.
+ * @brief Opens a file in the FAT filesystem.
  *
- * This function reads the file data from the FAT filesystem into the buffer
- * pointed to by `file->file_ptr`. It iterates through the file's clusters,
- * loading each cluster's data into the buffer. At the end of the file, it
- * replaces the last line feed character with a null terminator for
- * compatibility with string operations.
+ * @param inode Pointer to the VFS inode representing the file.
+ * @param file Pointer to the VFS file structure to load file data into.
  *
- * Return:
- *  - 0 on success.
- *  - -1 if an error occurs (e.g., invalid input or memory issues).
+ * @return 0 on success, or -1 on error, for example invalid input or a
+ * memory failure.
+ *
+ * Reads cluster data into the file's buffer and replaces the trailing line
+ * feed with a null terminator.
  */
 int fat_open_file(struct vfs_inode* inode, struct vfs_file* file)
 {

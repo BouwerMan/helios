@@ -200,14 +200,7 @@ struct vfs_superblock {
 };
 
 /**
- * struct sb_ops - Superblock operations
- * @alloc_inode: Allocate and initialize a new inode for this superblock
- * @destroy_inode: Free and cleanup an inode when no longer needed
- * @read_inode: Read inode metadata from storage into memory
- *
- * This structure defines the filesystem-specific operations that can be
- * performed on a superblock. These operations are typically implemented
- * by individual filesystem drivers to handle inode management.
+ * @brief Superblock operations implemented by a filesystem driver.
  */
 struct sb_ops {
 	struct vfs_inode* (*alloc_inode)(struct vfs_superblock* sb);
@@ -232,7 +225,7 @@ struct vfs_superblock* vfs_get_sb(const char* path);
 
 // --- Path and Dentry Management ---
 
-/**
+/*
  * DOC: Dentry lifetime & refs
  * Dentries are owned via counted references. Key rules:
  * 1) Returning cached dentries: dget() before returning.

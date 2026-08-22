@@ -37,8 +37,9 @@
 #include <uapi/helios/errno.h>
 
 /**
- * validate() - Validates the ELF file header.
- * @header: Pointer to the ELF file header.
+ * @brief Validates the ELF file header.
+ *
+ * @param header Pointer to the ELF file header.
  */
 static bool validate(struct elf_file_header* header)
 {
@@ -69,11 +70,15 @@ static bool validate(struct elf_file_header* header)
 }
 
 /**
- * load_program_header() - Loads a program header from an ELF file into the task's address space.
- * @ctx:   The exec context containing the new address space.
- * @inode: Pointer to the inode of the ELF file, or nullptr for anonymous mapping.
- * @prog:  Pointer to the ELF program header loaded in memory.
- * Return: 0 on success, -errno on failure.
+ * @brief Loads a program header from an ELF file into the task's address
+ * space.
+ *
+ * @param ctx The exec context containing the new address space.
+ * @param inode Pointer to the inode of the ELF file, or nullptr for
+ * anonymous mapping.
+ * @param prog Pointer to the ELF program header loaded in memory.
+ *
+ * @return 0 on success, -errno on failure.
  */
 static int load_program_header(struct exec_context* ctx,
 			       struct vfs_inode* inode,
@@ -213,13 +218,15 @@ static size_t arg_len(const char** args)
 }
 
 /**
- * setup_user_stack() - Sets up the user stack for the task.
- * @ctx:         The exec context containing the new address space.
- * @stack_top:   The top address of the stack.
- * @stack_pages: The number of pages to allocate for the stack.
- * @argv:        The argument vector.
- * @envp:        The environment vector.
- * Return: 0 on success, -errno on failure.
+ * @brief Sets up the user stack for the task.
+ *
+ * @param ctx The exec context containing the new address space.
+ * @param stack_top The top address of the stack.
+ * @param stack_pages The number of pages to allocate for the stack.
+ * @param argv The argument vector.
+ * @param envp The environment vector.
+ *
+ * @return 0 on success, -errno on failure.
  */
 static int setup_user_stack(struct exec_context* ctx,
 			    uptr stack_top,
@@ -382,16 +389,17 @@ static int exec_load_elf(struct exec_context* ctx, struct vfs_file* file)
 }
 
 /**
- * prepare_exec() - Build a new exec context for a userspace image
- * @path: Path to executable
- * @argv: NULL-terminated argument vector
- * @envp: NULL-terminated environment vector
- * Return: New exec_context* on success, NULL on failure
- * Context: May sleep; performs I/O and allocations.
+ * @brief Builds a new exec context for a userspace image.
  *
- * Creates a fresh address space and PML4, loads the ELF image, and
- * constructs a user stack per @argv/@envp. Marks the context prepared
- * on success; on failure, cleans up all intermediate resources.
+ * @param path Path to the executable.
+ * @param argv NULL-terminated argument vector.
+ * @param envp NULL-terminated environment vector.
+ *
+ * @return A pointer to the new exec context on success, or NULL on failure.
+ *
+ * @note This function may sleep. It performs I/O and memory allocation.
+ *
+ * On failure, this function frees all allocated resources.
  */
 struct exec_context*
 prepare_exec(const char* path, const char** argv, const char** envp)
@@ -443,16 +451,17 @@ prepare_exec(const char* path, const char** argv, const char** envp)
 }
 
 /**
- * commit_exec() - Install a prepared exec context into a task
- * @task: Task to reinitialize
- * @ctx:  Prepared exec context from prepare_exec()
- * Return: 0 on success, -EINVAL if @ctx is NULL or not prepared
- * Context: Disables preemption internally; caller must ensure @task is
- *          not executing concurrently on another CPU.
+ * @brief Installs a prepared exec context into a task.
  *
- * If @task is current, switches CR3 to the new address space, updates
- * the task's VAS, tears down the old VAS, resets registers, seeds user
- * CS/DS/SS/RFLAGS, updates @task->name, frees @ctx, and returns.
+ * @param task Task to reinitialize.
+ * @param ctx Prepared exec context from prepare_exec().
+ *
+ * @return 0 on success, or -EINVAL if the context is NULL or not prepared.
+ *
+ * @note This function disables preemption internally. The caller must
+ * ensure the task does not run concurrently on another CPU.
+ *
+ * This function frees the exec context after it installs it.
  */
 int commit_exec(struct task* task, struct exec_context* ctx)
 {
@@ -497,13 +506,13 @@ int commit_exec(struct task* task, struct exec_context* ctx)
 }
 
 /**
- * destroy_exec_context() - Free an exec context (best-effort cleanup)
- * @ctx: Exec context (may be partially initialized)
- * Return: none
- * Context: May sleep.
+ * @brief Destroys the new address space, if present, and frees the exec
+ * context.
  *
- * Destroys the new address space if present and frees @ctx. Safe to call
- * after a failed prepare_exec().
+ * @param ctx Exec context to free. It may be partially initialized.
+ *
+ * @note This function may sleep. It is safe to call after a failed
+ * prepare_exec() call.
  */
 void destroy_exec_context(struct exec_context* ctx)
 {

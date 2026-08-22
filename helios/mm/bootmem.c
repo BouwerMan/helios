@@ -21,15 +21,14 @@
 
 // This will be used to allocate memory before the buddy allocator is ready.
 
-/**
-* Initialization:
-* 	1. We setup a bitmap similar to the old PMM. Where a 1 means a page is alloc and 0 means free.
-* 	2. We find and allocate a space for mem_map. We then set this space as reserved.
-* 		2a. Reserved will just be a linked list of struct page, these don't get released to the buddy allocator.
-* 	I may end up just "freeing" pages which the bootmem allocator considers free.
-* 	As long as we can assume anything allocated through this is critical, that should make things easier.
-* 	So I don't actually have to "reserve" anything (though I may just set a flag in the struct page).
-*/
+/*
+ * Initialization:
+ * 1. Set up a bitmap like the old PMM, where 1 marks a page as allocated
+ *    and 0 marks it as free.
+ * 2. Find and allocate space for mem_map, then mark that space as
+ *    reserved. Reserved pages form a linked list of struct page, and the
+ *    buddy allocator never releases them.
+ */
 
 #undef LOG_LEVEL
 #define LOG_LEVEL 0
@@ -79,7 +78,7 @@ static constexpr size_t BITSET_WIDTH =
  *
  * @param phys_addr Physical address of the page to check.
  *
- * @returns true if the page is marked as used, false otherwise.
+ * @return true if the page is marked as used, false otherwise.
  */
 static bool is_page_used(uintptr_t phys_addr);
 
@@ -102,7 +101,7 @@ static inline uintptr_t get_phys_addr(size_t word_offset, size_t bit_offset)
  *
  * @param phys_addr Physical address to calculate the page index for.
  *
- * @returns The page index.
+ * @return The page index.
  */
 [[gnu::always_inline]]
 static inline size_t get_page_index(uintptr_t phys_addr)
@@ -115,7 +114,7 @@ static inline size_t get_page_index(uintptr_t phys_addr)
  *
  * @param phys_addr Physical address to calculate the word offset for.
  *
- * @returns The word offset.
+ * @return The word offset.
  */
 [[gnu::always_inline]]
 static inline size_t get_word_offset(uintptr_t phys_addr)
@@ -476,8 +475,9 @@ void bootmem_free_contiguous(void* addr, size_t count)
  * 2. Frees the memory used by the boot allocator bitmap itself.
  * 3. Logs the decommissioning process for debugging purposes.
  *
- * @note: This function should only be called when the boot allocator is no longer needed.
- * @note: We assume that all pages allocated by the boot allocator are critical and should NEVER be deallocated.
+ * @note Call this only when the boot allocator is no longer needed.
+ * @note Assumes every page the boot allocator allocated is critical. Never
+ * deallocates such a page.
  */
 void bootmem_free_all(void)
 {

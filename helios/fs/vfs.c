@@ -84,7 +84,7 @@ static inline u32 inode_key(const struct vfs_superblock* sb, const size_t id)
 }
 
 /**
- * vfs_init - Initializes the virtual filesystem.
+ * @brief Initializes the virtual filesystem.
  */
 void vfs_init()
 {
@@ -124,12 +124,11 @@ void vfs_init()
 }
 
 /**
- * register_mount - Registers a mount point in the virtual filesystem.
- * @mnt: Pointer to the vfs_mount structure representing the mount point.
+ * @brief Registers a mount point in the virtual filesystem.
  *
- * This function adds the given mount point to the global mount list. If the
- * list is empty, the mount point becomes the head of the list. Otherwise, it
- * is added to the beginning of the list.
+ * @param mnt Pointer to the vfs_mount structure for the mount point.
+ *
+ * Adds the mount point to the head of the global mount list.
  */
 static void register_mount(struct vfs_mount* mnt)
 {
@@ -142,12 +141,11 @@ static void register_mount(struct vfs_mount* mnt)
 }
 
 /**
- * register_filesystem - Registers a filesystem type in the virtual filesystem.
- * @fs: Pointer to the vfs_fs_type structure representing the filesystem type.
+ * @brief Registers a filesystem type in the virtual filesystem.
  *
- * This function adds the given filesystem type to the global filesystem list.
- * If the list is empty, the filesystem type becomes the head of the list.
- * Otherwise, it is added to the beginning of the list.
+ * @param fs Pointer to the vfs_fs_type structure for the filesystem type.
+ *
+ * Adds the filesystem type to the head of the global filesystem list.
  */
 void register_filesystem(struct vfs_fs_type* fs)
 {
@@ -204,11 +202,12 @@ mount_point_fail:
 }
 
 /**
- * new_inode - Creates a new, empty inode and adds it to the inode cache.
+ * @brief Creates a new, empty inode and adds it to the inode cache.
  *
- * @sb: The superblock of the filesystem where the new inode belongs.
- * @id: The unique ID for the new inode.
- * Return: A pointer to the new vfs_inode, or NULL on failure.
+ * @param sb Superblock of the filesystem that owns the new inode.
+ * @param id Unique ID for the new inode.
+ *
+ * @return A pointer to the new vfs_inode, or NULL on failure.
  */
 struct vfs_inode* new_inode(struct vfs_superblock* sb, size_t id)
 {
@@ -249,11 +248,11 @@ struct vfs_inode* iget(struct vfs_inode* inode)
 }
 
 /**
- * iput() - Releases a reference to an in-memory VFS inode.
+ * @brief Releases a reference to an in-memory VFS inode.
  *
- * @param inode A pointer to the `vfs_inode` whose reference should be released.
+ * @param inode Pointer to the vfs_inode whose reference is released.
  *
- * This function frees the inode if its reference count reaches zero.
+ * Frees the inode when its reference count reaches zero.
  */
 void iput(struct vfs_inode* inode)
 {
@@ -278,10 +277,11 @@ void iput(struct vfs_inode* inode)
 }
 
 /**
- * inode_add() - Add an inode to the global inode hash table
- * @inode: The inode to add to the hash table
+ * @brief Adds an inode to the global inode hash table.
  *
- * This function takes a reference on the inode.
+ * @param inode Inode to add to the hash table.
+ *
+ * Takes a reference on the inode.
  */
 void inode_add(struct vfs_inode* inode)
 {
@@ -294,11 +294,12 @@ void inode_add(struct vfs_inode* inode)
 }
 
 /**
- * inode_ht_check - Search for an existing inode in the hash table
- * @sb: Superblock containing the filesystem instance
- * @id: Unique inode identifier within the filesystem
+ * @brief Searches for an existing inode in the hash table.
  *
- * Return: Pointer to the existing inode if found, nullptr otherwise
+ * @param sb Superblock containing the filesystem instance.
+ * @param id Unique inode identifier within the filesystem.
+ *
+ * @return Pointer to the existing inode if found, or nullptr otherwise.
  */
 struct vfs_inode* inode_ht_check(struct vfs_superblock* sb, size_t id)
 {
@@ -321,20 +322,16 @@ struct vfs_inode* inode_ht_check(struct vfs_superblock* sb, size_t id)
 }
 
 /**
- * dget - Acquire a counted reference to a dentry
- * @dentry: Dentry to reference (may be NULL)
+ * @brief Acquires a counted reference to a dentry.
  *
- * Increments @dentry->ref_count and returns @dentry. Use dget() whenever:
- *  - You will return an existing (already-cached) dentry to a caller
- *    (e.g., a hash-table hit in dentry_lookup()).
- *  - You store a dentry into a structure that outlives the current scope
- *    (e.g., file->dentry), transferring ownership to that structure.
+ * @param dentry Dentry to reference. May be NULL.
  *
- * Do not add an extra reference when returning the freshly-allocated `child`
- * that was passed into a filesystem ->lookup() implementation; that dentry
- * already has refcount==1 from dentry_alloc().
+ * @return The same dentry, or NULL if @dentry was NULL.
  *
- * Return: @dentry (unchanged), or NULL if @dentry was NULL.
+ * Use dget() to return an existing cached dentry, or to store a dentry in a
+ * structure that outlives the current scope. Do not call dget() on a
+ * freshly allocated dentry from dentry_alloc(); it already has a refcount
+ * of one.
  */
 struct vfs_dentry* dget(struct vfs_dentry* dentry)
 {
@@ -349,23 +346,15 @@ struct vfs_dentry* dget(struct vfs_dentry* dentry)
 }
 
 /**
- * dput - Release a counted reference to a dentry
- * @dentry: Dentry to release (may be NULL)
+ * @brief Releases a counted reference to a dentry.
  *
- * Decrements @dentry->ref_count. When the count reaches zero, the dentry is
- * torn down: iput() is called on its inode and the dentry memory is freed.
+ * @param dentry Dentry to release. May be NULL.
  *
- * Typical balanced pairs:
- *  - vfs_walk_path(): dget(root) on entry; dput(prev) each hop.
- *  - vfs_open(): on any failure after a successful lookup, dput(dentry).
- *  - vfs_close(): when a file’s last ref is dropped, dput(file->dentry).
- *  - vfs_mount(): after grafting, dput(mount_point_dentry).
- *  - vfs_create()/vfs_mkdir(): always dput(parent) before returning.
+ * Decrements the reference count. At zero, releases the inode and frees the
+ * dentry.
  *
- * Notes:
- *  - This helper is NULL-safe; passing NULL is a no-op.
- *  - After dput(), the caller must not dereference @dentry unless it still
- *    holds another reference elsewhere.
+ * @note NULL-safe. After the call, do not dereference @dentry unless
+ * another reference is held elsewhere.
  */
 void dput(struct vfs_dentry* dentry)
 {
@@ -383,8 +372,9 @@ void dput(struct vfs_dentry* dentry)
 }
 
 /**
- * dentry_add - Adds a dentry to the hash table.
- * @dentry: Pointer to the vfs_dentry structure to be added.
+ * @brief Adds a dentry to the hash table.
+ *
+ * @param dentry Pointer to the vfs_dentry to add.
  */
 void dentry_add(struct vfs_dentry* dentry)
 {
@@ -399,10 +389,11 @@ void dentry_add(struct vfs_dentry* dentry)
 }
 
 /**
- * dentry_ht_check - Check if a dentry exists in the hash table.
- * @d: Pointer to the dentry to check.
+ * @brief Checks whether a dentry exists in the hash table.
  *
- * Return: Pointer to the matching dentry if found, or NULL if not found.
+ * @param d Pointer to the dentry to check.
+ *
+ * @return Pointer to the matching dentry if found, or NULL otherwise.
  */
 struct vfs_dentry* dentry_ht_check(struct vfs_dentry* d)
 {
@@ -417,21 +408,18 @@ struct vfs_dentry* dentry_ht_check(struct vfs_dentry* d)
 }
 
 /**
- * __dentry_lookup - Find or construct a child dentry under @parent
- * @parent: Directory dentry to search
- * @name:   Child name
+ * @brief Finds or constructs a child dentry under a parent directory.
  *
- * Semantics & ownership:
- *  - On a CACHE HIT: return dget(found); the caller owns one reference.
- *  - On a MISS: call parent->inode->ops->lookup(parent->inode, child),
- *    where @child is the freshly-allocated dentry from dentry_alloc().
- *    The filesystem must:
- *      * Populate @child (and insert with dentry_add(child) if it exists), and
- *        then return @child WITHOUT adding another reference; OR
- *      * If it decides to return a DIFFERENT existing dentry, it must
- *        dget(existing) and arrange to drop/dealloc the unused @child.
+ * @param parent Directory dentry to search.
+ * @param name Child name.
  *
- * Return: Referenced dentry on success (caller must dput()), or NULL on error.
+ * @return A referenced dentry on success. The caller must call dput(). NULL
+ * on error.
+ *
+ * On a cache hit, returns an extra reference on the existing dentry. On a
+ * miss, calls the filesystem's lookup() operation, which must populate and
+ * return the freshly allocated child dentry, or take a reference on a
+ * different dentry it returns instead.
  */
 struct vfs_dentry* __dentry_lookup(struct vfs_dentry* parent, const char* name)
 {
@@ -464,15 +452,14 @@ struct vfs_dentry* __dentry_lookup(struct vfs_dentry* parent, const char* name)
 }
 
 /**
- * dentry_hash - Computes a 32-bit hash for a directory entry (dentry).
+ * @brief Computes a 32-bit hash for a dentry.
  *
- * Generates a hash value based on the parent inode ID and the dentry name,
- * using the FNV-1a algorithm. Handles NULL pointers safely.
+ * @param key Pointer to the vfs_dentry to hash. Returns 0 if NULL.
  *
- * @key: Pointer to a `struct vfs_dentry` to be hashed.
- *            If NULL, returns 0. If parent/inode or name are NULL,
- *            special constants are mixed into the hash.
- * Return: 32-bit FNV-1a hash value representing the dentry.
+ * @return 32-bit FNV-1a hash value for the dentry.
+ *
+ * @note Handles a NULL parent, inode, or name by mixing in a sentinel
+ * value.
  */
 u32 dentry_hash(const struct vfs_dentry* key)
 {
@@ -517,11 +504,12 @@ u32 dentry_hash(const struct vfs_dentry* key)
 }
 
 /**
- * dentry_compare - Compares two directory entries (dentries) for equality.
+ * @brief Compares two dentries for equality.
  *
- * @d1: A pointer to the first `vfs_dentry` structure.
- * @d2: A pointer to the second `vfs_dentry` structure.
- * Returns: `true` if the dentries are equal, `false` otherwise.
+ * @param d1 Pointer to the first vfs_dentry.
+ * @param d2 Pointer to the second vfs_dentry.
+ *
+ * @return true if the dentries are equal, false otherwise.
  */
 bool dentry_compare(const struct vfs_dentry* d1, const struct vfs_dentry* d2)
 {
@@ -530,17 +518,15 @@ bool dentry_compare(const struct vfs_dentry* d1, const struct vfs_dentry* d2)
 }
 
 /**
- * __fill_dirent - Populate a VFS dirent from a (stable) dentry
- * @dentry: Dentry whose inode/name/type will be copied (must not be freed during the call)
- * @dirent: Output record to fill (caller-provided)
+ * @brief Populates a VFS dirent from a dentry.
  *
- * Copies the inode number, type, record length policy, and name from @locked_dentry
- * into @dirent. This helper does not set @dirent->d_off; the caller (typically
- * the VFS readdir wrapper) is responsible for assigning the resume position.
+ * @param dentry Dentry to copy the inode, name, and type from. Must not be
+ * freed during the call.
+ * @param dirent Output record to fill.
  *
- * Return:
- *    VFS_OK (0) on success; negative -VFS_ERR_* if I add stricter validation and
- *    choose to signal oversize names or invalid inputs.
+ * @return 0 on success.
+ *
+ * @note Does not set dirent->d_off. The caller assigns the resume position.
  */
 int __fill_dirent(struct vfs_dentry* dentry, struct dirent* dirent)
 {
@@ -563,22 +549,19 @@ int __fill_dirent(struct vfs_dentry* dentry, struct dirent* dirent)
 }
 
 /**
- * vfs_readdir - Iterate a directory one entry at a time (VFS view)
- * @dir:    Opened directory file object (must reference a directory inode)
- * @out:    Output dirent to fill
- * @offset: Global position (a.k.a. "cookie"): 0=".", 1="..", >=2=children
+ * @brief Iterates a directory one entry at a time.
  *
- * Returns:
- *    @retval  1  One entry was emitted and @out is valid; @out->d_off is where to resume.
- *    @retval  0  End of directory (no entry at @offset / no more children).
- *    @retval <0  Negative -VFS_ERR_* on error (e.g., -VFS_ERR_INVAL, -VFS_ERR_NOTDIR,
- *                -VFS_ERR_OPNOTSUPP).
+ * @param dir Open directory file. Must reference a directory inode.
+ * @param out Output dirent to fill.
+ * @param pos Position cookie: 0 is ".", 1 is "..", and 2 or more are
+ * children.
  *
- * Locking & concurrency:
- *    - Acquires the directory inode's read lock for the duration of the operation.
- *      Filesystem mutations (create/unlink/rename) should take the write lock.
- *    - Provides a best-effort snapshot: under concurrent mutations, an iterator may
- *      skip or re-see entries but must never crash or return partially initialized data.
+ * @return 1 if an entry was emitted, 0 at the end of the directory, or a
+ * negative errno on error.
+ *
+ * @note Holds the directory inode's read lock for the duration of the
+ * call. Under concurrent mutation, an iterator may skip or repeat entries
+ * but never returns partially initialized data.
  *
  * See: docs/man9/readdir.9.md
  */
@@ -664,13 +647,13 @@ ssize_t vfs_getdents(struct vfs_file* dir, struct dirent* dirp, size_t count)
 }
 
 /**
- * __vfs_open_for_task - Open a file for a specific task
+ * @brief Opens a file for a specific task.
  *
- * @t:     Task for which to open the file
- * @path:  Path to the file to open
- * @flags: Open flags (e.g., O_RDONLY, O_WRONLY, O_CREAT)
+ * @param t Task to open the file for.
+ * @param path Path to the file to open.
+ * @param flags Open flags, for example O_RDONLY, O_WRONLY, or O_CREAT.
  *
- * Return: File descriptor on success, negative -VFS_ERR_* on error
+ * @return File descriptor on success, or a negative errno on error.
  */
 int __vfs_open_for_task(struct task* t, const char* path, int flags)
 {
@@ -736,9 +719,10 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags)
 }
 
 /**
- * vfs_open - Open a file and return a file descriptor
- * @path: Path to the file to open
- * @flags: Open flags (e.g., O_RDONLY, O_WRONLY, O_CREAT)
+ * @brief Opens a file and returns a file descriptor.
+ *
+ * @param path Path to the file to open.
+ * @param flags Open flags, for example O_RDONLY, O_WRONLY, or O_CREAT.
  */
 int vfs_open(const char* path, int flags)
 {
@@ -746,10 +730,11 @@ int vfs_open(const char* path, int flags)
 }
 
 /**
- * vfs_close - Close a file descriptor
- * @fd: File descriptor to close
+ * @brief Closes a file descriptor.
  *
- * Return: VFS_OK on success, -VFS_ERR_INVAL if the file descriptor is invalid
+ * @param fd File descriptor to close.
+ *
+ * @return 0 on success, or -EINVAL if the file descriptor is invalid.
  */
 int vfs_close(int fd)
 {
@@ -815,12 +800,18 @@ void vfs_dump_child(struct vfs_dentry* parent)
 }
 
 /**
- * __split_string - Split a path into parent and basename (internal)
- * @path:       input path string
- * @parent_out: receives kzalloc'ed parent (or nullptr on failure)
- * @name_out:   receives kzalloc'ed basename (or nullptr on failure)
- * Return: VFS_OK on success; <0 as -VFS_ERR_* on error.
- * Context: may sleep; allocates memory; no locks held.
+ * @brief Splits a path into a parent directory and basename.
+ *
+ * @param path Input path string.
+ * @param parent_out Receives an allocated parent string, or nullptr on
+ * failure.
+ * @param name_out Receives an allocated basename string, or nullptr on
+ * failure.
+ *
+ * @return 0 on success, or a negative errno on error.
+ *
+ * @note May sleep. Allocates memory. Holds no locks.
+ *
  * See: docs/man9/__split_string.9.md
  */
 static int __split_path(const char* path, char** parent_out, char** name_out)
@@ -1360,12 +1351,13 @@ static struct vfs_fs_type* find_filesystem(const char* fs_type)
 }
 
 /**
- * vfs_mount - Mount a filesystem at a given path
- * @source: Device to mount at (`/dev/sda1`).
- *          Can be nullptr for ramfs/virtual devices
- * @target: path to mount at
- * @fstype: filesystem to mount
- * @flags: mount flags
+ * @brief Mounts a filesystem at a given path.
+ *
+ * @param source Device to mount, for example "/dev/sda1". May be nullptr
+ * for ramfs or other virtual devices.
+ * @param target Path to mount at.
+ * @param fstype Filesystem type to mount.
+ * @param flags Mount flags.
  */
 int vfs_mount(const char* source,
 	      const char* target,
@@ -1495,11 +1487,12 @@ static const char* path_next_token(struct path_tokenizer* tok, size_t* out_len)
 }
 
 /**
- * __vfs_walk_path - Resolves a relative path starting from a given root dentry.
+ * @brief Resolves a relative path starting from a root dentry.
  *
- * @root:     The starting directory dentry (must be a directory).
- * @path:     The relative path to resolve (e.g., "foo/bar.txt").
- * Return:    A pointer to the final vfs_dentry on success, or NULL on failure.
+ * @param root Starting directory dentry. Must be a directory.
+ * @param path Relative path to resolve, for example "foo/bar.txt".
+ *
+ * @return Pointer to the final vfs_dentry on success, or NULL on failure.
  */
 struct vfs_dentry* __vfs_walk_path(struct vfs_dentry* root, const char* path)
 {

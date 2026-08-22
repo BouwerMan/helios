@@ -7,22 +7,21 @@
 typedef u32 dev_t;
 
 /**
- * struct chrdev - character-device range descriptor
- * @base:   First device number in this contiguous range.
- * @count:  Number of minors in the range (>=1). Covers [minor(base), minor(base)+count).
- * @name:   Canonical base name (e.g., "ttyS", "null"). Advisory only; not used by lookup.
- * @fops:   Immutable VFS operation table for this device family.
- * @drvdata:Driver-private pointer installed into struct vfs_file->private_data by .open (optional).
- * @flags:  Internal flags (e.g., CHRDEV_F_DEAD). Not ABI.
+ * @brief Describes a contiguous character-device number range.
  *
- * A chrdev binds a contiguous minor range to a single ops table. If you need
- * different ops for different minors, register multiple chrdev ranges.
+ * A chrdev binds a contiguous minor range to one ops table. Register a
+ * separate chrdev range to use different ops for different minors.
  */
 struct chrdev {
+	/** @brief First device number in this range. */
 	dev_t base;	  // Base dev_t for this range
+	/** @brief Number of minors in the range (at least 1). */
 	u16 count;	  // How many minors in this range
+	/** @brief Canonical base name, e.g. "ttyS". Advisory only. */
 	const char* name; // Canonical name: "ttyS", "null", etc.
+	/** @brief Immutable VFS operation table for this device family. */
 	const struct file_ops* fops;
+	/** @brief Driver-private pointer for the open file, if any. */
 	void* drvdata;
 	struct hlist_node hnode;
 };

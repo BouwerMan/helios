@@ -51,7 +51,7 @@ struct vfs_file* g_kernel_console = nullptr;
 extern void* g_entry_new_stack;
 
 /**
- * init_kernel_structure() - Initialize core kernel data structures
+ * @brief Initializes core kernel data structures.
  */
 void init_kernel_structure()
 {

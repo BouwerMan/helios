@@ -30,11 +30,14 @@
 #include <uapi/helios/mman.h>
 
 /**
- * validate_args - Reject NULL, overflowing, or kernel-half args cheaply
- * @k:   Kernel-side pointer of the copy
- * @u:   User-side pointer of the copy
- * @len: Length of the range in bytes
- * Return: true if worth walking with check_access(), false to reject outright.
+ * @brief Rejects NULL, overflowing, or kernel-half arguments cheaply.
+ *
+ * @param k Kernel-side pointer of the copy.
+ * @param u User-side pointer of the copy.
+ * @param len Length of the range in bytes.
+ *
+ * @return true if the range is worth checking with check_access(), false
+ * to reject it outright.
  */
 static bool validate_args(const void* k, const void __user* u, size_t len)
 {
@@ -60,12 +63,16 @@ static bool validate_args(const void* k, const void __user* u, size_t len)
 }
 
 /**
- * copy_from_user - Validate and copy a range out of userspace
- * @dst: Kernel destination buffer
- * @src: User source pointer
- * @len: Number of bytes to copy
- * Return: 0 on success, -EFAULT if @src/@len is rejected.
- * Context: Task context only, must not be called from an IRQ handler.
+ * @brief Validates and copies a range out of userspace.
+ *
+ * @param dst Kernel destination buffer.
+ * @param src User source pointer.
+ * @param len Number of bytes to copy.
+ *
+ * @return 0 on success, or -EFAULT if the source or length is rejected.
+ *
+ * @note Call this function from task context only. Do not call it from
+ * an IRQ handler.
  */
 long copy_from_user(void* dst, const void __user* src, size_t len)
 {
@@ -98,12 +105,17 @@ long copy_from_user(void* dst, const void __user* src, size_t len)
 }
 
 /**
- * copy_to_user - Validate and copy a range into userspace
- * @dst: User destination pointer
- * @src: Kernel source buffer
- * @len: Number of bytes to copy
- * Return: 0 on success, -EFAULT if @dst/@len is rejected.
- * Context: Task context only, must not be called from an IRQ handler.
+ * @brief Validates and copies a range into userspace.
+ *
+ * @param dst User destination pointer.
+ * @param src Kernel source buffer.
+ * @param len Number of bytes to copy.
+ *
+ * @return 0 on success, or -EFAULT if the destination or length is
+ * rejected.
+ *
+ * @note Call this function from task context only. Do not call it from
+ * an IRQ handler.
  */
 long copy_to_user(void __user* dst, const void* src, size_t len)
 {

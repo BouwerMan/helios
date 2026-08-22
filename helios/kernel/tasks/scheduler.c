@@ -55,7 +55,11 @@ struct task* kernel_task;
 extern void __switch_to(struct task* next);
 
 /**
- * Helper to set task state and add the task to the chosen block list
+ * @brief Sets the task state to blocked and moves it to the given block
+ * list.
+ *
+ * @param task Task to block.
+ * @param block_list List to move the task onto.
  */
 static inline void __task_block(struct task* task, struct list_head* block_list)
 {
@@ -70,7 +74,7 @@ static inline bool should_reschedule()
 }
 
 /**
- * Enables task preemption by decrementing the preemption counter.
+ * @brief Enables task preemption by decrementing the preemption counter.
  */
 void enable_preemption(void)
 {
@@ -78,8 +82,9 @@ void enable_preemption(void)
 }
 
 /**
- * Disables task preemption by incrementing the preemption counter.
- * If the counter underflows, a panic is triggered.
+ * @brief Disables task preemption by incrementing the preemption counter.
+ *
+ * This function panics if the counter underflows.
  */
 void disable_preemption(void)
 {
@@ -89,8 +94,9 @@ void disable_preemption(void)
 }
 
 /**
- * get_current_task() - Retrieves the currently running task.
- * Return: Pointer to the current task structure.
+ * @brief Retrieves the currently running task.
+ *
+ * @return A pointer to the current task structure.
  */
 struct task* get_current_task()
 {
@@ -141,7 +147,7 @@ static struct task* get_next_task()
 }
 
 /**
- * Checks if a reschedule is needed and performs a context switch if required.
+ * @brief Checks if a reschedule is needed and switches context if it is.
  *
  * @param regs Pointer to the current task's register state.
  */
@@ -215,14 +221,10 @@ static void idle_task_entry()
 }
 
 /**
- * setup_first_kernel_task - Initialize the primary kernel task
- * 
- * Creates and configures the initial kernel task that represents the kernel's
- * execution context. This task serves as the root of the task hierarchy and
- * is used for kernel-level operations that require a task context.
- * 
- * This function must be called during early kernel initialization before
- * any other tasks are created or scheduled.
+ * @brief Initializes the primary kernel task.
+ *
+ * @note Call this function during early kernel initialization, before any
+ * other task is created or scheduled.
  */
 static void setup_first_kernel_task()
 {
@@ -250,9 +252,9 @@ static void setup_first_kernel_task()
 }
 
 /**
- * setup_idle_task - Create the idle task for CPU idle periods
- * 
- * This task is selected by the scheduler when the ready queue is empty.
+ * @brief Creates the idle task for CPU idle periods.
+ *
+ * The scheduler selects this task when the ready queue is empty.
  */
 static void setup_idle_task()
 {
@@ -261,7 +263,7 @@ static void setup_idle_task()
 }
 
 /**
- * Initializes the scheduler by creating the idle and kernel tasks.
+ * @brief Initializes the scheduler by creating the idle and kernel tasks.
  */
 void scheduler_init(void)
 {
@@ -307,14 +309,15 @@ bool is_scheduler_init()
 }
 
 /**
- * kthread_create - Creates new kernel thread
- * @name: Name of thread
- * @entry: Entry function to execute on first run
+ * @brief Creates a new kernel thread.
  *
- * User must call kthread_run after this function for the scheduler
- * to schedule it.
+ * @param name Name of the thread.
+ * @param entry Entry function to run on first execution.
  *
- * Return: Task that was created, nullptr if error
+ * @return The task that was created, or nullptr on error.
+ *
+ * @note Call kthread_run() after this function so the scheduler runs the
+ * thread.
  */
 [[nodiscard]]
 struct task* kthread_create(const char* name, entry_func entry)
@@ -366,10 +369,12 @@ void kthread_destroy(struct task* task)
 }
 
 /**
- * kthread_run - Start execution of a kernel thread
- * @task: Pointer to the task structure representing the kernel thread
+ * @brief Starts execution of a kernel thread.
  *
- * Return: 0 on success, -1 if task has no entry point specified
+ * @param task Pointer to the task structure representing the kernel
+ * thread.
+ *
+ * @return 0 on success, or -1 if the task has no entry point.
  */
 int kthread_run(struct task* task)
 {
@@ -555,9 +560,10 @@ int copy_thread_state(struct task* child, struct registers* parent_regs)
 }
 
 /**
- * __alloc_task - Allocate and initialize a new task structure
- * 
- * Return: Pointer to initialized task structure on success, nullptr on OOM
+ * @brief Allocates and initializes a new task structure.
+ *
+ * @return A pointer to the initialized task structure on success, or
+ * nullptr on OOM.
  */
 struct task* __alloc_task()
 {
@@ -619,7 +625,8 @@ void task_block(struct task* task)
 }
 
 /**
- * Handles the scheduler tick, decrementing sleep ticks for blocked tasks.
+ * @brief Handles the scheduler tick and decrements sleep ticks for blocked
+ * tasks.
  */
 void scheduler_tick()
 {
@@ -680,7 +687,8 @@ void scheduler_dump()
 }
 
 /**
- * Forces the current task to yield the CPU, triggering a reschedule.
+ * @brief Forces the current task to yield the CPU and triggers a
+ * reschedule.
  */
 void yield()
 {
@@ -689,7 +697,7 @@ void yield()
 }
 
 /**
- * Blocks the current task and yields the CPU.
+ * @brief Blocks the current task and yields the CPU.
  */
 void yield_blocked()
 {
@@ -698,10 +706,11 @@ void yield_blocked()
 }
 
 /**
- * waitqueue_init() - Initialize a waitqueue to the empty state.
- * @wqueue: Target waitqueue. Can be NULL.
+ * @brief Initializes a waitqueue to the empty state.
  *
- * Call this function before the first use of @wqueue.
+ * @param wqueue Target waitqueue. Can be NULL.
+ *
+ * @note Call this function before the first use of the waitqueue.
  */
 void waitqueue_init(struct waitqueue* wqueue)
 {
@@ -711,10 +720,11 @@ void waitqueue_init(struct waitqueue* wqueue)
 }
 
 /**
- * waitqueue_has_waiters() - Tell if a waitqueue has waiters.
- * @wqueue: Target waitqueue. Can be NULL.
+ * @brief Tells if a waitqueue has waiters.
  *
- * Return: true if one or more tasks are on the queue, false if not.
+ * @param wqueue Target waitqueue. Can be NULL.
+ *
+ * @return true if one or more tasks are on the queue, false if not.
  */
 bool waitqueue_has_waiters(struct waitqueue* wqueue)
 {
@@ -723,13 +733,14 @@ bool waitqueue_has_waiters(struct waitqueue* wqueue)
 }
 
 /**
- * waitqueue_prepare_wait() - Put the current task on a waitqueue.
- * @wqueue: Target waitqueue.
+ * @brief Puts the current task on a waitqueue.
  *
- * The task gets the WAIT_PREPARING state and does not sleep. Call this
+ * @param wqueue Target waitqueue.
+ *
+ * @note Call this function from process context only.
+ *
+ * The task gets the WAIT_PREPARING state. It does not sleep. Call this
  * function before you examine the wait condition. See waitqueue(9).
- *
- * Context: Process context only.
  */
 void waitqueue_prepare_wait(struct waitqueue* wqueue)
 {
@@ -742,15 +753,17 @@ void waitqueue_prepare_wait(struct waitqueue* wqueue)
 }
 
 /**
- * waitqueue_commit_sleep() - Sleep after waitqueue_prepare_wait().
- * @wqueue: Target waitqueue.
+ * @brief Sleeps after a call to waitqueue_prepare_wait().
  *
- * If a wake signal arrived after waitqueue_prepare_wait(), the function
- * returns immediately. If not, the task blocks until a wake signal
- * arrives. The function can return before the wait condition is true;
+ * @param wqueue Target waitqueue.
+ *
+ * @note Call this function from process context only. It may sleep. Do
+ * not hold a spinlock when you call it.
+ *
+ * If a wake signal arrived after waitqueue_prepare_wait(), this function
+ * returns immediately. Otherwise, the task blocks until a wake signal
+ * arrives. This function can return before the wait condition is true;
  * examine the condition in a loop. See waitqueue(9).
- *
- * Context: Process context only. Can sleep. Do not hold a spinlock.
  */
 void waitqueue_commit_sleep(struct waitqueue* wqueue)
 {
@@ -778,14 +791,15 @@ void waitqueue_commit_sleep(struct waitqueue* wqueue)
 }
 
 /**
- * waitqueue_cancel_wait() - Remove the current task from a waitqueue.
- * @wqueue: Target waitqueue.
+ * @brief Removes the current task from a waitqueue.
  *
- * Use this function when the wait condition became true between
- * waitqueue_prepare_wait() and waitqueue_commit_sleep(). The task does
- * not sleep.
+ * @param wqueue Target waitqueue.
  *
- * Context: Process context only.
+ * @note Call this function from process context only. The task does not
+ * sleep.
+ *
+ * Use this function when the wait condition becomes true between
+ * waitqueue_prepare_wait() and waitqueue_commit_sleep().
  */
 void waitqueue_cancel_wait(struct waitqueue* wqueue)
 {
@@ -799,13 +813,14 @@ void waitqueue_cancel_wait(struct waitqueue* wqueue)
 }
 
 /**
- * waitqueue_sleep() - Sleep with no examination of a wait condition.
- * @wqueue: Target waitqueue.
+ * @brief Sleeps without examining a wait condition.
  *
- * A wake signal that arrives before this call is lost. Use this
- * function only if a lost wake signal is acceptable. See waitqueue(9).
+ * @param wqueue Target waitqueue.
  *
- * Context: Process context only. Can sleep.
+ * @note Call this function from process context only. It may sleep.
+ *
+ * A wake signal that arrives before this call is lost. Use this function
+ * only if a lost wake signal is acceptable. See waitqueue(9).
  */
 void waitqueue_sleep(struct waitqueue* wqueue)
 {
@@ -814,15 +829,15 @@ void waitqueue_sleep(struct waitqueue* wqueue)
 }
 
 /**
- * waitqueue_wake_one() - Wake the first waiter on a waitqueue.
- * @wqueue: Target waitqueue. Can be NULL.
+ * @brief Wakes the first waiter on a waitqueue.
+ *
+ * @param wqueue Target waitqueue. Can be NULL.
+ *
+ * @note This function is safe to call in interrupt context.
  *
  * A waiter in the WAIT_PREPARING state gets the WAIT_WOKEN state and
- * leaves the queue. A waiter in the WAIT_SLEEPING state leaves the
- * queue and becomes ready to run. A call on an empty queue does
- * nothing.
- *
- * Context: Any. Safe in interrupt context.
+ * leaves the queue. A waiter in the WAIT_SLEEPING state leaves the queue
+ * and becomes ready to run. A call on an empty queue does nothing.
  */
 void waitqueue_wake_one(struct waitqueue* wqueue)
 {
@@ -853,10 +868,11 @@ void waitqueue_wake_one(struct waitqueue* wqueue)
 }
 
 /**
- * waitqueue_wake_all() - Wake all waiters on a waitqueue.
- * @wqueue: Target waitqueue. Can be NULL.
+ * @brief Wakes all waiters on a waitqueue.
  *
- * Context: Any. Safe in interrupt context.
+ * @param wqueue Target waitqueue. Can be NULL.
+ *
+ * @note This function is safe to call in interrupt context.
  */
 void waitqueue_wake_all(struct waitqueue* wqueue)
 {
@@ -883,10 +899,14 @@ void waitqueue_dump_waiters(struct waitqueue* wqueue)
 }
 
 /**
- * __install_fd_at - Install @file at a specific descriptor number.
- * @t:   target task
- * @fd:  descriptor index (e.g., 0,1,2)
- * Return: 0 on success, -1 if @fd is out of range or occupied.
+ * @brief Installs a file at a specific descriptor number.
+ *
+ * @param t Target task.
+ * @param file File to install.
+ * @param fd Descriptor index (for example, 0, 1, 2).
+ *
+ * @return 0 on success, or -1 if the descriptor is out of range or
+ * occupied.
  */
 int __install_fd_at(struct task* t, struct vfs_file* file, int fd)
 {

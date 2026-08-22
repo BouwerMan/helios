@@ -21,8 +21,9 @@ typedef struct {
 #define DEFINE_SPINLOCK(name) spinlock_t name = SPINLOCK_INIT
 
 /**
- * spin_init() - Initialize a spinlock to the unlocked state.
- * @lock: Pointer to the spinlock to initialize.
+ * @brief Initializes a spinlock to the unlocked state.
+ *
+ * @param lock Pointer to the spinlock to initialize.
  */
 static inline void spin_init(spinlock_t* lock)
 {
@@ -43,8 +44,9 @@ static inline void __spinlock_raw_release(spinlock_t* lock)
 }
 
 /**
- * spin_lock() - Acquire a spinlock. The interrupt state does not change.
- * @lock: Pointer to the spinlock to acquire.
+ * @brief Acquires a spinlock. The interrupt state does not change.
+ *
+ * @param lock Pointer to the spinlock to acquire.
  */
 static inline void spin_lock(spinlock_t* lock)
 {
@@ -52,8 +54,9 @@ static inline void spin_lock(spinlock_t* lock)
 }
 
 /**
- * spin_unlock() - Release a spinlock. The interrupt state does not change.
- * @lock: Pointer to the spinlock to release.
+ * @brief Releases a spinlock. The interrupt state does not change.
+ *
+ * @param lock Pointer to the spinlock to release.
  */
 static inline void spin_unlock(spinlock_t* lock)
 {
@@ -61,10 +64,11 @@ static inline void spin_unlock(spinlock_t* lock)
 }
 
 /**
- * spin_trylock() - Make one attempt to acquire a spinlock. Do not spin.
- * @lock: Pointer to the spinlock to acquire.
+ * @brief Makes one attempt to acquire a spinlock. Does not spin.
  *
- * Return: true if the lock was acquired, false if it was already held.
+ * @param lock Pointer to the spinlock to acquire.
+ *
+ * @return True if the spinlock was acquired. False if it was already held.
  */
 static inline bool spin_trylock(spinlock_t* lock)
 {
@@ -72,8 +76,9 @@ static inline bool spin_trylock(spinlock_t* lock)
 }
 
 /**
- * spin_lock_irq() - Disable interrupts, then acquire a spinlock.
- * @lock: Pointer to the spinlock to acquire.
+ * @brief Disables interrupts, then acquires a spinlock.
+ *
+ * @param lock Pointer to the spinlock to acquire.
  */
 static inline void spin_lock_irq(spinlock_t* lock)
 {
@@ -82,8 +87,9 @@ static inline void spin_lock_irq(spinlock_t* lock)
 }
 
 /**
- * spin_unlock_irq() - Release a spinlock, then enable interrupts.
- * @lock: Pointer to the spinlock to release.
+ * @brief Releases a spinlock, then enables interrupts.
+ *
+ * @param lock Pointer to the spinlock to release.
  */
 static inline void spin_unlock_irq(spinlock_t* lock)
 {
@@ -95,11 +101,12 @@ static inline void spin_unlock_irq(spinlock_t* lock)
 static constexpr ulong EFLAGS_IF = 1UL << 9;
 
 /**
- * spin_lock_irqsave() - Save the interrupt state, disable interrupts, then
- *                       acquire a spinlock.
- * @lock: Pointer to the spinlock to acquire.
+ * @brief Saves the interrupt state, disables interrupts, then acquires
+ * a spinlock.
  *
- * Return: The interrupt state to restore on unlock.
+ * @param lock Pointer to the spinlock to acquire.
+ *
+ * @return The interrupt state to restore on unlock.
  */
 static inline ulong spin_lock_irqsave(spinlock_t* lock)
 {
@@ -112,10 +119,10 @@ static inline ulong spin_lock_irqsave(spinlock_t* lock)
 }
 
 /**
- * spin_unlock_irqrestore() - Release a spinlock and restore the previous
- *                            interrupt state.
- * @lock: Pointer to the spinlock to release.
- * @flags: The value returned by the matching spin_lock_irqsave().
+ * @brief Releases a spinlock and restores the previous interrupt state.
+ *
+ * @param lock Pointer to the spinlock to release.
+ * @param flags The value returned by the matching spin_lock_irqsave().
  */
 static inline void spin_unlock_irqrestore(spinlock_t* lock, ulong flags)
 {
@@ -141,16 +148,18 @@ static inline void __spin_guard_fini(spinlock_guard_t* guard)
 }
 
 /**
- * spin_guard() - Hold a lock until the end of the current block.
- * @lockp: Pointer to the spinlock to acquire.
+ * @brief Holds a spinlock until the end of the current block.
+ *
+ * @param lockp Pointer to the spinlock to acquire.
  */
 #define spin_guard(lockp)               \
 	spinlock_guard_t __UNIQUE_ID(g) \
 		__cleanup(__spin_guard_fini) = __spin_guard_init(lockp)
 
 /**
- * scoped_spin_guard() - Hold a lock for the statement that follows.
- * @lockp: Pointer to the spinlock to acquire.
+ * @brief Holds a spinlock for the statement that follows.
+ *
+ * @param lockp Pointer to the spinlock to acquire.
  *
  * This macro expands to a loop. See spinlock(9) for a warning about
  * break and continue.

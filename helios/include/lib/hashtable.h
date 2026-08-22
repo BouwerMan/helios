@@ -96,29 +96,31 @@ static inline void __hash_init(struct hlist_head* ht, unsigned int sz)
 }
 
 /**
- * hash_init - initialize a hash table
- * @hashtable: hashtable to be initialized
+ * @brief Initializes a hash table.
  *
- * Calculates the size of the hashtable from the given parameter, otherwise
- * same as hash_init_size.
+ * @param hashtable Hash table to initialize.
  *
- * This has to be a macro since HASH_BITS() will not work on pointers since
- * it calculates the size during preprocessing.
+ * @note This is a macro. HASH_BITS() does not work on pointers, because it
+ * calculates the size during preprocessing.
  */
 #define hash_init(hashtable) __hash_init(hashtable, HASH_SIZE(hashtable))
 
 /**
- * hash_add - add an object to a hashtable
- * @hashtable: hashtable to add to
- * @node: the &struct hlist_node of the object to be added
- * @key: the key of the object to be added
+ * @brief Adds an object to a hash table.
+ *
+ * @param hashtable Hash table to add to.
+ * @param node The hlist_node of the object to add.
+ * @param key Key of the object to add.
  */
 #define hash_add(hashtable, node, key) \
 	hlist_add_head(&(hashtable)[hash_min(key, HASH_BITS(hashtable))], node)
 
 /**
- * hash_hashed - check whether an object is in any hashtable
- * @node: the &struct hlist_node of the object to be checked
+ * @brief Checks whether an object is in any hash table.
+ *
+ * @param node The hlist_node of the object to check.
+ *
+ * @return true if the object is in a hash table, false otherwise.
  */
 static inline bool hash_hashed(struct hlist_node* node)
 {
@@ -136,17 +138,21 @@ static inline bool __hash_empty(struct hlist_head* ht, unsigned int sz)
 }
 
 /**
- * hash_empty - check whether a hashtable is empty
- * @hashtable: hashtable to check
+ * @brief Checks whether a hash table is empty.
  *
- * This has to be a macro since HASH_BITS() will not work on pointers since
- * it calculates the size during preprocessing.
+ * @param hashtable Hash table to check.
+ *
+ * @return true if the hash table is empty, false otherwise.
+ *
+ * @note This is a macro. HASH_BITS() does not work on pointers, because it
+ * calculates the size during preprocessing.
  */
 #define hash_empty(hashtable) __hash_empty(hashtable, HASH_SIZE(hashtable))
 
 /**
- * hash_del - remove an object from a hashtable
- * @node: &struct hlist_node of the object to remove
+ * @brief Removes an object from a hash table.
+ *
+ * @param node The hlist_node of the object to remove.
  */
 static inline void hash_del(struct hlist_node* node)
 {
@@ -154,11 +160,12 @@ static inline void hash_del(struct hlist_node* node)
 }
 
 /**
- * hash_for_each - iterate over a hashtable
- * @name: hashtable to iterate
- * @bkt: integer to use as bucket loop cursor
- * @obj: the type * to use as a loop cursor for each entry
- * @member: the name of the hlist_node within the struct
+ * @brief Iterates over a hash table.
+ *
+ * @param name Hash table to iterate.
+ * @param bkt Integer to use as the bucket loop cursor.
+ * @param obj The type pointer to use as the loop cursor for each entry.
+ * @param member Name of the hlist_node field within the struct.
  */
 #define hash_for_each(name, bkt, obj, member)             \
 	for ((bkt) = 0, (obj) = nullptr;                  \
@@ -167,12 +174,12 @@ static inline void hash_del(struct hlist_node* node)
 		hlist_for_each_entry (obj, &(name)[bkt], member)
 
 /**
- * hash_for_each_possible - iterate over all possible objects hashing to the
- * same bucket
- * @name: hashtable to iterate
- * @obj: the type * to use as a loop cursor for each entry
- * @member: the name of the hlist_node within the struct
- * @key: the key of the objects to iterate over
+ * @brief Iterates over all objects that hash to the same bucket.
+ *
+ * @param name Hash table to iterate.
+ * @param obj The type pointer to use as the loop cursor for each entry.
+ * @param member Name of the hlist_node field within the struct.
+ * @param key Key of the objects to iterate over.
  */
 #define hash_for_each_possible(name, obj, member, key)                 \
 	hlist_for_each_entry (obj,                                     \

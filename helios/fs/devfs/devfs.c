@@ -234,7 +234,7 @@ struct vfs_dentry* devfs_lookup(struct vfs_inode* dir_inode,
 }
 
 /**
- * devfs_alloc_inode() - Allocates a new in-memory inode for devfs.
+ * @brief Allocates a new in-memory inode for devfs.
  */
 struct vfs_inode* devfs_alloc_inode(struct vfs_superblock* sb)
 {
@@ -255,18 +255,20 @@ struct vfs_inode* devfs_alloc_inode(struct vfs_superblock* sb)
 }
 
 /**
- * devfs_map_name() - Install a /dev entry for a device number.
- * @sb:    devfs superblock (mapping is per-mount)
- * @name:  basename under /dev (no '/'); e.g., "ttyS0", "null"
- * @rdev:  device number (major,minor) to put in inode->rdev
- * @type:  DEVFS_CHAR or DEVFS_BLOCK (sets inode->filetype)
- * @mode:  default permissions (e.g., 0666)
- * @flags: DEVFS_F_REPLACE to overwrite if it already exists (else -EEXIST)
+ * @brief Installs a /dev entry for a device number.
  *
- * Return: 0, -EINVAL (bad args), -EEXIST, or -ENOMEM
+ * @param sb devfs superblock. The mapping applies to one mount.
+ * @param name Base name under /dev, with no slash, for example "ttyS0".
+ * @param rdev Device number (major, minor) to store in inode->rdev.
+ * @param type DEVFS_CHAR or DEVFS_BLOCK. Sets inode->filetype.
+ * @param mode Default permissions, for example 0666.
+ * @param flags DEVFS_F_REPLACE overwrites an existing entry. Otherwise the
+ * function returns -EEXIST.
  *
- * Notes: Does NOT create the inode immediately; devfs_lookup() will
- * lazily create and cache it on first use.
+ * @return 0 on success, -EINVAL for bad arguments, -EEXIST, or -ENOMEM.
+ *
+ * @note Does not create the inode immediately. devfs_lookup() creates and
+ * caches it on first use.
  */
 int devfs_map_name(struct vfs_superblock* sb,
 		   const char* name,
@@ -337,8 +339,11 @@ int devfs_map_name(struct vfs_superblock* sb,
 }
 
 /**
- * devfs_unmap_name() - Remove a /dev entry
- * Return: 0, -ENOENT. If you cache an inode, invalidate/drop it here.
+ * @brief Removes a /dev entry.
+ *
+ * @return 0 on success, or -ENOENT if the entry does not exist.
+ *
+ * @note If an inode is cached for this entry, invalidate or drop it here.
  */
 int devfs_unmap_name(struct vfs_superblock* sb, const char* name)
 {
@@ -372,8 +377,12 @@ int devfs_unmap_name(struct vfs_superblock* sb, const char* name)
 }
 
 /**
- * devfs_resolve_name() - Fast name -> (rdev,type,mode) for devfs_lookup()
- * Return: 0, -ENOENT. Optionally hand back the entry to reuse its cached inode.
+ * @brief Resolves a name to (rdev, type, mode) for devfs_lookup().
+ *
+ * @return 0 on success, or -ENOENT if the entry does not exist.
+ *
+ * @note Optionally returns the entry so the caller can reuse its cached
+ * inode.
  */
 int devfs_resolve_name(struct vfs_superblock* sb,
 		       const char* name,
@@ -397,14 +406,14 @@ int devfs_resolve_name(struct vfs_superblock* sb,
 }
 
 /**
- * devfs_open - Open a devfs inode
- * @inode: Inode to open
- * @file:  VFS file being initialized
- * Return: 0 on success, -errno on failure
- * Context: May sleep. Caller holds no devfs locks.
+ * @brief Opens a devfs inode.
  *
- * Dispatches to character device open for FILETYPE_CHAR_DEV. Directory
- * open succeeds for the root dentry; other types return -ENOSYS.
+ * @param inode Inode to open.
+ * @param file VFS file being initialized.
+ *
+ * @return 0 on success, or a negative errno on failure.
+ *
+ * @note May sleep. The caller holds no devfs locks.
  */
 int devfs_open(struct vfs_inode* inode, struct vfs_file* file)
 {
@@ -422,15 +431,18 @@ int devfs_open(struct vfs_inode* inode, struct vfs_file* file)
 }
 
 /**
- * devnode_open - Bind a devfs char device to a file
- * @inode: Device inode (FILETYPE_CHAR_DEV)
- * @file:  VFS file to attach ops and private data to
- * Return: 0 on success, -EINVAL for bad args, or error from registry lookup
- * Context: May sleep. Caller holds no devfs locks.
+ * @brief Binds a devfs character device to a file.
  *
- * Looks up the registered chrdev by @inode->rdev, installs its file_ops
- * on @inode/@file, sets @file->private_data to the driver cookie, and
- * calls ->open() if provided.
+ * @param inode Device inode with type FILETYPE_CHAR_DEV.
+ * @param file VFS file to attach ops and private data to.
+ *
+ * @return 0 on success, -EINVAL for bad arguments, or an error from the
+ * registry lookup.
+ *
+ * @note May sleep. The caller holds no devfs locks.
+ *
+ * Looks up the registered character device driver and installs its file
+ * operations and private data on @file.
  */
 int devnode_open(struct vfs_inode* inode, struct vfs_file* file)
 {
@@ -477,18 +489,18 @@ int devnode_open(struct vfs_inode* inode, struct vfs_file* file)
  *******************************************************************************/
 
 /**
- * __resolve_name - Look up a devfs entry by name (locked)
- * @sb:       Superblock owning the devfs instance
- * @name:     NUL-terminated entry name
- * @out_rdev: Optional out dev_t
- * @out_type: Optional out FILETYPE_*
- * @out_mode: Optional out permission mode
- * @out_ent:  Optional out pointer to the entry
- * Return: 0 on success, -ENOENT if not found
- * Context: Caller must hold DEVFS_SB_INFO(@sb)->lock. Does not sleep.
+ * @brief Looks up a devfs entry by name.
  *
- * Probes the devfs hash table for @name and, on hit, fills any requested
- * outputs without taking additional references.
+ * @param sb Superblock owning the devfs instance.
+ * @param name NUL-terminated entry name.
+ * @param out_rdev Optional output device number.
+ * @param out_type Optional output FILETYPE_* value.
+ * @param out_mode Optional output permission mode.
+ * @param out_ent Optional output pointer to the entry.
+ *
+ * @return 0 on success, or -ENOENT if not found.
+ *
+ * @note Caller must hold DEVFS_SB_INFO(@sb)->lock. Does not sleep.
  */
 static int __resolve_name(struct vfs_superblock* sb,
 			  const char* name,
@@ -526,14 +538,13 @@ static int __resolve_name(struct vfs_superblock* sb,
 }
 
 /**
- * get_root_inode - Create and cache the devfs root inode
- * @sb: Superblock to own the root inode
- * Return: New root inode on success, NULL on failure
- * Context: May sleep. Caller holds no devfs locks.
+ * @brief Creates and caches the devfs root inode.
  *
- * Allocates a directory inode with broad permissions, sets ids and
- * superblock, inserts it into the inode cache, and returns it with
- * refcount initialized to 1.
+ * @param sb Superblock that owns the root inode.
+ *
+ * @return New root inode on success, or NULL on failure.
+ *
+ * @note May sleep. The caller holds no devfs locks.
  */
 static struct vfs_inode* get_root_inode(struct vfs_superblock* sb)
 {

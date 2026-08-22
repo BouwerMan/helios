@@ -88,15 +88,13 @@ int serial_port_init()
 }
 
 /**
- * serial_tty_init - Initialize the serial port TTY device
+ * @brief Creates and registers the serial port TTY device.
  *
- * Creates and registers a TTY device named "ttyS0" that outputs to the
- * serial port. Allocates memory for the output ring buffer and initializes
- * all necessary data structures. This TTY provides serial console access
- * for debugging and remote system administration.
+ * Creates a TTY device named "ttyS0" that outputs to the serial port. It
+ * allocates the output ring buffer and sets up the TTY structures.
  *
- * Panics if memory allocation for the ring buffer fails, as the serial
- * TTY is essential for system debugging and logging.
+ * @note Panics if the ring buffer allocation fails. The serial TTY is
+ * essential for system debugging and logging.
  */
 void serial_tty_init()
 {
@@ -182,15 +180,14 @@ void write_serial_n(const char* s, size_t len)
 }
 
 /**
- * serial_tty_write - Drain the TTY output buffer to the serial port
- * @tty: Pointer to the TTY device whose output buffer to drain
+ * @brief Drains the TTY output buffer to the serial port.
  *
- * Reads all available characters from the TTY's output ring buffer and
- * transmits them through the serial port. This function is typically called
- * as a work item to process buffered output. The operation is atomic and
- * protected by the ring buffer's spinlock to ensure thread safety.
+ * @param tty Pointer to the TTY device whose output buffer to drain.
  *
- * Return: Number of characters written to the serial port
+ * @return Number of characters written to the serial port.
+ *
+ * @note This function is typically called as a work item to process
+ * buffered output. It holds the TTY's write_lock semaphore.
  */
 ssize_t serial_tty_write(struct tty* tty)
 {

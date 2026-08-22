@@ -16,7 +16,7 @@ static constexpr u16 COM1_PORT = 0x3f8;
 int serial_port_init();
 
 /**
- * serial_tty_init - Initialize the serial port TTY device
+ * @brief Creates and registers the serial port TTY device.
  */
 void serial_tty_init();
 
@@ -33,8 +33,9 @@ void write_serial(char a);
 void write_serial_string(const char* s);
 
 /**
- * serial_tty_write - Drain the TTY output buffer to the serial port
- * @tty: Pointer to the TTY device whose output buffer to drain
+ * @brief Drains the TTY output buffer to the serial port.
+ *
+ * @param tty Pointer to the TTY device whose output buffer to drain.
  */
 ssize_t serial_tty_write(struct tty* tty);
 

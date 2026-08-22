@@ -116,9 +116,10 @@ static inline bool waitqueue_empty(struct waitqueue* wqueue)
 }
 
 /**
- * __alloc_task - Allocate and initialize a new task structure
- * 
- * Return: Pointer to initialized task structure on success, nullptr on OOM
+ * @brief Allocates and initializes a new task structure.
+ *
+ * @return A pointer to the initialized task structure on success, or
+ * nullptr on OOM.
  */
 struct task* __alloc_task();
 int copy_thread_state(struct task* child, struct registers* parent_regs);

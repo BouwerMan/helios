@@ -1,0 +1,48 @@
+# Doxyfile for HeliOS.
+#
+# Generate docs with:
+#   doxygen Doxyfile
+# Output goes to docs/build/doxygen/html/index.html
+#
+# This file only lists settings that differ from the Doxygen 1.16 defaults.
+# Run `doxygen -u Doxyfile` after a Doxygen upgrade to pick up new keys.
+
+#---------------------------------------------------------------------------
+# Project
+#---------------------------------------------------------------------------
+PROJECT_NAME            = "HeliOS"
+PROJECT_BRIEF           = "A small, educational 64-bit operating system for x86-64"
+OUTPUT_LANGUAGE         = English
+OUTPUT_DIRECTORY        = docs/build/doxygen
+
+#---------------------------------------------------------------------------
+# Input
+#---------------------------------------------------------------------------
+INPUT                   = README.md helios libc
+RECURSIVE               = YES
+FILE_PATTERNS           = *.c *.h
+EXCLUDE_PATTERNS        = */build/*
+USE_MDFILE_AS_MAINPAGE  = README.md
+
+#---------------------------------------------------------------------------
+# Build / extraction
+#---------------------------------------------------------------------------
+OPTIMIZE_OUTPUT_FOR_C   = YES
+EXTRACT_ALL             = YES
+EXTRACT_STATIC          = YES
+JAVADOC_AUTOBRIEF       = NO
+TAB_SIZE                = 8
+WARN_IF_UNDOCUMENTED    = NO
+SOURCE_BROWSER          = YES
+
+#---------------------------------------------------------------------------
+# Output formats
+#---------------------------------------------------------------------------
+GENERATE_HTML           = YES
+GENERATE_LATEX          = NO
+GENERATE_TREEVIEW       = YES
+
+#---------------------------------------------------------------------------
+# Graphs (no graphviz installed; leave off until it is)
+#---------------------------------------------------------------------------
+HAVE_DOT                = YES

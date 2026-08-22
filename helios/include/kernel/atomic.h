@@ -75,14 +75,14 @@ static inline long atomic64_compare_and_swap(atomic64_t* v, long old, long new)
 }
 
 /**
- * a64_cas_relaxed - 64-bit compare-and-swap with relaxed ordering
- * @v:   pointer to atomic64_t
- * @old: IN/OUT expected value; on failure, overwritten with the observed value
- * @new: desired value if *v == *old
+ * @brief Compares and swaps a 64-bit atomic variable with relaxed ordering.
  *
- * Returns:
- *   true  if the exchange took place (i.e., *v was equal to *old),
- *   false otherwise (and *@old is updated to the current *v).
+ * @param v Pointer to the atomic variable.
+ * @param old Pointer to the expected value. On failure, this function
+ * overwrites it with the observed value.
+ * @param new Desired value if the variable equals @p old.
+ *
+ * @return True if the exchange took place. False otherwise.
  */
 static inline bool a64_cas_relaxed(atomic64_t* v, long* old, long new)
 {

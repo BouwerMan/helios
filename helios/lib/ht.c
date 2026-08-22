@@ -52,17 +52,12 @@ static const char* ht_set_entry(struct ht_entry* entries,
 static bool ht_expand(struct ht* table);
 
 /**
- * ht_create - Creates a new hash table.
- * @hash_size: The initial size of the hash table (must be a power of 2).
+ * @brief Creates a new hash table.
  *
- * This function allocates and initializes a hash table structure. The hash
- * table uses the specified size to allocate memory for its entries and sets
- * up default operations. If memory allocation fails, the function returns
- * NULL.
+ * @param hash_size Initial size of the hash table. Must be a power of 2.
  *
- * Return:
- *  - Pointer to the newly created hash table on success.
- *  - NULL if memory allocation fails.
+ * @return A pointer to the new hash table, or NULL if memory allocation
+ * fails.
  */
 struct ht* ht_create(size_t hash_size)
 {
@@ -214,7 +209,8 @@ struct ht_iter ht_iterator(struct ht* table)
  * item's key and value. If there are no more items, the function returns
  * `false`.
  *
- * @note: Do not modify the hash table (e.g., using `ht_set`) while iterating.
+ * @note Do not modify the hash table (for example, with `ht_set`) while
+ * iterating.
  *
  * @param it Pointer to the hash table iterator.
  * @return `true` if the iterator was advanced to a valid item, `false` if no

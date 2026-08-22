@@ -192,11 +192,15 @@ static inline void put_page(struct page* pg)
 }
 
 /**
- * pages_clear - Zero-fill a run of pages by virtual address
- * @start: Page-aligned start VA
- * @num_pages: Number of pages (>0)
- * Return: @start
- * Context: Does not sleep. IRQ-safe. Caller must ensure mapping writable.
+ * @brief Zero-fills a run of pages by virtual address.
+ *
+ * @param start Page-aligned start address.
+ * @param num_pages Number of pages. Must be greater than 0.
+ *
+ * @return start.
+ *
+ * @note Does not sleep. IRQ-safe. The caller must ensure the mapping is
+ * writable.
  */
 static inline void* pages_clear(void* start, size_t num_pages)
 {
@@ -208,10 +212,14 @@ static inline void* pages_clear(void* start, size_t num_pages)
 }
 
 /**
- * page_clear - Zero-fill a single page by virtual address
- * @page: Page-aligned VA
- * Return: @page
- * Context: Does not sleep. IRQ-safe. Caller must ensure mapping writable.
+ * @brief Zero-fills a single page by virtual address.
+ *
+ * @param page Page-aligned virtual address.
+ *
+ * @return page.
+ *
+ * @note Does not sleep. IRQ-safe. The caller must ensure the mapping is
+ * writable.
  */
 static inline void* page_clear(void* page)
 {
@@ -222,10 +230,11 @@ static inline void* page_clear(void* page)
 }
 
 /**
- * __page_clear - Zero-fill a single physical page via HHDM
- * @page: Page descriptor
- * Return: none
- * Context: Does not sleep. IRQ-safe. Requires HHDM mapping of @page.
+ * @brief Zero-fills a single physical page through the HHDM mapping.
+ *
+ * @param page Page descriptor.
+ *
+ * @note Does not sleep. IRQ-safe. Requires an HHDM mapping of the page.
  */
 static inline void __page_clear(struct page* page)
 {
@@ -234,11 +243,12 @@ static inline void __page_clear(struct page* page)
 }
 
 /**
- * __pages_clear - Zero-fill a run of physical pages via HHDM
- * @page: First page descriptor in the run
- * @num_pages: Number of pages (>0)
- * Return: none
- * Context: Does not sleep. IRQ-safe. Requires HHDM mapping of pages.
+ * @brief Zero-fills a run of physical pages through the HHDM mapping.
+ *
+ * @param page First page descriptor in the run.
+ * @param num_pages Number of pages. Must be greater than 0.
+ *
+ * @note Does not sleep. IRQ-safe. Requires an HHDM mapping of the pages.
  */
 static inline void __pages_clear(struct page* page, size_t num_pages)
 {

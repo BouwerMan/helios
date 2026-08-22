@@ -166,9 +166,9 @@ static inline void free_page(void* addr)
 /**
  * @brief Frees a single page.
  *
- * @page: Pointer to the page to be freed.
+ * @param page Pointer to the page to free.
  *
- * Does not decrement ref count, just frees the page.
+ * Frees the page without decreasing its reference count.
  */
 [[gnu::always_inline]]
 static inline void __free_page(struct page* page)
