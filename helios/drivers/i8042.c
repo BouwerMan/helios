@@ -33,6 +33,8 @@
 
 static bool has_aux = false;
 
+static void i8042_reset_device(bool aux);
+
 /**
  * @brief Set up the i8042 controller.
  *
@@ -185,25 +187,87 @@ int i8042_init()
 		return -ENODEV;
 	}
 	cfg.int1 = port1_works;
+	cfg.trans1 = port1_works;
 	cfg.int2 = port2_works;
+	log_debug("Writing i8042 config: 0x%02x", cfg.raw);
 	if (i8042_write_cmd(I8042_CMD_WRITE_CONFIG) < 0 || i8042_write_data(cfg.raw) < 0) {
 		log_error("Failed to write back i8042 configuration byte");
 		return -ENODEV;
 	}
-
 	// Reset devices
 	if (port1_works) {
-		if (i8042_write_data(0xFF) < 0) {
-			log_error("Failed to reset port 1 devices");
-		}
+		i8042_reset_device(false);
 	}
 	if (port2_works) {
-		if (i8042_write_aux(0xFF) < 0) {
-			log_error("Failed to reset port 2 devices");
-		}
+		i8042_reset_device(true);
 	}
 
 	return 0;
+}
+
+/**
+ * @brief Waits for one byte of a device's reset response.
+ *
+ * Unlike a normal controller round trip, a device can take real wall-clock
+ * time to reply (BAT), so this paces with io_wait() instead of busy-spinning.
+ *
+ * @param out Pointer to store the byte read.
+ * @return 0 if a byte was read. -ETIMEDOUT if the device never responded.
+ */
+static int __wait_reset_response(u8* out)
+{
+	for (size_t i = 0; i < I8042_RESET_MAX_TRIES; i++) {
+		i8042_status_t st;
+		st.raw = inb(I8042_STATUS);
+		if (st.obf) {
+			*out = inb(I8042_DATA);
+			return 0;
+		}
+		io_wait();
+	}
+	return -ETIMEDOUT;
+}
+
+/**
+ * @brief Resets a PS/2 device and reads back its reset response.
+ *
+ * Sends 0xFF to the given port and synchronously waits for the ACK (0xFA)
+ * and self-test result (0xAA passed, 0xFC failed). The two bytes can arrive
+ * in either order. A device that never responds is treated as "not
+ * populated," not as an error. Any further bytes the device sends (such as
+ * a device ID) are left for the normal interrupt path to pick up.
+ *
+ * @param aux true to reset the device on the second PS/2 port, false for the first.
+ */
+static void i8042_reset_device(bool aux)
+{
+	const char* label = aux ? "port 2" : "port 1";
+	int st = aux ? i8042_write_aux(0xFF) : i8042_write_data(0xFF);
+	if (st < 0) {
+		log_error("Failed to send reset to i8042 %s", label);
+		return;
+	}
+
+	u8 first = 0;
+	if (__wait_reset_response(&first) < 0) {
+		log_debug("i8042 %s did not respond to reset (port not populated)", label);
+		return;
+	}
+
+	u8 second = 0;
+	if (__wait_reset_response(&second) < 0) {
+		log_error("i8042 %s acked reset (0x%02x) but never finished self-test", label, first);
+		return;
+	}
+
+	u8 bat_result = (first == I8042_DEVICE_RESET_ACK) ? second : first;
+	if (first != I8042_DEVICE_RESET_ACK && second != I8042_DEVICE_RESET_ACK) {
+		log_error("i8042 %s reset was not acked (got 0x%02x, 0x%02x)", label, first, second);
+	} else if (bat_result == I8042_DEVICE_RESET_PASSED) {
+		log_debug("i8042 %s device reset and self-test passed", label);
+	} else {
+		log_error("i8042 %s device failed self-test after reset (0x%02x)", label, bat_result);
+	}
 }
 
 /**

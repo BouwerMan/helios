@@ -11,6 +11,15 @@
 
 static constexpr size_t I8042_IO_MAX_TRIES = 1024;
 
+/**
+ * Bound for polling a device's response to a reset command. Device
+ * self-test (BAT) can take real wall-clock time (up to ~750 ms per spec),
+ * unlike a normal controller round trip, so this is paced with io_wait()
+ * between tries rather than busy-spun like I8042_IO_MAX_TRIES. The value is
+ * a conservative estimate, not a calibrated time bound.
+ */
+static constexpr size_t I8042_RESET_MAX_TRIES = 200000;
+
 enum I8042_PORTS {
 	I8042_DATA = 0x60,   /**< i8042 data port. Read/Write. */
 	I8042_STATUS = 0x64, /**< i8042 status port. Read only. */
@@ -67,6 +76,12 @@ enum I8042_PORT_TEST_RESULT {
 enum I8042_SELF_TEST_RESULT {
 	I8042_SELF_TEST_PASSED = 0x55, /**< The controller passed its self-test. */
 	I8042_SELF_TEST_FAILED = 0xFC, /**< The controller failed its self-test. */
+};
+
+enum I8042_DEVICE_RESET_RESULT {
+	I8042_DEVICE_RESET_ACK = 0xFA,	   /**< The device acknowledged the reset command. */
+	I8042_DEVICE_RESET_PASSED = 0xAA, /**< The device passed its self-test after reset. */
+	I8042_DEVICE_RESET_FAILED = 0xFC, /**< The device failed its self-test after reset. */
 };
 
 typedef union {
