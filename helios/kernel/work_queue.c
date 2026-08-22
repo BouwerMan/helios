@@ -28,6 +28,11 @@
 #include "lib/log.h"
 #include "mm/kmalloc.h"
 
+/**
+ * @addtogroup kernel
+ * @{
+ */
+
 static struct task* wq_task = nullptr;
 static struct work_queue g_work_queue;
 
@@ -118,3 +123,5 @@ int add_work_item(work_func_t func, void* data)
 
 	return 0;
 }
+
+/** @} */

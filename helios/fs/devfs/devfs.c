@@ -30,6 +30,11 @@
 #include "lib/log.h"
 #include "mm/kmalloc.h"
 
+/**
+ * @addtogroup fs
+ * @{
+ */
+
 /*******************************************************************************
  * Global Variable Definitions
  *******************************************************************************/
@@ -537,3 +542,5 @@ static struct vfs_inode* get_root_inode(struct vfs_superblock* sb)
 
 	return r_node;
 }
+
+/** @} */

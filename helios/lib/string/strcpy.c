@@ -2,6 +2,11 @@
 #include <stdbool.h>
 
 /**
+ * @addtogroup lib
+ * @{
+ */
+
+/**
  * @brief Copies a null-terminated string to a destination buffer.
  *
  * Copies the string pointed to by `src` (including the null terminator)
@@ -61,3 +66,4 @@ char* strncpy(char* dest, const char* src, size_t num)
 
 	return dest;
 }
+/** @} */

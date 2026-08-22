@@ -1,6 +1,11 @@
 #include "lib/string.h"
 
 /**
+ * @addtogroup lib
+ * @{
+ */
+
+/**
  * @brief Locates the first occurrence of a character in a string.
  *
  * @param   str         The null-terminated string to search.
@@ -67,3 +72,4 @@ char* strrnechr(const char* s, int c)
 
 	return nullptr;
 }
+/** @} */

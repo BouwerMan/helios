@@ -33,6 +33,11 @@
 #include "kernel/types.h"
 #include "mm/page_alloc.h"
 
+/**
+ * @addtogroup kernel
+ * @{
+ */
+
 // TODO: Implement and use levels
 // TODO: Implement backlog tracking that effects delay
 // TODO: Make sure my u64->long casts are safe on x86_64
@@ -506,3 +511,5 @@ void klog_discard_to_head(void)
 	g_klog_cursor.bytes = (u64)atomic64_load_relaxed(&g_klog_ring.head_bytes);
 	g_klog_cursor.last_seq = (u64)atomic64_load_relaxed(&g_klog_ring.next_seq);
 }
+
+/** @} */

@@ -1,6 +1,11 @@
 #include <string.h>
 
 /**
+ * @addtogroup libc
+ * @{
+ */
+
+/**
  * @brief Appends a string to the end of another string.
  *
  * Concatenates the null-terminated string `src` to the end of the
@@ -21,3 +26,5 @@ char* strcat(char* dest, const char* src)
 	size_t dest_len = strlen(dest); // Finding null terminator of dest
 	return strcpy(dest + dest_len, src);
 }
+
+/** @} */

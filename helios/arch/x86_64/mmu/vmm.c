@@ -58,6 +58,11 @@
 #include <uapi/helios/errno.h>
 #include <uapi/helios/mman.h>
 
+/**
+ * @addtogroup arch_x86_64
+ * @{
+ */
+
 extern char __kernel_start[], __kernel_end[];
 
 /*******************************************************************************
@@ -1672,3 +1677,5 @@ err_free_table:
 	return rc;
 }
 #endif
+
+/** @} */

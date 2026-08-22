@@ -25,6 +25,11 @@
 
 #include "tss.h"
 
+/**
+ * @addtogroup arch_x86_64
+ * @{
+ */
+
 /*******************************************************************************
  * Global Variable Definitions
  *******************************************************************************/
@@ -152,3 +157,5 @@ static void set_tss_descriptor(void* tss_ptr, size_t tss_size)
 	tss_high->base_upper = (uint32_t)((base >> 32) & 0xFFFFFFFF);
 	tss_high->reserved = 0;
 }
+
+/** @} */

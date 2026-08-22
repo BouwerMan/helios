@@ -11,6 +11,11 @@
 #include <mm/slab.h>
 #include <uapi/helios/errno.h>
 
+/**
+ * @addtogroup mm
+ * @{
+ */
+
 static struct slab_cache mem_cache = { 0 };
 
 static void __free_addr_space(struct address_space* vas);
@@ -477,3 +482,4 @@ static void __free_addr_space(struct address_space* vas)
 		slab_free(&mem_cache, pos);
 	}
 }
+/** @} */

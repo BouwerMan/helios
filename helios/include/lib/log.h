@@ -2,6 +2,11 @@
 #pragma once
 #include <lib/printf.h>
 
+/**
+ * @addtogroup lib
+ * @{
+ */
+
 // LOG_LEVEL: Determines the minimum level of logs to be compiled.
 // (e.g., LOG_LEVEL_INFO will compile INFO, WARN, and ERROR logs, but not DEBUG)
 #ifndef LOG_LEVEL
@@ -117,3 +122,4 @@ void set_log_mode(enum LOG_MODE mode);
  * @param len The length of the message string.
  */
 void log_output(const char* msg, int len);
+/** @} */

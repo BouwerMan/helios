@@ -10,6 +10,11 @@
 #include "kernel/types.h"
 #include "lib/string.h"
 
+/**
+ * @addtogroup mm
+ * @{
+ */
+
 static constexpr int PAGE_SHIFT = 12;
 static constexpr size_t PAGE_SIZE = (1UL << PAGE_SHIFT);
 static constexpr unsigned long PAGE_MASK = (~(PAGE_SIZE - 1));
@@ -264,3 +269,4 @@ bool tryunlock_page(struct page* page);
 void unlock_page(struct page* page);
 
 void wait_on_page_locked(struct page* page);
+/** @} */

@@ -29,6 +29,11 @@
 #include "lib/string.h"
 #include "mm/address_space_dump.h"
 
+/**
+ * @addtogroup arch_x86_64
+ * @{
+ */
+
 /*******************************************************************************
  * Global Variable Definitions
  *******************************************************************************/
@@ -433,3 +438,5 @@ static void default_exception_handler(struct registers* registers)
 	outword(0x604, 0x2000);
 	__builtin_unreachable();
 }
+
+/** @} */

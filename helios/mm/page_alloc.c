@@ -47,6 +47,11 @@
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 
+/**
+ * @addtogroup mm
+ * @{
+ */
+
 /*******************************************************************************
  * Global Variable Definitions
  *******************************************************************************/
@@ -824,3 +829,4 @@ KTEST_FLAGS(test_page_alloc_uniqueness, KTEST_NO_PREEMPT)
 }
 
 #endif /* HELIOS_TESTS */
+/** @} */

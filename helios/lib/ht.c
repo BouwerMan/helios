@@ -32,6 +32,11 @@
 #include <lib/string.h>
 #include <mm/kmalloc.h>
 
+/**
+ * @addtogroup lib
+ * @{
+ */
+
 // TODO: Implement some sort of LRU deletion
 // TODO: Implement any sort of removal using custom destructors
 // TODO: Update documentation to reflect generic keys now supported
@@ -348,3 +353,4 @@ static bool ht_expand(struct ht* table)
 	table->capacity = new_capacity;
 	return true;
 }
+/** @} */

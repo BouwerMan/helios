@@ -36,6 +36,11 @@
 #include "mm/bootmem.h"
 #include "mm/page_alloc.h"
 
+/**
+ * @addtogroup arch_x86_64
+ * @{
+ */
+
 [[noreturn]]
 extern void __switch_to_new_stack(void* new_stack_top, void (*entrypoint)(void));
 
@@ -112,3 +117,5 @@ void __arch_entry()
 	__switch_to_new_stack(g_entry_new_stack, kernel_main);
 	__builtin_unreachable();
 }
+
+/** @} */

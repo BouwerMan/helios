@@ -25,6 +25,11 @@
 #include "kernel/tasks/scheduler.h"
 
 /**
+ * @addtogroup kernel
+ * @{
+ */
+
+/**
  * @brief Initializes a counting semaphore.
  *
  * @param sem Target semaphore.
@@ -227,3 +232,5 @@ bool try_down_write(rwsem_t* s)
 	(void)s;
 	kunimpl("try_down_write");
 }
+
+/** @} */

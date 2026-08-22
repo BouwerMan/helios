@@ -16,6 +16,11 @@
 #include <uapi/helios/dirent.h>
 #include <uapi/helios/fcntl.h>
 
+/**
+ * @addtogroup fs
+ * @{
+ */
+
 static constexpr size_t FS_TYPE_LEN = 8;
 static constexpr size_t VFS_MAX_NAME = 255; // Not including null terminator
 static constexpr size_t VFS_MAX_PATH = 255; // Not inlcuding null terminator
@@ -263,3 +268,5 @@ struct vfs_inode* inode_ht_check(struct vfs_superblock* sb, size_t id);
 bool dentry_compare(const struct vfs_dentry* d1, const struct vfs_dentry* d2);
 int vfs_get_next_id();
 int vfs_get_id();
+
+/** @} */

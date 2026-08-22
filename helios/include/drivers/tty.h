@@ -6,6 +6,11 @@
 #include "kernel/spinlock.h"
 #include "kernel/tasks/scheduler.h"
 
+/**
+ * @addtogroup drivers
+ * @{
+ */
+
 // TODO: Actually use waitqueue
 
 /**
@@ -106,3 +111,5 @@ ssize_t __write_to_tty(struct tty* tty, const char* buffer, size_t count);
  * @param data Void pointer to the TTY device structure to drain.
  */
 void tty_drain_output_buffer(void* data);
+
+/** @} */

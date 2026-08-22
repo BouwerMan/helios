@@ -27,6 +27,11 @@
 #include "lib/log.h"
 #include "mm/kmalloc.h"
 
+/**
+ * @addtogroup drivers
+ * @{
+ */
+
 struct major_info {
 	bool used;
 	char* label;
@@ -264,3 +269,5 @@ static struct chrdev* chrdev_find(dev_t d)
 
 	return nullptr;
 }
+
+/** @} */

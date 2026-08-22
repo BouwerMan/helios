@@ -2,6 +2,11 @@
 #include <string.h>
 
 /**
+ * @addtogroup libc
+ * @{
+ */
+
+/**
  * @brief Copies a block of memory from a source to a destination.
  *
  * This function copies `count` bytes from the memory area pointed to by `src`
@@ -27,3 +32,5 @@ void* memcpy(void* restrict dest, const void* restrict src, size_t n)
 
 	return dest;
 }
+
+/** @} */

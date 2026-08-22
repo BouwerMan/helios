@@ -31,6 +31,11 @@
 #include "lib/log.h"
 #include "lib/string.h"
 
+/**
+ * @addtogroup drivers
+ * @{
+ */
+
 /*******************************************************************************
  * Global Variable Definitions
  *******************************************************************************/
@@ -313,3 +318,5 @@ static ssize_t tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_
 
 	return (ssize_t)i;
 }
+
+/** @} */

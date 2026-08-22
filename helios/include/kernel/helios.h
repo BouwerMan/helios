@@ -11,6 +11,11 @@
 #include <lib/list.h>
 #include <limine.h>
 
+/**
+ * @addtogroup kernel
+ * @{
+ */
+
 /* Kernel Strings */
 #define KERNEL_NAME    "HELIOS"
 #define KERNEL_VERSION "0.0.0"
@@ -143,3 +148,5 @@ extern struct kernel_context kernel;
 
 void init_kernel_structure();
 void kernel_main();
+
+/** @} */

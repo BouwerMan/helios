@@ -37,6 +37,11 @@
 #include <uapi/helios/errno.h>
 
 /**
+ * @addtogroup kernel
+ * @{
+ */
+
+/**
  * @brief Validates the ELF file header.
  *
  * @param header Pointer to the ELF file header.
@@ -491,3 +496,5 @@ void destroy_exec_context(struct exec_context* ctx)
 	}
 	kfree(ctx);
 }
+
+/** @} */

@@ -28,6 +28,11 @@
 #include "mm/page.h"
 #include "mm/page_alloc.h"
 
+/**
+ * @addtogroup drivers
+ * @{
+ */
+
 /*******************************************************************************
  * Global Variable Definitions
  *******************************************************************************/
@@ -108,3 +113,5 @@ ssize_t vconsole_tty_write(struct tty* tty)
 
 	return bytes_written;
 }
+
+/** @} */

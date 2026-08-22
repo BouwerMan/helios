@@ -5,6 +5,11 @@
 #include <kernel/types.h>
 
 /**
+ * @addtogroup drivers
+ * @{
+ */
+
+/**
  * @brief Creates and registers the VGA console TTY device.
  */
 void vconsole_tty_init();
@@ -15,3 +20,5 @@ void vconsole_tty_init();
  * @param tty Pointer to the TTY device whose output buffer to drain.
  */
 ssize_t vconsole_tty_write(struct tty* tty);
+
+/** @} */

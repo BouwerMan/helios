@@ -8,106 +8,101 @@
 #include "mm/page_tables.h"
 
 /**
- * struct address_space - Represents a virtual address space.
+ * @addtogroup mm
+ * @{
+ */
+
+/**
+ * @brief Represents a virtual address space.
  *
- * Invariants:
- *  - mr_list contains non-overlapping regions sorted by start (recommended).
- *  - All regions are page-aligned: start % PAGE_SIZE == 0, end % PAGE_SIZE == 0.
+ * mr_list holds non-overlapping regions, sorted by start. Every region
+ * is page-aligned: start and end are both multiples of PAGE_SIZE.
  */
 struct address_space {
-	uptr pml4_phys;		  /* Physical address of the PML4 table. */
-	pgd_t* pml4;		  /* Has to go second for switch.asm */
-	rwsem_t vma_lock;	  /* Lock for mr_list */
-	spinlock_t pgt_lock;	  /* Lock for page table modifications */
-	struct list_head mr_list; /* List of memory regions (VMAs). */
+	uptr pml4_phys; /**< Physical address of the PML4 table. */
+	pgd_t* pml4; /**< Virtual address of the PML4 table. Must stay second; switch.asm reads this field directly. */
+	rwsem_t vma_lock;	  /**< Locks mr_list. */
+	spinlock_t pgt_lock;	  /**< Locks page table modifications. */
+	struct list_head mr_list; /**< List of memory regions (VMAs). */
 };
 
 /**
- * enum mr_kind - Backing type of a memory_region.
- *
- * MR_FILE: pages are faulted by reading from a file (vfs_inode).
- * MR_ANON: pages are zero-filled on demand (no file IO).
- * MR_DEVICE: (future) MMIO or special pager; not needed for ELF, but handy long-term.
+ * @brief Backing type of a memory_region.
  */
 enum mr_kind {
-	MR_ANON = 0,
-	MR_FILE = 1,
-	MR_DEVICE = 2,
+	MR_ANON = 0,   /**< Pages are zero-filled on demand. No file I/O. */
+	MR_FILE = 1,   /**< Pages are faulted in by reading from a file. */
+	MR_DEVICE = 2, /**< Pages map MMIO or another special pager. Reserved for future use. */
 };
 
 /**
- * struct mr_file - File-backed bookkeeping for demand paging.
- *
- * file_lo: page-aligned file offset that corresponds to 'start' (vstart).
- * file_hi: exclusive end of the initialized bytes for THIS segment
- *          (i.e., p_offset + p_filesz). Never read past this; zero the rest.
- * pgoff   : file_lo / PAGE_SIZE, convenient for a page cache index.
- * delta   : intra-page bias: p_vaddr % PAGE == p_offset % PAGE (0..PAGE_SIZE-1).
- *           Not strictly required if you always use file_lo/start deltas, but useful
- *           for debugging and certain corner cases.
+ * @brief File-backed bookkeeping for demand paging.
  */
 struct mr_file {
-	struct vfs_inode* inode;
-	off_t file_lo;	/* aligned_down(p_offset) */
-	off_t file_hi;	/* p_offset + p_filesz (exclusive) */
-	pgoff_t pgoff;	/* file_lo >> PAGE_SHIFT */
-	uint16_t delta; /* p_vaddr - align_down(p_vaddr) */
+	struct vfs_inode* inode; /**< The backing file. */
+	off_t file_lo;		 /**< Page-aligned file offset that corresponds to the region's start. */
+
+	/**
+	 * @brief Exclusive end of the initialized bytes for this segment
+	 * (p_offset + p_filesz).
+	 *
+	 * Never read past this offset. Zero the rest of the page instead.
+	 */
+	off_t file_hi;
+	pgoff_t pgoff;	/**< file_lo expressed as a page index (file_lo >> PAGE_SHIFT). */
+	uint16_t delta; /**< Intra-page bias: p_vaddr - align_down(p_vaddr). */
 };
 
 /**
- * struct mr_anon - Anonymous (zero-fill) bookkeeping.
- * tag: optional accounting/debug identifier (e.g., "bss", "heap").
+ * @brief Anonymous (zero-fill) bookkeeping.
  */
 struct mr_anon {
-	uint32_t tag;
+	uint32_t tag; /**< Optional accounting or debug identifier, e.g. "bss" or "heap". */
 };
 
 /**
- * struct mr_device - Device-backed bookeeping.
- * paddr: physical base of the device region
+ * @brief Device-backed bookkeeping.
  */
 struct mr_device {
-	paddr_t paddr;
+	paddr_t paddr; /**< Physical base address of the device region. */
 };
 
 /**
- * struct memory_region - Represents a virtual memory area (VMA).
+ * @brief Represents a virtual memory area (VMA).
  *
- * Semantics for ELF segments:
- *  - FILE region covers [vstart, vstart + align_up(delta + p_filesz)).
- *    Reads are clamped to [file_lo, file_hi) and any unread tail is zeroed.
- *  - If p_memsz > p_filesz, a second ANON region covers the remainder:
- *      [align_up(p_vaddr + p_filesz), align_up(p_vaddr + p_memsz)).
+ * For an ELF segment, the FILE region covers
+ * `[vstart, vstart + align_up(delta + p_filesz))`. Reads are clamped to
+ * `[file_lo, file_hi)`; any unread tail is zeroed. If `p_memsz >
+ * p_filesz`, a second ANON region covers the remainder:
+ * `[align_up(p_vaddr + p_filesz), align_up(p_vaddr + p_memsz))`.
  *
- * Fault-time algorithm (FILE):
- *  let VA = align_down(fault_addr)
- *  page_off = VA - start
- *  file_off = file.file_lo + page_off
- *  init_left = file.file_hi - file_off
- *  to_read = init_left > 0 ? min(PAGE_SIZE, (size_t)init_left) : 0
- *  read 'to_read' bytes; zero the rest of the page
+ * @note Fault-time algorithm for a FILE region: let `VA =
+ * align_down(fault_addr)`; `page_off = VA - start`; `file_off =
+ * file.file_lo + page_off`; `init_left = file.file_hi - file_off`;
+ * `to_read = init_left > 0 ? min(PAGE_SIZE, init_left) : 0`. Read
+ * `to_read` bytes, then zero the rest of the page.
  *
- * Fault-time algorithm (ANON):
- *  allocate zeroed page; map with 'prot'
+ * @note Fault-time algorithm for an ANON region: allocate a zeroed
+ * page and map it with `prot`.
  */
 struct memory_region {
-	uptr start;		      /* VMA start, inclusive (page-aligned) */
-	uptr end;		      /* VMA end, exclusive (page-aligned) */
+	uptr start;		      /**< VMA start, inclusive. Page-aligned. */
+	uptr end;		      /**< VMA end, exclusive. Page-aligned. */
 
-	unsigned long prot;	      /* PROT_READ/WRITE/EXEC (ELF p_flags->prot). */
-	unsigned long flags;	      /* MAP_PRIVATE/SHARED and your VM bits. */
+	unsigned long prot;	      /**< PROT_READ/WRITE/EXEC (ELF p_flags -> prot). */
+	unsigned long flags;	      /**< MAP_PRIVATE/SHARED and other VM bits. */
 
-	enum mr_kind kind;	      /* MR_FILE vs MR_ANON (MR_DEVICE optional). */
-	bool is_private;	      /* True for MAP_PRIVATE → CoW on first write. */
+	enum mr_kind kind;	      /**< Which member of the union below is valid. */
+	bool is_private;	      /**< True for MAP_PRIVATE. Triggers copy-on-write on the first write. */
 
 	union {
-		struct mr_file file;  /* Valid when kind == MR_FILE */
-		struct mr_anon anon;  /* Valid when kind == MR_ANON */
-		struct mr_device dev; /* Valid when kind == MR_DEVICE */
+		struct mr_file file;  /**< Valid when kind == MR_FILE. */
+		struct mr_anon anon;  /**< Valid when kind == MR_ANON. */
+		struct mr_device dev; /**< Valid when kind == MR_DEVICE. */
 	};
 
-	struct address_space* owner;  /* Owning address space. */
-	struct list_head list;	      /* Link in address_space::mr_list. */
+	struct address_space* owner;  /**< Owning address space. */
+	struct list_head list;	      /**< Link in address_space::mr_list. */
 };
 
 static inline bool is_within_region(struct memory_region* mr, vaddr_t vaddr)
@@ -163,3 +158,5 @@ int map_device_region(struct address_space* vas,
 		      unsigned long flags);
 
 struct address_space* alloc_address_space();
+
+/** @} */

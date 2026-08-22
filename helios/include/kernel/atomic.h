@@ -3,6 +3,11 @@
 
 #include <arch/atomic.h>
 
+/**
+ * @addtogroup kernel
+ * @{
+ */
+
 #define ATOMIC_INIT(i)	 { (i) }
 #define ATOMIC64_INIT(i) { (i) }
 
@@ -83,3 +88,5 @@ static inline bool a64_cas_relaxed(atomic64_t* v, long* old, long new)
 {
 	return __atomic_compare_exchange_n(&v->counter, old, new, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 }
+
+/** @} */

@@ -30,6 +30,11 @@
 #include <uapi/helios/mman.h>
 
 /**
+ * @addtogroup kernel
+ * @{
+ */
+
+/**
  * @brief Rejects NULL, overflowing, or kernel-half arguments cheaply.
  *
  * @param k Kernel-side pointer of the copy.
@@ -260,3 +265,5 @@ err_unmap_region:
 }
 
 #endif
+
+/** @} */

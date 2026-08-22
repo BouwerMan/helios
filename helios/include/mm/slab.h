@@ -6,6 +6,11 @@
 #include <lib/list.h>
 #include <stddef.h>
 
+/**
+ * @addtogroup mm
+ * @{
+ */
+
 // TODO: Try using a free list stored in the freed object's slab slice similar to the linux kernel
 
 static constexpr int MAX_CACHE_NAME_LEN = 32;
@@ -183,3 +188,4 @@ void slab_cache_purge_corrupt(struct slab_cache* cache);
  *              If the cache is NULL or uninitialized, an error is logged.
  */
 void slab_dump_stats(struct slab_cache* cache);
+/** @} */

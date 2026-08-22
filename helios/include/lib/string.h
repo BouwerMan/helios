@@ -3,6 +3,11 @@
 
 #include "kernel/types.h"
 
+/**
+ * @addtogroup lib
+ * @{
+ */
+
 #define __STRING_H_CHECK_ALIGN(num, dest, src, size) ((num % size == 0) && (dest % size == 0) && (src % size == 0))
 
 void* __memset(void* restrict d, int c, size_t n);
@@ -149,3 +154,4 @@ size_t strlen(const char*);
 
 size_t strnlen_s(const char* s, size_t n);
 size_t strnlen(const char* s, size_t n);
+/** @} */

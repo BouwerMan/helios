@@ -3,6 +3,11 @@
 #include "lib/string.h"
 
 /**
+ * @addtogroup lib
+ * @{
+ */
+
+/**
  * @brief Splits a string into tokens using specified delimiters.
  *
  * This function tokenizes a string by replacing delimiter characters with
@@ -61,3 +66,4 @@ char* strtok(char* str, const char* delimiters)
 
 	return nullptr;
 }
+/** @} */

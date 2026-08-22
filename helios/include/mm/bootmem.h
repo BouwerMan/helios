@@ -6,6 +6,11 @@
 #include <limine.h>
 
 /**
+ * @addtogroup mm
+ * @{
+ */
+
+/**
  * @brief Initializes the bootmem memmory manager and mem_map.
  *
  * @param mmap Pointer to the Limine memory map response structure.
@@ -59,3 +64,4 @@ void bootmem_free_page(void* addr);
  * @param count The number of contiguous pages to free. Must be greater than 0.
  */
 void bootmem_free_contiguous(void* addr, size_t count);
+/** @} */

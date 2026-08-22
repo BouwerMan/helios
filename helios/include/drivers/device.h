@@ -4,6 +4,11 @@
 #include <kernel/types.h>
 #include <stddef.h>
 
+/**
+ * @addtogroup drivers
+ * @{
+ */
+
 typedef u32 dev_t;
 
 /**
@@ -50,3 +55,5 @@ int chrdev_add(struct chrdev* c, dev_t dev, unsigned count);
 void chrdev_del(struct chrdev* c);
 
 int chrdev_lookup(dev_t dev, const struct file_ops** fops_out, void** drvdata_out, dev_t* base_out, size_t* count_out);
+
+/** @} */

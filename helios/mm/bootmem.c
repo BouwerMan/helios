@@ -48,6 +48,11 @@
 #include <mm/page_alloc.h>
 #include <stdint.h>
 
+/**
+ * @addtogroup mm
+ * @{
+ */
+
 /*******************************************************************************
  * Global Variable Definitions
  *******************************************************************************/
@@ -558,3 +563,4 @@ static bool is_page_used(uintptr_t phys_addr)
 
 	return ((boot_bitmap[word_offset] & (1ULL << bit_offset)) != 0);
 }
+/** @} */

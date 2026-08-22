@@ -5,6 +5,11 @@
 
 #include <kernel/compiler_attributes.h>
 
+/**
+ * @addtogroup arch_x86_64
+ * @{
+ */
+
 struct tss_descriptor {
 	uint16_t limit_low;	// bits 0–15
 	uint16_t base_low;	// bits 16–31
@@ -35,3 +40,5 @@ struct tss_entry {
 	uint16_t reserved_3;
 	uint16_t iomap_base;
 } __packed;
+
+/** @} */

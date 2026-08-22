@@ -3,6 +3,11 @@
 
 #include <kernel/helios.h>
 
+/**
+ * @addtogroup arch_x86_64
+ * @{
+ */
+
 /*
  * Atomic operations on the atomic_t type
  */
@@ -153,3 +158,5 @@ static inline bool flags_test_acquire(const volatile unsigned long* addr, unsign
 	unsigned long v = __atomic_load_n(addr, __ATOMIC_ACQUIRE);
 	return (v & mask) != 0;
 }
+
+/** @} */

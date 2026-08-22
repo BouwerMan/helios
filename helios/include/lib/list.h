@@ -32,6 +32,11 @@
 #include "kernel/rwonce.h"
 #include "kernel/types.h"
 
+/**
+ * @addtogroup lib
+ * @{
+ */
+
 static constexpr uptr LIST_POISON1 = 0x100;
 static constexpr uptr LIST_POISON2 = 0x122;
 
@@ -574,3 +579,4 @@ static inline size_t hlist_count_nodes(struct hlist_head* head)
 
 	return count;
 }
+/** @} */

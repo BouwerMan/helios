@@ -8,6 +8,11 @@
 #include <kernel/types.h>
 #include <limine.h>
 
+/**
+ * @addtogroup drivers
+ * @{
+ */
+
 static constexpr int CHAR_SPACING = 0;
 
 enum COLORS {
@@ -82,3 +87,5 @@ void screen_putchar(char c);
 struct screen_info* get_screen_info();
 
 void screen_draw_cursor_at(size_t cx, size_t cy);
+
+/** @} */

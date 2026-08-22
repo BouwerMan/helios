@@ -30,6 +30,11 @@
 #include <kernel/types.h>
 #include <lib/log.h>
 
+/**
+ * @addtogroup kernel
+ * @{
+ */
+
 static struct timer_subsystem ts = {
 	.active_timers = LIST_HEAD_INIT(ts.active_timers),
 	.lock = SPINLOCK_INIT,
@@ -160,3 +165,5 @@ void timer_init(u32 phase)
 {
 	ts_phase = phase;
 }
+
+/** @} */

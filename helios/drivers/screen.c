@@ -27,6 +27,11 @@
 #include "lib/string.h"
 #include <stddef.h>
 
+/**
+ * @addtogroup drivers
+ * @{
+ */
+
 /*******************************************************************************
  * Global Variable Definitions
  *******************************************************************************/
@@ -282,3 +287,5 @@ static inline void draw_glyph(uint8_t* glyph, size_t offset, uint32_t fg, uint32
 		draw_glyph_scanline(glyph_row, dst_line, fg, bg);
 	}
 }
+
+/** @} */

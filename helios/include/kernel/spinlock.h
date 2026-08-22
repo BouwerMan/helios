@@ -10,6 +10,11 @@
 #include "kernel/compiler_attributes.h"
 #include "kernel/helios.h"
 
+/**
+ * @addtogroup kernel
+ * @{
+ */
+
 typedef struct {
 	int val;
 } spinlock_t;
@@ -168,3 +173,5 @@ static inline void __spin_guard_fini(spinlock_guard_t* guard)
 							 *__CONCAT(__uid_done_, id) = nullptr;                    \
 	     !__CONCAT(__uid_done_, id);                                                                          \
 	     __CONCAT(__uid_done_, id) = (void*)1)
+
+/** @} */

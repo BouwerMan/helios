@@ -7,6 +7,11 @@
 #include "kernel/types.h"
 #include "mm/page.h"
 
+/**
+ * @addtogroup kernel
+ * @{
+ */
+
 typedef enum __klog_level {
 	KLOG_EMERG = 0,	  // System is unusable
 	KLOG_ALERT = 1,	  // Action must be taken immediately
@@ -104,3 +109,5 @@ void klog_discard_to_head(void);
 
 void klog_pause_drain(void);
 void klog_resume_drain(void);
+
+/** @} */

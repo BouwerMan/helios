@@ -38,6 +38,11 @@
 #include "mm/kmalloc.h"
 #include "mm/slab.h"
 
+/**
+ * @addtogroup fs
+ * @{
+ */
+
 // TODO: Find a better way to handle some of these icky globals, also def need
 // some locks
 
@@ -1940,3 +1945,5 @@ KTEST(test_split_path)
 	return (int)fails;
 }
 #endif
+
+/** @} */

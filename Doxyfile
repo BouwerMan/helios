@@ -18,9 +18,9 @@ OUTPUT_DIRECTORY        = docs/build/doxygen
 #---------------------------------------------------------------------------
 # Input
 #---------------------------------------------------------------------------
-INPUT                   = README.md helios libc
+INPUT                   = README.md helios libc docs/doxygen_groups.dox
 RECURSIVE               = YES
-FILE_PATTERNS           = *.c *.h
+FILE_PATTERNS           = *.c *.h *.dox
 EXCLUDE_PATTERNS        = */build/*
 USE_MDFILE_AS_MAINPAGE  = README.md
 

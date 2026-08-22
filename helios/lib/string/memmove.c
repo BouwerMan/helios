@@ -2,6 +2,11 @@
 #include <stdint.h>
 
 /**
+ * @addtogroup lib
+ * @{
+ */
+
+/**
  * @brief Moves 64-bit values between overlapping memory regions.
  *
  * Copies `count` 64-bit words from `src` to `dest`, correctly handling overlap.
@@ -294,3 +299,4 @@ void* memmove(void* restrict dest, const void* restrict src, size_t n)
 
 	return dest;
 }
+/** @} */

@@ -36,6 +36,11 @@
 
 #include <uapi/helios/errno.h>
 
+/**
+ * @addtogroup fs
+ * @{
+ */
+
 // TODO: Locking
 
 /*******************************************************************************
@@ -768,3 +773,5 @@ KTEST(test_ramfs_readpage)
 }
 
 #endif
+
+/** @} */

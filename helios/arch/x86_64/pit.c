@@ -25,6 +25,11 @@
 #include "kernel/timer.h"
 #include "lib/log.h"
 
+/**
+ * @addtogroup arch_x86_64
+ * @{
+ */
+
 // Some IBM employee had a very fun time when designing this fucker.
 static constexpr u32 PIT_CLK = 1193180;
 
@@ -63,3 +68,5 @@ void pit_init(void)
 	pit_phase(TIMER_HERTZ);
 	isr_install_handler(IRQ0, pit_handler);
 }
+
+/** @} */

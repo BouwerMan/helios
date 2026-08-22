@@ -42,6 +42,11 @@
 #include "kernel/ktest.h"
 #endif
 
+/**
+ * @addtogroup kernel
+ * @{
+ */
+
 struct limine_framebuffer* framebuffer;
 
 struct kernel_context kernel = { 0 };
@@ -144,3 +149,5 @@ void kernel_main()
 		yield();
 	}
 }
+
+/** @} */

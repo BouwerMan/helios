@@ -1,5 +1,11 @@
 #include <stdint.h>
 #include <string.h>
+
+/**
+ * @addtogroup libc
+ * @{
+ */
+
 // TODO: These implementations might not be exactly what standard c libraries do. Need to investigate how null
 // terminators and/or bounds are handled.
 
@@ -63,3 +69,5 @@ int strncmp(const char* str1, const char* str2, size_t count)
 	}
 	return 0;
 }
+
+/** @} */

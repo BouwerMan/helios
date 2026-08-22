@@ -4,6 +4,11 @@
 #include <drivers/tty.h>
 
 /**
+ * @addtogroup drivers
+ * @{
+ */
+
+/**
  * @brief Initializes the console subsystem.
  */
 void console_init();
@@ -37,3 +42,5 @@ void detach_tty(const char* name);
  * @brief Flushes output buffers for all registered console sinks.
  */
 void console_flush();
+
+/** @} */

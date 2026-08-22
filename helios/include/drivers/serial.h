@@ -5,6 +5,11 @@
 #include <kernel/types.h>
 #include <stddef.h>
 
+/**
+ * @addtogroup drivers
+ * @{
+ */
+
 static constexpr u16 COM1_PORT = 0x3f8;
 
 /**
@@ -40,3 +45,5 @@ void write_serial_string(const char* s);
 ssize_t serial_tty_write(struct tty* tty);
 
 void write_serial_n(const char* s, size_t len);
+
+/** @} */

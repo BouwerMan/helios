@@ -7,6 +7,11 @@
 #include "kernel/spinlock.h"
 #include "lib/list.h"
 
+/**
+ * @addtogroup sched
+ * @{
+ */
+
 typedef void (*entry_func)(void);
 
 // Negative PIDs for kernel threads
@@ -54,58 +59,80 @@ static inline const char* get_task_name(enum TASK_TYPE type)
 	return task_type_names[type];
 }
 
+/**
+ * @brief A set of tasks blocked on the same event.
+ */
 struct waitqueue {
-	struct list_head waiters_list;
-	spinlock_t waiters_lock;
+	struct list_head waiters_list; /**< List of blocked tasks. */
+	spinlock_t waiters_lock;       /**< Locks waiters_list. */
 };
 
-// Any changes to this structure needs to be reflected in switch.asm
-// This represents ANY schedulable task
+/**
+ * @brief Represents any schedulable task, kernel or user.
+ *
+ * @warning switch.asm reads this structure directly. Reflect any layout
+ * change there too.
+ */
 struct task {
-	struct registers* regs; // Full CPU context, this address is loaded into rsp on switch
-	struct address_space* vas;
-	uintptr_t kernel_stack; // The top of the kernel stack
-	enum TASK_STATE state;
-	enum TASK_WAIT_STATE wait_state;
-	enum TASK_TYPE type;
-	uint8_t priority;
-	int preempt_count;
-	pid_t pid;
-	uint64_t sleep_ticks;
-	int errno_value;
-	struct vfs_dentry* cwd;
-	struct vfs_file* resources[MAX_RESOURCES];
-	struct task* parent;	     // Should this just be parent PID?
+	/**
+	 * @brief Full CPU register context.
+	 *
+	 * This address is loaded into rsp on a context switch.
+	 */
+	struct registers* regs;
+	struct address_space* vas;	 /**< The task's virtual address space. */
+	uintptr_t kernel_stack;		 /**< Top of the kernel stack. */
+	enum TASK_STATE state;		 /**< Current scheduler state. */
+	enum TASK_WAIT_STATE wait_state; /**< Current waitqueue state. */
+	enum TASK_TYPE type;		 /**< Kernel task or user task. */
+	uint8_t priority;		 /**< Scheduling priority. */
+	int preempt_count;		 /**< Preemption-disable nesting count. Zero means preemption is allowed. */
+	pid_t pid;			 /**< Process ID. */
+	uint64_t sleep_ticks;		 /**< Remaining ticks to sleep. */
+	int errno_value;		 /**< The task's current errno value. */
+	struct vfs_dentry* cwd;		 /**< Current working directory. */
+	struct vfs_file* resources[MAX_RESOURCES]; /**< Open file table, indexed by file descriptor. */
+	struct task* parent;			   /**< Parent task. */
 
-	struct list_head sched_list; // For the scheduler's main task list
-	struct list_head wait_list;  // For waitqueues
-	struct list_head children;   // Head of this task's children list
-	struct list_head sibling;    // Node in the parent's children list
-	int exit_code;		     // Store the exit code
-	struct waitqueue parent_wq;  // For parents to wait on
+	struct list_head sched_list;		   /**< Node in the scheduler's main task list. */
+	struct list_head wait_list;		   /**< Node in a waitqueue's waiter list. */
+	struct list_head children;		   /**< Head of this task's children list. */
+	struct list_head sibling;		   /**< Node in the parent's children list. */
+	int exit_code;				   /**< Exit code. Valid once the task terminates. */
+	struct waitqueue parent_wq;		   /**< Waitqueue the parent waits on for this task to exit. */
 
-	char name[MAX_TASK_NAME_LEN];
+	char name[MAX_TASK_NAME_LEN];		   /**< Task name, null-terminated. */
 
-	struct waitqueue* wait; // For debug, stores current blocking waitqueue
+	struct waitqueue* wait;			   /**< Waitqueue this task is blocked on. For debugging only. */
 };
 
+/**
+ * @brief Per-CPU scheduler state: task lists, the running task, and PID
+ * counters.
+ */
 struct scheduler_queue {
-	volatile bool need_reschedule; // Must be first for interrupt handler access
-	spinlock_t lock;	       // Locks the lists
-	struct list_head ready_list;
-	struct list_head blocked_list;
-	struct list_head terminated_list;
-	struct task* current_task;
+	/**
+	 * @brief Set when a reschedule is needed.
+	 *
+	 * @warning Must stay the first field; the interrupt handler accesses
+	 * it directly.
+	 */
+	volatile bool need_reschedule;
+	spinlock_t lock;		  /**< Locks ready_list, blocked_list, and terminated_list. */
+	struct list_head ready_list;	  /**< Tasks ready to run. */
+	struct list_head blocked_list;	  /**< Tasks blocked on a waitqueue. */
+	struct list_head terminated_list; /**< Tasks that have exited but not been reaped. */
+	struct task* current_task;	  /**< Task currently running on this CPU. */
 
-	struct task* idle_task;
+	struct task* idle_task;		  /**< Run when ready_list is empty. */
 
-	struct slab_cache* cache;
-	size_t task_count;
-	pid_t kernel_pid_counter;
-	pid_t user_pid_counter;
-	bool inited;
+	struct slab_cache* cache;	  /**< Slab cache used to allocate struct task. */
+	size_t task_count;		  /**< Number of tasks tracked by this queue. */
+	pid_t kernel_pid_counter;	  /**< Next PID to assign to a kernel task. */
+	pid_t user_pid_counter;		  /**< Next PID to assign to a user task. */
+	bool inited;			  /**< True once the scheduler has been initialized. */
 
-	struct task* last_task; // For debug
+	struct task* last_task;		  /**< Most recently scheduled task. For debugging only. */
 };
 
 static inline bool waitqueue_empty(struct waitqueue* wqueue)
@@ -171,3 +198,5 @@ int install_fd(struct task* t, struct vfs_file* file);
  * @param task Pointer to the task structure to add.
  */
 void __task_add(struct task* task);
+
+/** @} */

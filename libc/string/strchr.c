@@ -1,6 +1,11 @@
 #include <string.h>
 
 /**
+ * @addtogroup libc
+ * @{
+ */
+
+/**
  * @brief Locates the first occurrence of a character in a string.
  *
  * Historically the character argument was of type int, but I'm not like K&C I'm
@@ -42,3 +47,5 @@ char* strrchr(const char* s, int c)
 
 	return (char*)last;
 }
+
+/** @} */

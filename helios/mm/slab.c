@@ -37,6 +37,11 @@
 #include "mm/page_alloc.h"
 #include "mm/slab.h"
 
+/**
+ * @addtogroup mm
+ * @{
+ */
+
 /*******************************************************************************
  * Global Variable Definitions
  *******************************************************************************/
@@ -934,3 +939,4 @@ KTEST(test_slab_alloc_free)
 }
 
 #endif // HELIOS_TESTS
+/** @} */

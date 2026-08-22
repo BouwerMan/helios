@@ -29,6 +29,11 @@
 #include <kernel/types.h>
 #include <lib/list.h>
 
+/**
+ * @addtogroup lib
+ * @{
+ */
+
 /*
  * This hash multiplies the input by a large odd number and takes the
  * high bits.  Since multiplication propagates changes to the most
@@ -177,3 +182,4 @@ static inline void hash_del(struct hlist_node* node)
  */
 #define hash_for_each_possible(name, obj, member, key) \
 	hlist_for_each_entry (obj, &(name)[hash_min(key, HASH_BITS(name))], member)
+/** @} */

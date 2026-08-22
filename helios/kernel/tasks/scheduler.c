@@ -44,6 +44,11 @@
 
 #include <uapi/helios/errno.h>
 
+/**
+ * @addtogroup sched
+ * @{
+ */
+
 extern void* g_entry_new_stack;
 
 static bool g_preempt_enabled = false;
@@ -912,3 +917,5 @@ void __task_add(struct task* task)
 	log_debug("Added task %d", task->pid);
 	log_debug("Currently have %lu tasks", squeue.task_count);
 }
+
+/** @} */
