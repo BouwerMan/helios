@@ -11,27 +11,28 @@
 #include <mm/slab.h>
 #include <uapi/helios/errno.h>
 
+/**
+ * @addtogroup mm
+ * @{
+ */
+
 static struct slab_cache mem_cache = { 0 };
 
 static void __free_addr_space(struct address_space* vas);
 
 /**
- * address_space_init - Initialize VMA slab/cache state
- * Return: none
- * Context: Early boot or mm init; may sleep.
- * Notes: Idempotent. Creates slab cache for struct memory_region.
+ * @brief Initializes the VMA slab cache state.
+ *
+ * Creates the slab cache for struct memory_region. This function is
+ * idempotent and may sleep. Call it during early boot or memory-management
+ * initialization.
  */
 void address_space_init()
 {
 	if (*mem_cache.name) {
 		return;
 	}
-	int res = slab_cache_init(&mem_cache,
-				  "Memory Regions",
-				  sizeof(struct memory_region),
-				  0,
-				  nullptr,
-				  nullptr);
+	int res = slab_cache_init(&mem_cache, "Memory Regions", sizeof(struct memory_region), 0, nullptr, nullptr);
 	if (res < 0) {
 		panic("Could not init memory region slab cache");
 	}
@@ -39,10 +40,12 @@ void address_space_init()
 }
 
 /**
- * alloc_address_space - Allocate and initialize an address_space
- * Return: New address_space* or NULL on OOM
- * Context: May sleep.
- * Notes: Initializes region list and both locks; caller must set pml4 fields.
+ * @brief Allocates and initializes an address space.
+ *
+ * @return A new address_space, or NULL on out-of-memory.
+ *
+ * This function may sleep. It initializes the region list and both locks.
+ * The caller must set the pml4 fields.
  */
 struct address_space* alloc_address_space()
 {
@@ -58,17 +61,20 @@ struct address_space* alloc_address_space()
 }
 
 /**
- * alloc_mem_region - Allocate a memory_region descriptor
- * @start: Inclusive start VA (page-aligned)
- * @end:   Exclusive end VA (page-aligned, > @start)
- * @prot:  PROT_* mask
- * @flags: MAP_* mask
- * Return: New memory_region* or NULL on OOM
- * Context: May sleep.
- * Notes: Does not insert into any list; caller must add_region().
+ * @brief Allocates a memory_region descriptor.
+ *
+ * @param start Inclusive start virtual address. Must be page-aligned.
+ * @param end Exclusive end virtual address. Must be page-aligned and
+ * greater than start.
+ * @param prot PROT_* permission mask.
+ * @param flags MAP_* mask.
+ *
+ * @return A new memory_region, or NULL on out-of-memory.
+ *
+ * This function may sleep. It does not insert the region into any list.
+ * The caller must call add_region().
  */
-struct memory_region*
-alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags)
+struct memory_region* alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags)
 {
 	struct memory_region* mr = slab_alloc(&mem_cache);
 	if (!mr) return nullptr;
@@ -84,10 +90,11 @@ alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags)
 }
 
 /**
- * destroy_mem_region - Free a memory_region descriptor
- * @mr: Region to release
- * Return: none
- * Context: May sleep.
+ * @brief Frees a memory_region descriptor.
+ *
+ * @param mr Region to release.
+ *
+ * @note May sleep.
  */
 void destroy_mem_region(struct memory_region* mr)
 {
@@ -95,18 +102,17 @@ void destroy_mem_region(struct memory_region* mr)
 }
 
 /**
- * address_space_dup - Duplicate regions and set up child mappings
- * @dest: Destination address space
- * @src:  Source address space
- * Return: 0 on success, -errno on failure
- * Context: May sleep. Caller must ensure @dest is not yet visible to any
- *          other thread. Locks: acquires @src->vma_lock (read) for the
- *          whole walk — not just the list traversal, but the vmm_fork_region()
- *          calls too, since that function now assumes the caller already
- *          holds it (see its docstring). Acquires @dest->vma_lock (write)
- *          only briefly around each add_region().
- * Notes: Clones region metadata, adds to @dest, then forks mappings via
- *        vmm_fork_region(). On failure, frees @dest contents.
+ * @brief Duplicates regions and sets up child mappings.
+ *
+ * @param dest Destination address space.
+ * @param src Source address space.
+ *
+ * @return 0 on success, or a negative errno value on failure.
+ *
+ * This function may sleep. The caller must ensure dest is not yet visible
+ * to any other thread. It holds src->vma_lock for reading across the whole
+ * walk, including the vmm_fork_region() calls, since that function assumes
+ * the caller already holds it.
  */
 int address_space_dup(struct address_space* dest, struct address_space* src)
 {
@@ -115,10 +121,7 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
 
 	down_read(&src->vma_lock);
 	list_for_each_entry (pos, &src->mr_list, list) {
-		struct memory_region* new_mr = alloc_mem_region(pos->start,
-								pos->end,
-								pos->prot,
-								pos->flags);
+		struct memory_region* new_mr = alloc_mem_region(pos->start, pos->end, pos->prot, pos->flags);
 
 		if (!new_mr) {
 			log_error("Could not allocate mem region");
@@ -150,21 +153,19 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
 }
 
 /**
- * check_access - Validate VMA permissions for an address
- * @vas:        Address space
- * @vaddr:      Address to check
- * @need_read:  Require read permission
- * @need_write: Require write permission
- * @need_exec:  Require exec permission
- * Return: 0 or -EFAULT/-EACCES/-EINVAL
- * Context: May sleep. Locks: acquires @vas->vma_lock (read).
- * Notes: Logs VMA summary on hit; errors if no covering VMA or perms fail.
+ * @brief Validates VMA permissions for an address.
+ *
+ * @param vas Address space.
+ * @param vaddr Address to check.
+ * @param need_read Require read permission.
+ * @param need_write Require write permission.
+ * @param need_exec Require exec permission.
+ *
+ * @return 0 on success, or -EFAULT, -EACCES, or -EINVAL on failure.
+ *
+ * This function may sleep and acquires vas->vma_lock for reading.
  */
-int check_access(struct address_space* vas,
-		 vaddr_t vaddr,
-		 bool need_read,
-		 bool need_write,
-		 bool need_exec)
+int check_access(struct address_space* vas, vaddr_t vaddr, bool need_read, bool need_write, bool need_exec)
 {
 	if (!vas) {
 		return -EINVAL;
@@ -180,40 +181,31 @@ int check_access(struct address_space* vas,
 		goto out;
 	}
 
-	const char* kind = (mr->kind == MR_FILE) ? "FILE" :
-			   (mr->kind == MR_ANON) ? "ANON" :
-						   "DEVICE";
+	const char* kind = (mr->kind == MR_FILE) ? "FILE" : (mr->kind == MR_ANON) ? "ANON" : "DEVICE";
 	char prot_str[4] = { (mr->prot & PROT_READ) ? 'r' : '-',
 			     (mr->prot & PROT_WRITE) ? 'w' : '-',
 			     (mr->prot & PROT_EXEC) ? 'x' : '-',
 			     '\0' };
-	log_debug(
-		"VMA: [%016lx..%016lx) kind=%s prot=%s flags=0x%lx private=%d",
-		(unsigned long)mr->start,
-		(unsigned long)mr->end,
-		kind,
-		prot_str,
-		(unsigned long)mr->flags,
-		(int)mr->is_private);
+	log_debug("VMA: [%016lx..%016lx) kind=%s prot=%s flags=0x%lx private=%d",
+		  (unsigned long)mr->start,
+		  (unsigned long)mr->end,
+		  kind,
+		  prot_str,
+		  (unsigned long)mr->flags,
+		  (int)mr->is_private);
 
 	if (need_exec && !(mr->prot & PROT_EXEC)) {
-		log_error("NX violation at vaddr=0x%lx in %s VMA",
-			  (unsigned long)vaddr,
-			  kind);
+		log_error("NX violation at vaddr=0x%lx in %s VMA", (unsigned long)vaddr, kind);
 		err = -EACCES;
 		goto out;
 	}
 	if (need_write && !(mr->prot & PROT_WRITE)) {
-		log_error("Write disallowed at vaddr=0x%lx in %s VMA",
-			  (unsigned long)vaddr,
-			  kind);
+		log_error("Write disallowed at vaddr=0x%lx in %s VMA", (unsigned long)vaddr, kind);
 		err = -EACCES;
 		goto out;
 	}
 	if (need_read && !(mr->prot & PROT_READ)) {
-		log_error("Read disallowed at vaddr=0x%lx in %s VMA",
-			  (unsigned long)vaddr,
-			  kind);
+		log_error("Read disallowed at vaddr=0x%lx in %s VMA", (unsigned long)vaddr, kind);
 		err = -EACCES;
 		goto out;
 	}
@@ -224,12 +216,14 @@ out:
 }
 
 /**
- * add_region - Insert a region into an address space
- * @vas: Address space owner
- * @mr:  Region to insert
- * Return: none
- * Context: Caller must hold @vas->vma_lock (write).
- * Notes: Sets @mr->owner and links onto @vas->mr_list head.
+ * @brief Inserts a region into an address space.
+ *
+ * @param vas Address space owner.
+ * @param mr Region to insert.
+ *
+ * Sets mr->owner and links the region onto the head of vas->mr_list.
+ *
+ * @note The caller must hold vas->vma_lock for writing.
  */
 void add_region(struct address_space* vas, struct memory_region* mr)
 {
@@ -238,10 +232,11 @@ void add_region(struct address_space* vas, struct memory_region* mr)
 }
 
 /**
- * remove_region - Unlink a region from its address space
- * @mr: Region to unlink
- * Return: none
- * Context: Caller must hold @mr->owner->vma_lock (write).
+ * @brief Unlinks a region from its address space.
+ *
+ * @param mr Region to unlink.
+ *
+ * @note The caller must hold mr->owner->vma_lock for writing.
  */
 void remove_region(struct memory_region* mr)
 {
@@ -249,12 +244,14 @@ void remove_region(struct memory_region* mr)
 }
 
 /**
- * vas_set_pml4 - Set top-level page table for an address space
- * @vas:  Address space (must be non-NULL)
- * @pml4: Kernel-virtual pointer to PML4
- * Return: none
- * Context: IRQ-safe. Caller ensures @pml4 is valid and aligned.
- * Notes: Also records physical address of the PML4.
+ * @brief Sets the top-level page table for an address space.
+ *
+ * @param vas Address space. Must not be NULL.
+ * @param pml4 Kernel-virtual pointer to the PML4.
+ *
+ * Also records the physical address of the PML4.
+ *
+ * @note IRQ-safe. The caller ensures pml4 is valid and aligned.
  */
 void vas_set_pml4(struct address_space* vas, pgd_t* pml4)
 {
@@ -266,17 +263,20 @@ void vas_set_pml4(struct address_space* vas, pgd_t* pml4)
 }
 
 /**
- * map_region - Create and add a new region descriptor
- * @vas:   Address space
- * @file:  File mapping info (used if !MAP_ANONYMOUS)
- * @start: Inclusive start VA (page-aligned)
- * @end:   Exclusive end VA (page-aligned, > @start)
- * @prot:  PROT_* mask
- * @flags: MAP_* mask (exactly one of PRIVATE/SHARED)
- * Return: 0 on success, -errno otherwise
- * Context: May sleep. Locks: acquires @vas->vma_lock (write) around
- *          add_region() only; allocation and validation happen unlocked.
- * Notes: Only creates metadata; does not populate page tables.
+ * @brief Creates and adds a new region descriptor.
+ *
+ * @param vas Address space.
+ * @param file File mapping info. Used if MAP_ANONYMOUS is not set.
+ * @param start Inclusive start virtual address. Must be page-aligned.
+ * @param end Exclusive end virtual address. Must be page-aligned and
+ * greater than start.
+ * @param prot PROT_* permission mask.
+ * @param flags MAP_* mask. Exactly one of MAP_PRIVATE or MAP_SHARED.
+ *
+ * @return 0 on success, or a negative errno value on failure.
+ *
+ * This function may sleep. It only creates metadata and does not populate
+ * page tables.
  */
 int map_region(struct address_space* vas,
 	       struct mr_file file,
@@ -285,11 +285,7 @@ int map_region(struct address_space* vas,
 	       unsigned long prot,
 	       unsigned long flags)
 {
-	log_debug("Mapping region: %lx - %lx, prot: %lx, flags: %lx",
-		  start,
-		  end,
-		  prot,
-		  flags);
+	log_debug("Mapping region: %lx - %lx, prot: %lx, flags: %lx", start, end, prot, flags);
 
 	if (!is_page_aligned(start) || !is_page_aligned(end) || start >= end) {
 		return -EINVAL;
@@ -317,8 +313,7 @@ int map_region(struct address_space* vas,
 			destroy_mem_region(mr);
 			return -EINVAL;
 		}
-		if (!is_page_aligned((uptr)file.file_lo) ||
-		    file.file_hi < file.file_lo) {
+		if (!is_page_aligned((uptr)file.file_lo) || file.file_hi < file.file_lo) {
 			destroy_mem_region(mr);
 			return -EINVAL;
 		}
@@ -334,22 +329,21 @@ int map_region(struct address_space* vas,
 }
 
 /**
- * map_device_region - Create, add, and eagerly map an MR_DEVICE region
- * @vas:   Address space
- * @start: Inclusive start VA (page-aligned)
- * @end:   Exclusive end VA (page-aligned, > @start)
- * @paddr: Physical base to alias (no struct page backing required)
- * @prot:  PROT_* mask
- * @flags: MAP_* mask (MAP_SHARED required; MAP_PRIVATE rejected)
- * Return: 0 on success, -errno otherwise
- * Context: May sleep. Locks: acquires @vas->vma_lock (write) around
- *          add_region() only, same as map_region(); vmm_map_device_region()
- *          takes its own vma_lock (read) + pgt_lock per page once the region
- *          is visible in @vas->mr_list, so this must not still hold the
- *          write lock when it calls down into the arch layer.
- * Notes: Unlike map_region(), this populates page tables immediately
- *        (device regions are never demand-paged). On vmm_map_device_region()
- *        failure, unlinks and frees the region before returning.
+ * @brief Creates, adds, and eagerly maps an MR_DEVICE region.
+ *
+ * @param vas Address space.
+ * @param start Inclusive start virtual address. Must be page-aligned.
+ * @param end Exclusive end virtual address. Must be page-aligned and
+ * greater than start.
+ * @param paddr Physical base address to alias.
+ * @param prot PROT_* permission mask.
+ * @param flags MAP_* mask. MAP_SHARED is required; MAP_PRIVATE is rejected.
+ *
+ * @return 0 on success, or a negative errno value on failure.
+ *
+ * This function may sleep. Unlike map_region(), it populates page tables
+ * immediately, because device regions are never demand-paged. On failure,
+ * it unlinks and frees the region before it returns.
  */
 int map_device_region(struct address_space* vas,
 		      uptr start,
@@ -358,11 +352,7 @@ int map_device_region(struct address_space* vas,
 		      unsigned long prot,
 		      unsigned long flags)
 {
-	log_debug("Mapping region: %lx - %lx, prot: %lx, flags: %lx",
-		  start,
-		  end,
-		  prot,
-		  flags);
+	log_debug("Mapping region: %lx - %lx, prot: %lx, flags: %lx", start, end, prot, flags);
 
 	if (!is_page_aligned(start) || !is_page_aligned(end) || start >= end) {
 		return -EINVAL;
@@ -411,18 +401,14 @@ int map_device_region(struct address_space* vas,
 }
 
 /**
- * unmap_region - Remove mappings and drop a region
- * @vas: Address space
- * @mr:  Region to remove
- * Return: none
- * Context: May sleep. Locks: acquires @vas->vma_lock (write) to unlink
- *          before touching page tables.
- * Notes: Unlinks first so a concurrent fault can no longer find @mr via
- *        get_region(), then calls vmm_unmap_region() (which takes its own
- *        vma_lock read + pgt_lock) and frees the descriptor. Unlinking
- *        before the PTE teardown matters: doing it after would leave a
- *        window where vmm_populate_one() could still find @mr and install a
- *        fresh PTE into memory this call is in the middle of tearing down.
+ * @brief Removes mappings and drops a region.
+ *
+ * @param vas Address space.
+ * @param mr Region to remove.
+ *
+ * This function may sleep. It unlinks the region before it tears down its
+ * page tables, so a concurrent fault cannot find the region through
+ * get_region() while its mappings are being removed.
  */
 void unmap_region(struct address_space* vas, struct memory_region* mr)
 {
@@ -437,11 +423,12 @@ void unmap_region(struct address_space* vas, struct memory_region* mr)
 }
 
 /**
- * address_space_destroy - Tear down all regions of an address space
- * @vas: Address space to destroy
- * Return: none
- * Context: May sleep. Caller must ensure @vas not in use elsewhere.
- * Notes: Unmaps and frees all regions; does not free @vas itself.
+ * @brief Tears down all regions of an address space.
+ *
+ * @param vas Address space to destroy.
+ *
+ * This function may sleep. The caller must ensure vas is not in use
+ * elsewhere. It does not free vas itself.
  */
 void address_space_destroy(struct address_space* vas)
 {
@@ -456,11 +443,14 @@ void address_space_destroy(struct address_space* vas)
 }
 
 /**
- * get_region - Find VMA covering an address
- * @vas:   Address space
- * @vaddr: Address to search
- * Return: Covering memory_region* or NULL if none
- * Context: Caller must hold @vas->vma_lock (read or write).
+ * @brief Finds the VMA that covers an address.
+ *
+ * @param vas Address space.
+ * @param vaddr Address to search for.
+ *
+ * @return The covering memory_region, or NULL if none covers the address.
+ *
+ * @note The caller must hold vas->vma_lock for reading or writing.
  */
 struct memory_region* get_region(struct address_space* vas, vaddr_t vaddr)
 {
@@ -475,11 +465,12 @@ struct memory_region* get_region(struct address_space* vas, vaddr_t vaddr)
 }
 
 /**
- * __free_addr_space - Free all region descriptors (no unmap)
- * @vas: Address space
- * Return: none
- * Context: May sleep. Internal helper; caller ensures no concurrent users.
- * Notes: Unlinks and frees descriptors without touching page tables.
+ * @brief Frees all region descriptors without unmapping.
+ *
+ * @param vas Address space.
+ *
+ * This function may sleep. It is an internal helper. The caller ensures no
+ * concurrent users exist.
  */
 static void __free_addr_space(struct address_space* vas)
 {
@@ -491,3 +482,4 @@ static void __free_addr_space(struct address_space* vas)
 		slab_free(&mem_cache, pos);
 	}
 }
+/** @} */

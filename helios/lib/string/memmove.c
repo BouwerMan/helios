@@ -2,6 +2,11 @@
 #include <stdint.h>
 
 /**
+ * @addtogroup lib
+ * @{
+ */
+
+/**
  * @brief Moves 64-bit values between overlapping memory regions.
  *
  * Copies `count` 64-bit words from `src` to `dest`, correctly handling overlap.
@@ -11,9 +16,7 @@
  * @param count Number of 64-bit elements to move.
  * @return Pointer to the destination buffer.
  */
-static uint64_t* memmove64(uint64_t* restrict dest,
-			   const uint64_t* restrict src,
-			   size_t count)
+static uint64_t* memmove64(uint64_t* restrict dest, const uint64_t* restrict src, size_t count)
 {
 	if (src < dest) {
 		// backwards copy
@@ -38,9 +41,7 @@ static uint64_t* memmove64(uint64_t* restrict dest,
  * @param count Number of 32-bit elements to move.
  * @return Pointer to the destination buffer.
  */
-static uint32_t* memmove32(uint32_t* restrict dest,
-			   const uint32_t* restrict src,
-			   size_t count)
+static uint32_t* memmove32(uint32_t* restrict dest, const uint32_t* restrict src, size_t count)
 {
 	if (src < dest) {
 		// backwards copy
@@ -65,9 +66,7 @@ static uint32_t* memmove32(uint32_t* restrict dest,
  * @param count Number of 16-bit elements to move.
  * @return Pointer to the destination buffer.
  */
-static uint16_t* memmove16(uint16_t* restrict dest,
-			   const uint16_t* restrict src,
-			   size_t count)
+static uint16_t* memmove16(uint16_t* restrict dest, const uint16_t* restrict src, size_t count)
 {
 	if (src < dest) {
 		// backwards copy
@@ -92,9 +91,7 @@ static uint16_t* memmove16(uint16_t* restrict dest,
  * @param count Number of bytes to move.
  * @return Pointer to the destination buffer.
  */
-static uint8_t* memmove8(uint8_t* restrict dest,
-			 const uint8_t* restrict src,
-			 size_t count)
+static uint8_t* memmove8(uint8_t* restrict dest, const uint8_t* restrict src, size_t count)
 {
 	if (src < dest) {
 		// backwards copy
@@ -116,8 +113,7 @@ static uint8_t* memmove8(uint8_t* restrict dest,
 #define CHECK_ALIGN(num, dest, src, size) ((num % size == 0))
 #else
 // On other architectures, unaligned pointer access might not be allowed
-#define CHECK_ALIGN(num, dest, src, size) \
-	((num % size == 0) && (dest % size == 0) && (src % size == 0))
+#define CHECK_ALIGN(num, dest, src, size) ((num % size == 0) && (dest % size == 0) && (src % size == 0))
 #endif
 
 #define SMALL_MOVE_THRESHOLD 1024
@@ -133,9 +129,7 @@ static uint8_t* memmove8(uint8_t* restrict dest,
  * @param n     Number of bytes to move.
  * @return      Pointer to `dest`.
  */
-static void* small_memmove(void* restrict dest,
-			   const void* restrict src,
-			   size_t n)
+static void* small_memmove(void* restrict dest, const void* restrict src, size_t n)
 {
 	// If count is small we just use memmove 8 and call it a day
 	if (n <= 32) return (void*)memmove8(dest, src, n);
@@ -163,9 +157,7 @@ static void* small_memmove(void* restrict dest,
  * @param n     Number of bytes to move.
  * @return      Pointer to original `dest`.
  */
-static void* forward_move(void* restrict dest,
-			  const void* restrict src,
-			  size_t n)
+static void* forward_move(void* restrict dest, const void* restrict src, size_t n)
 {
 	uint8_t* b = dest;
 	const uint8_t* s = src;
@@ -190,14 +182,12 @@ static void* forward_move(void* restrict dest,
 	register const uint64_t* s64 __asm__("rsi") = (const uint64_t*)s;
 	register size_t cnt __asm__("rcx") = n / 8;
 
-	__asm__ volatile("rep movsq"
-			 : "+D"(d64), "+S"(s64), "+c"(cnt)::"memory");
+	__asm__ volatile("rep movsq" : "+D"(d64), "+S"(s64), "+c"(cnt)::"memory");
 
 	// Phase 3: Copy remaining bytes
 	cnt = n % 8;
 
-	__asm__ volatile("rep movsb"
-			 : "+D"(d64), "+S"(s64), "+c"(cnt)::"memory");
+	__asm__ volatile("rep movsb" : "+D"(d64), "+S"(s64), "+c"(cnt)::"memory");
 
 	return dest;
 }
@@ -214,9 +204,7 @@ static void* forward_move(void* restrict dest,
  * @param n     Number of bytes to move.
  * @return      Pointer to original start of destination.
  */
-static void* backward_move(void* restrict dest,
-			   const void* restrict src,
-			   size_t n)
+static void* backward_move(void* restrict dest, const void* restrict src, size_t n)
 {
 	// NOTE: Because we are moving backwards, I'm going to be lazy and just use the c only style.
 	// The forward path is usually the hot path anyways
@@ -306,9 +294,9 @@ void* memmove(void* restrict dest, const void* restrict src, size_t n)
 		return forward_move(dest, src, n);
 	} else {
 		// backwards (unlikely), pass end pointers to backward_move
-		return backward_move(
-			(void*)(d + (n - 1)), (void*)(s + (n - 1)), n);
+		return backward_move((void*)(d + (n - 1)), (void*)(s + (n - 1)), n);
 	}
 
 	return dest;
 }
+/** @} */

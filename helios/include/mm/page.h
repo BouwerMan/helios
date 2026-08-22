@@ -10,6 +10,11 @@
 #include "kernel/types.h"
 #include "lib/string.h"
 
+/**
+ * @addtogroup mm
+ * @{
+ */
+
 static constexpr int PAGE_SHIFT = 12;
 static constexpr size_t PAGE_SIZE = (1UL << PAGE_SHIFT);
 static constexpr unsigned long PAGE_MASK = (~(PAGE_SIZE - 1));
@@ -192,40 +197,47 @@ static inline void put_page(struct page* pg)
 }
 
 /**
- * pages_clear - Zero-fill a run of pages by virtual address
- * @start: Page-aligned start VA
- * @num_pages: Number of pages (>0)
- * Return: @start
- * Context: Does not sleep. IRQ-safe. Caller must ensure mapping writable.
+ * @brief Zero-fills a run of pages by virtual address.
+ *
+ * @param start Page-aligned start address.
+ * @param num_pages Number of pages. Must be greater than 0.
+ *
+ * @return start.
+ *
+ * @note Does not sleep. IRQ-safe. The caller must ensure the mapping is
+ * writable.
  */
 static inline void* pages_clear(void* start, size_t num_pages)
 {
-	kassert(is_page_aligned((uintptr_t)start),
-		"pages_clear: pages not aligned");
+	kassert(is_page_aligned((uintptr_t)start), "pages_clear: pages not aligned");
 	kassert(num_pages > 0, "pages_clear: num_pages must be > 0");
 	if (!start) return start;
 	return __memset(start, 0, num_pages << PAGE_SHIFT);
 }
 
 /**
- * page_clear - Zero-fill a single page by virtual address
- * @page: Page-aligned VA
- * Return: @page
- * Context: Does not sleep. IRQ-safe. Caller must ensure mapping writable.
+ * @brief Zero-fills a single page by virtual address.
+ *
+ * @param page Page-aligned virtual address.
+ *
+ * @return page.
+ *
+ * @note Does not sleep. IRQ-safe. The caller must ensure the mapping is
+ * writable.
  */
 static inline void* page_clear(void* page)
 {
-	kassert(is_page_aligned((uintptr_t)page),
-		"page_clear: page not aligned");
+	kassert(is_page_aligned((uintptr_t)page), "page_clear: page not aligned");
 	if (!page) return page;
 	return __memset(page, 0, PAGE_SIZE);
 }
 
 /**
- * __page_clear - Zero-fill a single physical page via HHDM
- * @page: Page descriptor
- * Return: none
- * Context: Does not sleep. IRQ-safe. Requires HHDM mapping of @page.
+ * @brief Zero-fills a single physical page through the HHDM mapping.
+ *
+ * @param page Page descriptor.
+ *
+ * @note Does not sleep. IRQ-safe. Requires an HHDM mapping of the page.
  */
 static inline void __page_clear(struct page* page)
 {
@@ -234,11 +246,12 @@ static inline void __page_clear(struct page* page)
 }
 
 /**
- * __pages_clear - Zero-fill a run of physical pages via HHDM
- * @page: First page descriptor in the run
- * @num_pages: Number of pages (>0)
- * Return: none
- * Context: Does not sleep. IRQ-safe. Requires HHDM mapping of pages.
+ * @brief Zero-fills a run of physical pages through the HHDM mapping.
+ *
+ * @param page First page descriptor in the run.
+ * @param num_pages Number of pages. Must be greater than 0.
+ *
+ * @note Does not sleep. IRQ-safe. Requires an HHDM mapping of the pages.
  */
 static inline void __pages_clear(struct page* page, size_t num_pages)
 {
@@ -256,3 +269,4 @@ bool tryunlock_page(struct page* page);
 void unlock_page(struct page* page);
 
 void wait_on_page_locked(struct page* page);
+/** @} */

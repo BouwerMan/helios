@@ -18,8 +18,7 @@ void lock_page(struct page* page)
 		waitqueue_commit_sleep(&page->wq);
 	}
 
-	kassert(flags_test_acquire(&page->flags, PG_LOCKED),
-		"Failed to acquire page lock");
+	kassert(flags_test_acquire(&page->flags, PG_LOCKED), "Failed to acquire page lock");
 }
 
 bool tryunlock_page(struct page* page)

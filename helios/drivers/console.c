@@ -58,8 +58,7 @@ void console_init()
 	dev_t base;
 	int e = alloc_chrdev_region(&base, 1, "console");
 	if (e < 0) {
-		log_error("Failed to allocate chrdev region for console: %d",
-			  e);
+		log_error("Failed to allocate chrdev region for console: %d", e);
 		panic("Cannot continue without console");
 	}
 
@@ -82,20 +81,11 @@ void console_init()
 		panic("Cannot continue without console");
 	}
 
-	devfs_map_name(devfs_sb,
-		       console_chrdev.name,
-		       console_chrdev.base,
-		       FILETYPE_CHAR_DEV,
-		       0666,
-		       0);
+	devfs_map_name(devfs_sb, console_chrdev.name, console_chrdev.base, FILETYPE_CHAR_DEV, 0666, 0);
 
 	log_debug("Got sb %p for /dev", (void*)devfs_sb);
-	log_debug("Console chrdev major: %u minor: %u",
-		  MAJOR(console_chrdev.base),
-		  MINOR(console_chrdev.base));
-	log_debug("Mounted at %s/%s",
-		  devfs_sb->mount_point,
-		  console_chrdev.name);
+	log_debug("Console chrdev major: %u minor: %u", MAJOR(console_chrdev.base), MINOR(console_chrdev.base));
+	log_debug("Mounted at %s/%s", devfs_sb->mount_point, console_chrdev.name);
 }
 
 void attach_tty_to_console(const char* name)
@@ -124,10 +114,7 @@ void detach_tty(const char* name)
 	}
 }
 
-ssize_t console_write(struct vfs_file* file,
-		      const char* buffer,
-		      size_t count,
-		      off_t* offset)
+ssize_t console_write(struct vfs_file* file, const char* buffer, size_t count, off_t* offset)
 {
 	(void)offset;
 
@@ -143,8 +130,7 @@ ssize_t console_write(struct vfs_file* file,
 	return (ssize_t)count;
 }
 
-ssize_t
-console_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
+ssize_t console_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
 {
 	(void)file;
 	(void)offset;

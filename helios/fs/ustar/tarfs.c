@@ -32,22 +32,17 @@ void unpack_tarfs(void* archive_address)
 
 		void* file_data = (void*)(ptr + 512);
 
-		size_t file_size = oct2bin((unsigned char*)header->size,
-					   ARRAY_SIZE(header->size));
+		size_t file_size = oct2bin((unsigned char*)header->size, ARRAY_SIZE(header->size));
 
 		if (header->typeflag == '5') {
 			vfs_mkdir(header->name, VFS_PERM_ALL);
-		} else if (header->typeflag == '0' ||
-			   header->typeflag == '\0') {
+		} else if (header->typeflag == '0' || header->typeflag == '\0') {
 			int fd = vfs_open(header->name, O_CREAT | O_WRONLY);
 			if (fd >= 0) {
-				vfs_write(fd,
-					  (const char*)file_data,
-					  file_size);
+				vfs_write(fd, (const char*)file_data, file_size);
 				vfs_close(fd);
 			} else {
-				log_error("tarfs: Failed to create file %s",
-					  header->name);
+				log_error("tarfs: Failed to create file %s", header->name);
 			}
 		}
 

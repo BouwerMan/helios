@@ -30,13 +30,11 @@ static struct file_ops fb_fops = {
 void fb_init()
 {
 	// Ensure we got a framebuffer.
-	if (framebuffer_request.response == NULL ||
-	    framebuffer_request.response->framebuffer_count < 1) {
+	if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) {
 		panic("No framebuffer found");
 	}
 
-	struct limine_framebuffer* fb =
-		framebuffer_request.response->framebuffers[0];
+	struct limine_framebuffer* fb = framebuffer_request.response->framebuffers[0];
 
 	sem_init(&g_fbdev.sem, 1);
 
@@ -83,20 +81,12 @@ void fb_init()
 		panic("Cannot continue without console");
 	}
 
-	devfs_map_name(devfs_sb,
-		       g_fbdev.cdev.name,
-		       g_fbdev.cdev.base,
-		       FILETYPE_CHAR_DEV,
-		       0666,
-		       0);
+	devfs_map_name(devfs_sb, g_fbdev.cdev.name, g_fbdev.cdev.base, FILETYPE_CHAR_DEV, 0666, 0);
 
 	log_info("Framebuffer initialized");
 }
 
-ssize_t fb_write(struct vfs_file* file,
-		 const char __user* buffer,
-		 size_t count,
-		 off_t* offset)
+ssize_t fb_write(struct vfs_file* file, const char __user* buffer, size_t count, off_t* offset)
 {
 	(void)offset;
 
@@ -111,12 +101,7 @@ ssize_t fb_write(struct vfs_file* file,
 	return (ssize_t)count;
 }
 
-int fb_mmap(struct vfs_file* file,
-	    void* addr,
-	    size_t len,
-	    int prot,
-	    int flags,
-	    off_t off)
+int fb_mmap(struct vfs_file* file, void* addr, size_t len, int prot, int flags, off_t off)
 {
 	char prot_str[4] = { (prot & PROT_READ) ? 'r' : '-',
 			     (prot & PROT_WRITE) ? 'w' : '-',
@@ -138,25 +123,18 @@ int fb_mmap(struct vfs_file* file,
 	paddr_t vram_paddr = fbdev->vram_paddr;
 	sem_signal(&fbdev->sem);
 
-	if (!is_page_aligned((uptr)off) || off < 0 ||
-	    (size_t)off + len > vram_len || flags & MAP_PRIVATE) {
+	if (!is_page_aligned((uptr)off) || off < 0 || (size_t)off + len > vram_len || flags & MAP_PRIVATE) {
 		return -EINVAL;
 	}
 
 	struct address_space* vas = get_current_task()->vas;
 	uptr start = align_down_page((uptr)addr);
 	uptr end = align_up_page(start + len);
-	int res = map_device_region(vas,
-				    start,
-				    end,
-				    vram_paddr + (paddr_t)off,
-				    (ulong)prot,
-				    (ulong)flags);
+	int res = map_device_region(vas, start, end, vram_paddr + (paddr_t)off, (ulong)prot, (ulong)flags);
 	return res;
 }
 
-static void fb_get_screeninfo(struct fb_device* fbdev,
-			      struct fb_screeninfo* info)
+static void fb_get_screeninfo(struct fb_device* fbdev, struct fb_screeninfo* info)
 {
 	sem_wait(&fbdev->sem);
 	info->width = fbdev->width;
@@ -208,9 +186,7 @@ int fb_ioctl(struct vfs_file* file, unsigned long request, void __user* arg)
 	case FBIOGET_SCREENINFO: {
 		struct fb_screeninfo info = { 0 };
 		fb_get_screeninfo(fbdev, &info);
-		return (int)copy_to_user(arg,
-					 &info,
-					 sizeof(struct fb_screeninfo));
+		return (int)copy_to_user(arg, &info, sizeof(struct fb_screeninfo));
 	}
 	case FBIOSET_MODE: {
 		enum fb_mode mode = 0;

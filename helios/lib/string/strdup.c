@@ -2,6 +2,11 @@
 #include <mm/kmalloc.h>
 
 /**
+ * @addtogroup lib
+ * @{
+ */
+
+/**
  * @brief Duplicates a string by allocating memory and copying its content.
  *
  * This function creates a duplicate of the input string by allocating
@@ -26,3 +31,4 @@ char* strdup(const char* src)
 
 	return strcpy(new, src);
 }
+/** @} */

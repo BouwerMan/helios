@@ -3,8 +3,12 @@
 
 #include "kernel/types.h"
 
-#define __STRING_H_CHECK_ALIGN(num, dest, src, size) \
-	((num % size == 0) && (dest % size == 0) && (src % size == 0))
+/**
+ * @addtogroup lib
+ * @{
+ */
+
+#define __STRING_H_CHECK_ALIGN(num, dest, src, size) ((num % size == 0) && (dest % size == 0) && (src % size == 0))
 
 void* __memset(void* restrict d, int c, size_t n);
 u16* __memset16(u16* restrict d, u16 v, size_t n);
@@ -27,14 +31,15 @@ u64* __memset64(u64* restrict d, u64 v, size_t n);
 #endif
 
 /**
- * memset - Set a block of memory to a byte value.
- * @d: Destination buffer.
- * @c: Byte value to store (low 8 bits used).
- * @n: Number of bytes to set.
- * Return: @d.
+ * @brief Sets a block of memory to a byte value.
  *
- * Writes @n bytes at @d as (uint8_t)@c. No barriers implied.
- * Context: Any. Does not sleep.
+ * @param d Destination buffer.
+ * @param c Byte value to store. Uses the low 8 bits.
+ * @param n Number of bytes to set.
+ *
+ * @return d.
+ *
+ * @note Does not sleep. Safe in any context.
  */
 static inline void* memset(void* restrict d, int c, size_t n)
 {
@@ -45,14 +50,15 @@ static inline void* memset(void* restrict d, int c, size_t n)
 }
 
 /**
- * memset8 - Fill bytes with a value.
- * @s: Destination buffer (u8 *).
- * @v: Byte value to store.
- * @n: Number of bytes to set.
- * Return: @s.
+ * @brief Fills a buffer with a byte value.
  *
- * Semantics match memset() for byte-sized elements. No barriers implied.
- * Context: Any. Does not sleep.
+ * @param s Destination buffer.
+ * @param v Byte value to store.
+ * @param n Number of bytes to set.
+ *
+ * @return s.
+ *
+ * @note Does not sleep. Safe in any context.
  */
 static inline u8* memset8(u8* restrict s, u8 v, size_t n)
 {
@@ -60,14 +66,15 @@ static inline u8* memset8(u8* restrict s, u8 v, size_t n)
 }
 
 /**
- * memset16 - Fill 16-bit elements with a value.
- * @s: Destination buffer (u16 *).
- * @v: 16-bit value to store.
- * @n: Number of 16-bit elements to set.
- * Return: @s.
+ * @brief Fills a buffer with 16-bit elements of a value.
  *
- * Stores @n copies of @v to @s. No barriers implied.
- * Context: Any. Does not sleep.
+ * @param s Destination buffer.
+ * @param v 16-bit value to store.
+ * @param n Number of 16-bit elements to set.
+ *
+ * @return s.
+ *
+ * @note Does not sleep. Safe in any context.
  */
 static inline u16* memset16(u16* restrict s, u16 v, size_t n)
 {
@@ -80,14 +87,15 @@ static inline u16* memset16(u16* restrict s, u16 v, size_t n)
 }
 
 /**
- * memset32 - Fill 32-bit elements with a value.
- * @s: Destination buffer (u32 *).
- * @v: 32-bit value to store.
- * @n: Number of 32-bit elements to set.
- * Return: @s.
+ * @brief Fills a buffer with 32-bit elements of a value.
  *
- * Stores @n copies of @v to @s. No barriers implied.
- * Context: Any. Does not sleep.
+ * @param s Destination buffer.
+ * @param v 32-bit value to store.
+ * @param n Number of 32-bit elements to set.
+ *
+ * @return s.
+ *
+ * @note Does not sleep. Safe in any context.
  */
 static inline u32* memset32(u32* restrict s, u32 v, size_t n)
 {
@@ -100,14 +108,15 @@ static inline u32* memset32(u32* restrict s, u32 v, size_t n)
 }
 
 /**
- * memset64 - Fill 64-bit elements with a value.
- * @s: Destination buffer (u64 *).
- * @v: 64-bit value to store.
- * @n: Number of 64-bit elements to set.
- * Return: @s.
+ * @brief Fills a buffer with 64-bit elements of a value.
  *
- * Stores @n copies of @v to @s. No barriers implied.
- * Context: Any. Does not sleep.
+ * @param s Destination buffer.
+ * @param v 64-bit value to store.
+ * @param n Number of 64-bit elements to set.
+ *
+ * @return s.
+ *
+ * @note Does not sleep. Safe in any context.
  */
 static inline u64* memset64(u64* restrict s, u64 v, size_t n)
 {
@@ -145,3 +154,4 @@ size_t strlen(const char*);
 
 size_t strnlen_s(const char* s, size_t n);
 size_t strnlen(const char* s, size_t n);
+/** @} */

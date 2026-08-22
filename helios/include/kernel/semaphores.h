@@ -29,7 +29,7 @@ typedef struct rwsem {
 	struct waitqueue writers; /**< Queue of waiting writer threads */
 	int reader_count;	  /**< Number of active readers */
 	int writer_count;	  /**< Number of waiting writers */
-	bool writer_active; /**< True if a writer currently holds the lock */
+	bool writer_active;	  /**< True if a writer currently holds the lock */
 } rwsem_t;
 
 void rwsem_init(rwsem_t* s);

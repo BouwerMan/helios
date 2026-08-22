@@ -85,8 +85,7 @@ void* __default_memset(void* dest, int ch, size_t count)
 	size_t head_bytes = ((uintptr_t)b) & 7;
 	if (head_bytes) {
 		size_t bytes_to_fill = 8 - head_bytes;
-		size_t head_fill = (bytes_to_fill < count) ? (bytes_to_fill) :
-							     count;
+		size_t head_fill = (bytes_to_fill < count) ? (bytes_to_fill) : count;
 		for (size_t i = 0; i < head_fill; i++) {
 			b[i] = c;
 		}
@@ -99,20 +98,13 @@ void* __default_memset(void* dest, int ch, size_t count)
 		// prepare registers for inline asm
 		register uint64_t* d64 __asm__("rdi") = (uint64_t*)b;
 		register size_t cnt64 __asm__("rcx") = count / 8;
-		register uint64_t pattern __asm__("rax") =
-			0x0101010101010101ULL * c;
+		register uint64_t pattern __asm__("rax") = 0x0101010101010101ULL * c;
 
-		__asm__ volatile("rep stosq"
-				 : "+D"(d64), "+c"(cnt64)
-				 : "a"(pattern)
-				 : "memory");
+		__asm__ volatile("rep stosq" : "+D"(d64), "+c"(cnt64) : "a"(pattern) : "memory");
 
 		// leftover bytes
 		register size_t cnt8 __asm__("rcx") = count & 7;
-		__asm__ volatile("rep stosb"
-				 : "+D"(d64), "+c"(cnt8)
-				 :
-				 : "memory");
+		__asm__ volatile("rep stosb" : "+D"(d64), "+c"(cnt8) : : "memory");
 	}
 
 	return dest;

@@ -7,6 +7,11 @@
 #include "kernel/types.h"
 #include "mm/page.h"
 
+/**
+ * @addtogroup kernel
+ * @{
+ */
+
 typedef enum __klog_level {
 	KLOG_EMERG = 0,	  // System is unusable
 	KLOG_ALERT = 1,	  // Action must be taken immediately
@@ -43,8 +48,7 @@ struct klog_header {
 
 static constexpr u8 KLOG_HDR_LEN_8 = 32 / 8;
 _Static_assert(KLOG_HDR_LEN_8 == 4, "log_header must be 32 bytes");
-_Static_assert(sizeof(struct klog_header) == (size_t)(KLOG_HDR_LEN_8 * 8U),
-	       "log_header must be 32 bytes");
+_Static_assert(sizeof(struct klog_header) == (size_t)(KLOG_HDR_LEN_8 * 8U), "log_header must be 32 bytes");
 
 struct klog_ring {
 	u8* buf;
@@ -63,19 +67,21 @@ struct klog_cursor {
 	struct timer timer;
 };
 
-typedef int (*klog_emit_fn)(const struct klog_header* hdr,
-			    const u8* payload,
-			    u32 payload_len,
-			    void* cookie /* sink context */
+typedef int (*klog_emit_fn)(const struct klog_header* hdr, const u8* payload, u32 payload_len, void* cookie /* sink
+													       context
+													     */
 );
 
 /**
- * enum KLOG_DRAIN_STATUS - return codes from klog_drain()
- * @KLOG_DRAIN_OK: drained all available records
- * @KLOG_DRAIN_STOPPED_UNCOMMITTED: hit a not-yet-published record
- * @KLOG_DRAIN_BUDGET_EXHAUSTED: emitted 'budget' records
- * @KLOG_DRAIN_EMIT_BACKPRESSURE: sink asked us to stop (nonzero return)
- * @KLOG_DRAIN_RESYNCED: overrun detected; cursor jumped forward
+ * @brief Return codes from klog_drain().
+ *
+ * @param KLOG_DRAIN_OK Drained all available records.
+ * @param KLOG_DRAIN_STOPPED_UNCOMMITTED Hit a not-yet-published record.
+ * @param KLOG_DRAIN_BUDGET_EXHAUSTED Emitted the requested number of
+ * records.
+ * @param KLOG_DRAIN_EMIT_BACKPRESSURE The sink asked the drain to stop.
+ * @param KLOG_DRAIN_RESYNCED Detected an overrun; the cursor jumped
+ * forward.
  */
 enum KLOG_DRAIN_STATUS {
 	KLOG_DRAIN_OK = 0,
@@ -103,3 +109,5 @@ void klog_discard_to_head(void);
 
 void klog_pause_drain(void);
 void klog_resume_drain(void);
+
+/** @} */

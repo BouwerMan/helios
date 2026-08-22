@@ -14,11 +14,9 @@ static inline unsigned long millis_to_ticks(unsigned long ms)
 
 #define BENCHMARK_START(label) uint64_t label##_start = clock_now_ns()
 
-#define BENCHMARK_END(label)                     \
-	uint64_t label##_end = clock_now_ns();   \
-	log_debug(#label ": %lu (%lx) ns",       \
-		  (label##_end - label##_start), \
-		  (label##_end - label##_start))
+#define BENCHMARK_END(label)                   \
+	uint64_t label##_end = clock_now_ns(); \
+	log_debug(#label ": %lu (%lx) ns", (label##_end - label##_start), (label##_end - label##_start))
 
 struct timer {
 	struct list_head list;	      // Linked list node
@@ -44,10 +42,7 @@ void timer_handler(void);
 
 // Functions to manage timers
 struct timer* timer_create();
-void timer_schedule(struct timer* timer,
-		    u64 delay_ms,
-		    timer_callback_t callback,
-		    void* data);
+void timer_schedule(struct timer* timer, u64 delay_ms, timer_callback_t callback, void* data);
 void timer_cancel(struct timer* timer);
 void timer_reschedule(struct timer* timer, u64 new_delay_ms);
 void timer_destroy(struct timer* timer);

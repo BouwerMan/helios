@@ -28,6 +28,11 @@
 #include "mm/page.h"
 #include "mm/page_alloc.h"
 
+/**
+ * @addtogroup drivers
+ * @{
+ */
+
 /*******************************************************************************
  * Global Variable Definitions
  *******************************************************************************/
@@ -44,15 +49,14 @@ static constexpr size_t RING_BUFFER_SIZE = RING_BUFFER_SIZE_PAGES * PAGE_SIZE;
  *******************************************************************************/
 
 /**
- * vconsole_tty_init - Initialize the VGA console TTY device
+ * @brief Creates and registers the VGA console TTY device.
  *
- * Creates and registers a TTY device named "tty0" that outputs to the VGA
- * text console. Allocates memory for the output ring buffer and initializes
- * all necessary data structures. This TTY serves as the primary console
- * output device for the system.
+ * Creates a TTY device named "tty0" that outputs to the VGA text console.
+ * It allocates the output ring buffer and sets up the TTY structures. This
+ * TTY is the primary console output device for the system.
  *
- * Panics if memory allocation for the ring buffer fails, as the console
- * TTY is essential for system operation.
+ * @note Panics if the ring buffer allocation fails. The console TTY is
+ * essential for system operation.
  */
 void vconsole_tty_init()
 {
@@ -81,17 +85,6 @@ void vconsole_tty_init()
 	register_tty(tty);
 }
 
-/**
- * vconsole_tty_write - Drain the TTY output buffer to the VGA console
- * @tty: Pointer to the TTY device whose output buffer to drain
- *
- * Reads all available characters from the TTY's output ring buffer and
- * displays them on the VGA text console. This function is typically called
- * as a work item to process buffered output. The operation is atomic and
- * protected by the ring buffer's spinlock to ensure thread safety.
- *
- * Return: Number of characters written to the console
- */
 ssize_t vconsole_tty_write(struct tty* tty)
 {
 	struct ring_buffer* rb = &tty->output_buffer;
@@ -110,3 +103,5 @@ ssize_t vconsole_tty_write(struct tty* tty)
 
 	return bytes_written;
 }
+
+/** @} */

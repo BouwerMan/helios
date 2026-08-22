@@ -216,8 +216,7 @@ long sys_chdir(struct registers* r)
 
 	struct task* task = get_current_task();
 	struct vfs_dentry* dentry = vfs_lookup(path);
-	if (dentry && dentry->inode &&
-	    dentry->inode->filetype == FILETYPE_DIR) {
+	if (dentry && dentry->inode && dentry->inode->filetype == FILETYPE_DIR) {
 		dput(task->cwd);
 		task->cwd = dentry;
 		return 0;
@@ -300,15 +299,12 @@ long sys_shutdown(struct registers* r)
 
 typedef long (*sys_handler_t)(struct registers* r);
 static const sys_handler_t syscall_handlers[] = {
-	[SYS_READ] = sys_read,	       [SYS_WRITE] = sys_write,
-	[SYS_MMAP] = sys_mmap,	       [SYS_EXIT] = sys_exit,
-	[SYS_WAITPID] = sys_waitpid,   [SYS_FORK] = sys_fork,
-	[SYS_GETPID] = sys_getpid,     [SYS_GETPPID] = sys_getppid,
-	[SYS_EXEC] = sys_exec,	       [SYS_GETCWD] = sys_getcwd,
-	[SYS_CHDIR] = sys_chdir,       [SYS_GETDENTS] = sys_getdents,
-	[SYS_IOCTL] = sys_ioctl,       [SYS_OPEN] = sys_open,
-	[SYS_CLOSE] = sys_close,       [SYS_ACCESS] = sys_access,
-	[SYS_SHUTDOWN] = sys_shutdown,
+	[SYS_READ] = sys_read,	   [SYS_WRITE] = sys_write,	  [SYS_MMAP] = sys_mmap,
+	[SYS_EXIT] = sys_exit,	   [SYS_WAITPID] = sys_waitpid,	  [SYS_FORK] = sys_fork,
+	[SYS_GETPID] = sys_getpid, [SYS_GETPPID] = sys_getppid,	  [SYS_EXEC] = sys_exec,
+	[SYS_GETCWD] = sys_getcwd, [SYS_CHDIR] = sys_chdir,	  [SYS_GETDENTS] = sys_getdents,
+	[SYS_IOCTL] = sys_ioctl,   [SYS_OPEN] = sys_open,	  [SYS_CLOSE] = sys_close,
+	[SYS_ACCESS] = sys_access, [SYS_SHUTDOWN] = sys_shutdown,
 };
 
 static constexpr int SYSCALL_COUNT = ARRAY_SIZE(syscall_handlers);

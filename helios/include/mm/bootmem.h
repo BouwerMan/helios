@@ -6,21 +6,25 @@
 #include <limine.h>
 
 /**
+ * @addtogroup mm
+ * @{
+ */
+
+/**
  * @brief Initializes the bootmem memmory manager and mem_map.
- *
- * @param mmap Pointer to the Limine memory map response structure.
  */
 void bootmem_init();
 
 /**
  * @brief Frees all pages managed by the boot allocator.
  *
- * @note: This function should only be called when the boot allocator is no longer needed.
- * @note: We assume that all pages allocated by the boot allocator are critical and should NEVER be deallocated.
+ * @note Call this only when the boot allocator is no longer needed.
+ * @note Assumes every page the boot allocator allocated is critical. Never
+ * deallocates such a page.
  */
 void bootmem_free_all();
 
-/** 
+/**
  * @brief Reclaims memory marked as bootloader reclaimable.
  */
 void bootmem_reclaim_bootloader();
@@ -58,3 +62,4 @@ void bootmem_free_page(void* addr);
  * @param count The number of contiguous pages to free. Must be greater than 0.
  */
 void bootmem_free_contiguous(void* addr, size_t count);
+/** @} */

@@ -25,13 +25,18 @@
 #include "kernel/tasks/scheduler.h"
 
 /**
- * sem_init() - Initialize a counting semaphore.
- * @sem: Target semaphore.
- * @initial_count: Initial number of available permits.
- * Return: None.
- * Context: Any. Must be called before first use and not concurrently with
- *          other operations on @sem.
- * Locks: None required; internal synchronization is established by init.
+ * @addtogroup kernel
+ * @{
+ */
+
+/**
+ * @brief Initializes a counting semaphore.
+ *
+ * @param sem Target semaphore.
+ * @param initial_count Initial number of available permits.
+ *
+ * @note Call this function before the first use of the semaphore. Do not
+ * call it concurrently with other operations on the semaphore.
  */
 void sem_init(semaphore_t* sem, int initial_count)
 {
@@ -41,18 +46,18 @@ void sem_init(semaphore_t* sem, int initial_count)
 }
 
 /**
- * sem_wait() - Acquire one permit from a semaphore (may block).
- * @sem: Target semaphore.
- * Return: None. Returns only after a permit is acquired.
- * Context: Process context only; may sleep. Not valid in IRQ, NMI, or while
- *          holding spinlocks or in other atomic sections.
- * Locks: No external locks required; wait/queueing is handled internally.
+ * @brief Acquires one permit from a semaphore. May block.
+ *
+ * @param sem Target semaphore.
+ *
+ * @note This function returns only after it acquires a permit. Call it
+ * from process context only. Do not call it in IRQ or NMI context, or
+ * while holding a spinlock.
  */
 void sem_wait(semaphore_t* sem)
 {
 	while (true) {
-		unsigned long flags;
-		spin_lock_irqsave(&sem->guard_lock, &flags);
+		ulong flags = spin_lock_irqsave(&sem->guard_lock);
 
 		if (atomic_read(&sem->count) > 0) {
 			// Permit is available, take it and go.
@@ -71,18 +76,15 @@ void sem_wait(semaphore_t* sem)
 }
 
 /**
- * sem_signal() - Release one permit and wake a waiter if present.
- * @sem: Target semaphore.
- * Return: None.
- * Context: Any; IRQ-safe.
- * Locks: No external locks required; wakeup and bookkeeping are internal.
- * Notes: Wakes at most one waiter. In debug builds, clears ownership
- *        metadata before releasing the permit.
+ * @brief Releases one permit and wakes a waiter if one is present.
+ *
+ * @param sem Target semaphore.
+ *
+ * @note This function is IRQ-safe. It wakes at most one waiter.
  */
 void sem_signal(semaphore_t* sem)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&sem->guard_lock, &flags);
+	spin_guard(&sem->guard_lock);
 
 #ifdef SEMAPHORE_DEBUG
 	sem->owner = nullptr;
@@ -94,18 +96,14 @@ void sem_signal(semaphore_t* sem)
 	if (!waitqueue_empty(&sem->waiters)) {
 		waitqueue_wake_one(&sem->waiters);
 	}
-
-	spin_unlock_irqrestore(&sem->guard_lock, flags);
 }
 
 /**
- * rwsem_init() - Initialize an rwsem to the unlocked state
- * @s: semaphore to initialize
+ * @brief Initializes a rwsem to the unlocked state.
  *
- * Sets up wait queues and clears counters/flags. Subsequent down/up
- * operations enforce writer-preferred semantics.
+ * @param s Semaphore to initialize.
  *
- * Return: void
+ * Subsequent down and up operations enforce writer-preferred semantics.
  */
 void rwsem_init(rwsem_t* s)
 {
@@ -118,19 +116,18 @@ void rwsem_init(rwsem_t* s)
 }
 
 /**
- * down_read() - Acquire the rwsem for shared (reader) access
- * @s: semaphore
+ * @brief Acquires the rwsem for shared (reader) access.
  *
- * Blocks if a writer is active or waiting, giving writers preference.
- * Multiple readers may hold the lock when no writer is active/queued.
+ * @param s Semaphore.
  *
- * Context: May sleep; not in IRQ/atomic context.
- * Return: void
+ * @note This function may sleep. Do not call it in IRQ or atomic context.
+ *
+ * This function blocks while a writer is active or waiting, giving writers
+ * preference. Multiple readers may hold the lock at once.
  */
 void down_read(rwsem_t* s)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&s->guard, &flags);
+	ulong flags = spin_lock_irqsave(&s->guard);
 
 	while (s->writer_active || s->writer_count > 0) {
 		waitqueue_prepare_wait(&s->readers);
@@ -138,7 +135,7 @@ void down_read(rwsem_t* s)
 		waitqueue_commit_sleep(&s->readers);
 
 		// Relock before rechecking condition
-		spin_lock_irqsave(&s->guard, &flags);
+		flags = spin_lock_irqsave(&s->guard);
 	}
 
 	kassert(!s->writer_active, "Writer active in down_read");
@@ -149,42 +146,38 @@ void down_read(rwsem_t* s)
 }
 
 /**
- * up_read() - Release a shared (reader) hold on the rwsem
- * @s: semaphore
+ * @brief Releases a shared (reader) hold on the rwsem.
  *
- * Decrements the reader count; if it reaches zero and writers are queued,
- * wake one writer.
+ * @param s Semaphore.
  *
- * Context: Does not sleep.
- * Return: void
+ * @note This function does not sleep.
+ *
+ * If the reader count reaches zero and a writer is queued, this function
+ * wakes one writer.
  */
 void up_read(rwsem_t* s)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&s->guard, &flags);
+	spin_guard(&s->guard);
 
 	s->reader_count--;
 	if (s->reader_count == 0 && s->writer_count > 0) {
 		waitqueue_wake_one(&s->writers);
 	}
-
-	spin_unlock_irqrestore(&s->guard, flags);
 }
 
 /**
- * down_write() - Acquire the rwsem for exclusive (writer) access
- * @s: semaphore
+ * @brief Acquires the rwsem for exclusive (writer) access.
  *
- * Blocks until no readers are active and no writer holds the lock. On
- * success marks the writer as active; writers are preferred over new readers.
+ * @param s Semaphore.
  *
- * Context: May sleep; not in IRQ/atomic context.
- * Return: void
+ * @note This function may sleep. Do not call it in IRQ or atomic context.
+ *
+ * This function blocks until no readers are active and no writer holds the
+ * lock. Writers take preference over new readers.
  */
 void down_write(rwsem_t* s)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&s->guard, &flags);
+	ulong flags = spin_lock_irqsave(&s->guard);
 
 	while (s->writer_active || s->reader_count > 0) {
 		s->writer_count++;
@@ -193,7 +186,7 @@ void down_write(rwsem_t* s)
 		waitqueue_commit_sleep(&s->writers);
 
 		// Relock before rechecking condition
-		spin_lock_irqsave(&s->guard, &flags);
+		flags = spin_lock_irqsave(&s->guard);
 		s->writer_count--;
 	}
 
@@ -202,19 +195,18 @@ void down_write(rwsem_t* s)
 }
 
 /**
- * up_write() - Release an exclusive (writer) hold on the rwsem
- * @s: semaphore
+ * @brief Releases an exclusive (writer) hold on the rwsem.
  *
- * Clears writer_active. If writers are waiting, wake one; otherwise wake
- * all readers to proceed in batch.
+ * @param s Semaphore.
  *
- * Context: Does not sleep.
- * Return: void
+ * @note This function does not sleep.
+ *
+ * If a writer is waiting, this function wakes one writer. Otherwise, it
+ * wakes all waiting readers.
  */
 void up_write(rwsem_t* s)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&s->guard, &flags);
+	spin_guard(&s->guard);
 
 	s->writer_active = false;
 
@@ -223,8 +215,6 @@ void up_write(rwsem_t* s)
 	} else if (s->reader_count == 0 && !waitqueue_empty(&s->readers)) {
 		waitqueue_wake_all(&s->readers);
 	}
-
-	spin_unlock_irqrestore(&s->guard, flags);
 }
 
 void downgrade_write(rwsem_t* s)
@@ -242,3 +232,5 @@ bool try_down_write(rwsem_t* s)
 	(void)s;
 	kunimpl("try_down_write");
 }
+
+/** @} */

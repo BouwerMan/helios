@@ -25,8 +25,7 @@ FILE* __create_stream(int fd, buffer_mode_t mode, bool readable, bool writable)
 
 	int prot = readable ? PROT_READ : 0;
 	prot |= writable ? PROT_WRITE : 0;
-	void* buf = mmap(
-		nullptr, BUFFER_SIZE, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	void* buf = mmap(nullptr, BUFFER_SIZE, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
 	stream->__buffer = (char*)buf;
 	stream->__buffer_size = BUFFER_SIZE;
@@ -60,8 +59,7 @@ int __fflush(FILE* stream)
 		return -EPERM;
 	}
 
-	ssize_t written =
-		write(stream->__fd, stream->__buffer, stream->__buffer_pos);
+	ssize_t written = write(stream->__fd, stream->__buffer, stream->__buffer_pos);
 
 	if (written < 0) {
 		stream->__error = true;

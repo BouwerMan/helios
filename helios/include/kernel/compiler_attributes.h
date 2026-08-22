@@ -11,9 +11,9 @@
 #define __initdata __attribute__((section(".init.data")))
 
 /* Use when a non-init caller must reference an init symbol */
-#define __ref                       \
-	__attribute__((no_sanitize( \
-		"address"))) /* marker; you can also put it in a .ref.text if you add checks */
+#define __ref                                                                                                   \
+	__attribute__((no_sanitize("address"))) /* marker; you can also put it in a .ref.text if you add checks \
+						 */
 
 // Always inline, even if the compiler thinks otherwise
 #ifndef __always_inline
@@ -77,8 +77,23 @@
 #define __packed __attribute__((packed))
 #endif
 
-#define __weak_alias(old, new) \
-	extern __typeof(old) new __attribute__((__weak__, __alias__(#old)))
+#ifndef __weak_alias
+#define __weak_alias(old, new) extern __typeof(old) new __attribute__((__weak__, __alias__(#old)))
+#endif
 
-#define __strong_alias(old, new) \
-	extern __typeof(old) new __attribute__((__alias__(#old)))
+#ifndef __strong_alias
+#define __strong_alias(old, new) extern __typeof(old) new __attribute__((__alias__(#old)))
+#endif
+
+#ifndef __cleanup
+#define __cleanup(func) __attribute__((cleanup(func)))
+#endif
+
+#ifndef __CONCAT
+#define __CONCAT_(a, b) a##b
+#define __CONCAT(a, b)	__CONCAT_(a, b)
+#endif
+
+#ifndef __UNIQUE_ID
+#define __UNIQUE_ID(prefix) __CONCAT(__CONCAT(__uid_, prefix), __COUNTER__)
+#endif

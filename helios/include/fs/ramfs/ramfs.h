@@ -14,8 +14,8 @@ struct ramfs_dentry {
 	char name[RAMFS_MAX_NAME + 1];	     // Name of the file/directory
 	struct ramfs_inode_info* inode_info; // Pointer to the inode info
 
-	struct list_head children; // List of child dentries (files/directories)
-	struct list_head siblings; // Sibling directories
+	struct list_head children;	     // List of child dentries (files/directories)
+	struct list_head siblings;	     // Sibling directories
 };
 
 struct ramfs_file {
@@ -53,14 +53,12 @@ struct ramfs_sb_info {
 
 static inline struct ramfs_inode_info* RAMFS_INODE_INFO(struct vfs_inode* inode)
 {
-	return inode->fs_data ? (struct ramfs_inode_info*)inode->fs_data :
-				nullptr;
+	return inode->fs_data ? (struct ramfs_inode_info*)inode->fs_data : nullptr;
 }
 
 static inline struct ramfs_file* RAMFS_FILE(struct vfs_inode* inode)
 {
-	return RAMFS_INODE_INFO(inode) ? RAMFS_INODE_INFO(inode)->file :
-					 nullptr;
+	return RAMFS_INODE_INFO(inode) ? RAMFS_INODE_INFO(inode)->file : nullptr;
 }
 
 static inline struct ramfs_dentry* RAMFS_DENTRY(struct vfs_dentry* dentry)
@@ -83,24 +81,15 @@ struct vfs_superblock* ramfs_mount(const char* source, int flags);
 int ramfs_open(struct vfs_inode* inode, struct vfs_file* file);
 int ramfs_close(struct vfs_inode* inode, struct vfs_file* file);
 
-ssize_t
-ramfs_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset);
-ssize_t ramfs_write(struct vfs_file* file,
-		    const char* buffer,
-		    size_t count,
-		    off_t* offset);
+ssize_t ramfs_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset);
+ssize_t ramfs_write(struct vfs_file* file, const char* buffer, size_t count, off_t* offset);
 
 int ramfs_readdir(struct vfs_file* file, struct dirent* dirent, off_t offset);
 int ramfs_readpage(struct vfs_inode* inode, struct page* page);
 
-struct vfs_dentry* ramfs_lookup(struct vfs_inode* dir_inode,
-				struct vfs_dentry* child);
-int ramfs_mkdir(struct vfs_inode* dir,
-		struct vfs_dentry* dentry,
-		uint16_t mode);
-int ramfs_create(struct vfs_inode* dir,
-		 struct vfs_dentry* dentry,
-		 uint16_t mode);
+struct vfs_dentry* ramfs_lookup(struct vfs_inode* dir_inode, struct vfs_dentry* child);
+int ramfs_mkdir(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode);
+int ramfs_create(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode);
 struct vfs_inode* ramfs_alloc_inode(struct vfs_superblock* sb);
 void ramfs_destroy_inode(struct vfs_inode* inode);
 int ramfs_read_inode(struct vfs_inode* inode);

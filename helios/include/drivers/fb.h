@@ -29,16 +29,8 @@ struct fb_device {
 
 void fb_init();
 
-ssize_t fb_write(struct vfs_file* file,
-		 const char __user* buffer,
-		 size_t count,
-		 off_t* offset);
+ssize_t fb_write(struct vfs_file* file, const char __user* buffer, size_t count, off_t* offset);
 
-int fb_mmap(struct vfs_file* file,
-	    void* addr,
-	    size_t len,
-	    int prot,
-	    int flags,
-	    off_t off);
+int fb_mmap(struct vfs_file* file, void* addr, size_t len, int prot, int flags, off_t off);
 
 int fb_ioctl(struct vfs_file* file, unsigned long request, void __user* arg);

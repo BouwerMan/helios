@@ -2,6 +2,11 @@
 #include <string.h>
 
 /**
+ * @addtogroup libc
+ * @{
+ */
+
+/**
  * @brief Splits a string into tokens using specified delimiters.
  *
  * This function tokenizes a string by replacing delimiter characters with
@@ -30,32 +35,34 @@
  */
 char* strtok(char* str, const char* delimiters)
 {
-    static char* trunc; // String to truncate
-    if (str) {
-        trunc = str; // if string exists, we set trunc, otherwise we use
-                     // previous trunc value
-    } else if (trunc == NULL) {
-        return NULL;
-    }
+	static char* trunc;  // String to truncate
+	if (str) {
+		trunc = str; // if string exists, we set trunc, otherwise we use
+			     // previous trunc value
+	} else if (trunc == NULL) {
+		return NULL;
+	}
 
-    char* token_start = NULL;
-    // Skip initial delimiters
-    while (*trunc && strchr(delimiters, *trunc))
-        trunc++;
+	char* token_start = NULL;
+	// Skip initial delimiters
+	while (*trunc && strchr(delimiters, *trunc))
+		trunc++;
 
-    if (*trunc == '\0') return NULL;
-    token_start = trunc;
-    while (*trunc) {
-        if (strchr(delimiters, *trunc)) {
-            *trunc++ = '\0';
-            return token_start;
-        }
-        trunc++;
-    }
-    if (*trunc == '\0') {
-        trunc = NULL;
-        return token_start;
-    }
+	if (*trunc == '\0') return NULL;
+	token_start = trunc;
+	while (*trunc) {
+		if (strchr(delimiters, *trunc)) {
+			*trunc++ = '\0';
+			return token_start;
+		}
+		trunc++;
+	}
+	if (*trunc == '\0') {
+		trunc = NULL;
+		return token_start;
+	}
 
-    return NULL;
+	return NULL;
 }
+
+/** @} */

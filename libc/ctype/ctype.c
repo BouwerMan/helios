@@ -227,15 +227,13 @@ weak_alias(__isspace, isspace);
 // Derived classification functions
 int __isgraph(int c)
 {
-	return (unsigned)c < 256 &&
-	       (__ctype_table[c] & (_ALPHA | _DIGIT | _PUNCT));
+	return (unsigned)c < 256 && (__ctype_table[c] & (_ALPHA | _DIGIT | _PUNCT));
 }
 weak_alias(__isgraph, isgraph);
 
 int __isprint(int c)
 {
-	return (unsigned)c < 256 &&
-	       ((__ctype_table[c] & (_ALPHA | _DIGIT | _PUNCT)) || c == ' ');
+	return (unsigned)c < 256 && ((__ctype_table[c] & (_ALPHA | _DIGIT | _PUNCT)) || c == ' ');
 }
 weak_alias(__isprint, isprint);
 

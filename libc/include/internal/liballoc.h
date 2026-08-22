@@ -6,7 +6,7 @@
 
 // NOTE: This is from liballoc_1_1 at https://github.com/blanham/liballoc/tree/master
 
-/** \defgroup ALLOCHOOKS liballoc hooks
+/** \defgroup LIBALLOC_HOOKS liballoc hooks
  *
  * These are the OS specific functions which need to
  * be implemented on any platform that the library

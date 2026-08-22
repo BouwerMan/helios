@@ -2,6 +2,11 @@
 #pragma once
 #include <lib/printf.h>
 
+/**
+ * @addtogroup lib
+ * @{
+ */
+
 // LOG_LEVEL: Determines the minimum level of logs to be compiled.
 // (e.g., LOG_LEVEL_INFO will compile INFO, WARN, and ERROR logs, but not DEBUG)
 #ifndef LOG_LEVEL
@@ -46,8 +51,7 @@ enum LOG_MODE {
 		char __log_buf[LOG_BUFFER_SIZE];                                                                    \
 		int __log_len = snprintf(__log_buf,                                                                 \
 					 sizeof(__log_buf),                                                         \
-					 color level_str LOG_COLOR_RESET                                            \
-					 " %s:%d:%s(): " fmt "\n",                                                  \
+					 color level_str LOG_COLOR_RESET " %s:%d:%s(): " fmt "\n",                  \
 					 __FILE__,                                                                  \
 					 __LINE__,                                                                  \
 					 __func__ __VA_OPT__(, ) __VA_ARGS__);                                      \
@@ -55,66 +59,53 @@ enum LOG_MODE {
 		if (__log_len > 0) {                                                                                \
 			/* Output the original message (which might be truncated). */                               \
 			/* We must ensure the length passed to log_output doesn't exceed the actual buffer size. */ \
-			int __len_to_write =                                                                        \
-				(__log_len < (int)sizeof(__log_buf)) ?                                              \
-					__log_len :                                                                 \
-					((int)sizeof(__log_buf) - 1);                                               \
+			int __len_to_write = (__log_len < (int)sizeof(__log_buf)) ? __log_len :                     \
+										    ((int)sizeof(__log_buf) - 1);   \
 			log_output(__log_buf, __len_to_write);                                                      \
 		}                                                                                                   \
                                                                                                                     \
 		/* If snprintf's return value indicates the buffer was too small, print a warning. */               \
 		if (__log_len >= (int)sizeof(__log_buf)) {                                                          \
-			static const char __trunc_msg[] = LOG_COLOR_RED                                             \
-				"[LOG TRUNCATED]\n" LOG_COLOR_RESET;                                                \
-			log_output(                                                                                 \
-				__trunc_msg,                                                                        \
-				sizeof(__trunc_msg) -                                                               \
-					1); /* -1 to exclude null terminator */                                     \
+			static const char __trunc_msg[] = LOG_COLOR_RED "[LOG TRUNCATED]\n" LOG_COLOR_RESET;        \
+			log_output(__trunc_msg, sizeof(__trunc_msg) - 1); /* -1 to exclude null terminator */       \
 		}                                                                                                   \
 	} while (0)
 
-#define _LOG_UNUSED(fmt, ...)                                               \
-	do {                                                                \
-		(void)sizeof(fmt);                                          \
-		if (0) {                                                    \
-			/* compile-time format checking, no runtime cost */ \
-			(void)snprintf((char*)0,                            \
-				       0,                                   \
-				       fmt __VA_OPT__(, ) __VA_ARGS__);     \
-		}                                                           \
+#define _LOG_UNUSED(fmt, ...)                                                        \
+	do {                                                                         \
+		(void)sizeof(fmt);                                                   \
+		if (0) {                                                             \
+			/* compile-time format checking, no runtime cost */          \
+			(void)snprintf((char*)0, 0, fmt __VA_OPT__(, ) __VA_ARGS__); \
+		}                                                                    \
 	} while (0)
 
 #if LOG_LEVEL <= LOG_LEVEL_DEBUG
-#define log_debug(fmt, ...) \
-	_LOG_IMPL("[DEBUG]", "", fmt __VA_OPT__(, ) __VA_ARGS__)
+#define log_debug(fmt, ...) _LOG_IMPL("[DEBUG]", "", fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_debug(fmt, ...) _LOG_UNUSED(fmt __VA_OPT__(, __VA_ARGS__))
 #endif
 
 #if LOG_LEVEL <= LOG_LEVEL_INFO
-#define log_info(fmt, ...) \
-	_LOG_IMPL("[INFO] ", LOG_COLOR_CYAN, fmt __VA_OPT__(, ) __VA_ARGS__)
+#define log_info(fmt, ...) _LOG_IMPL("[INFO] ", LOG_COLOR_CYAN, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_info(fmt, ...) _LOG_UNUSED(fmt __VA_OPT__(, __VA_ARGS__))
 #endif
 
 #if LOG_LEVEL <= LOG_LEVEL_WARN
-#define log_warn(fmt, ...) \
-	_LOG_IMPL("[WARN] ", LOG_COLOR_YELLOW, fmt __VA_OPT__(, ) __VA_ARGS__)
+#define log_warn(fmt, ...) _LOG_IMPL("[WARN] ", LOG_COLOR_YELLOW, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_warn(fmt, ...) _LOG_UNUSED(fmt __VA_OPT__(, __VA_ARGS__))
 #endif
 
 #if LOG_LEVEL <= LOG_LEVEL_ERROR
-#define log_error(fmt, ...) \
-	_LOG_IMPL("[ERROR]", LOG_COLOR_RED, fmt __VA_OPT__(, ) __VA_ARGS__)
+#define log_error(fmt, ...) _LOG_IMPL("[ERROR]", LOG_COLOR_RED, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_error(fmt, ...) _LOG_UNUSED(fmt __VA_OPT__(, __VA_ARGS__))
 #endif
 
 #if LOG_LEVEL <= LOG_LEVEL_INFO
-#define log_init(fmt, ...) \
-	_LOG_IMPL("[INIT] ", LOG_COLOR_GREEN, fmt __VA_OPT__(, ) __VA_ARGS__)
+#define log_init(fmt, ...) _LOG_IMPL("[INIT] ", LOG_COLOR_GREEN, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define log_init(fmt, ...) _LOG_UNUSED(fmt __VA_OPT__(, __VA_ARGS__))
 #endif
@@ -131,3 +122,4 @@ void set_log_mode(enum LOG_MODE mode);
  * @param len The length of the message string.
  */
 void log_output(const char* msg, int len);
+/** @} */

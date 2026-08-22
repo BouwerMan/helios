@@ -1,5 +1,5 @@
 /**
- * @file util/ht.c
+ * @file lib/ht.c
  * @brief Implementation of a hash table for the HeliOS project.
  *
  * This file contains the implementation of a hash table, including functions
@@ -10,7 +10,7 @@
  *
  * @author Dylan Parks
  * @date 2025-04-05
- * @license GPL-3.0
+ * License: GPL-3.0
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,6 +32,11 @@
 #include <lib/string.h>
 #include <mm/kmalloc.h>
 
+/**
+ * @addtogroup lib
+ * @{
+ */
+
 // TODO: Implement some sort of LRU deletion
 // TODO: Implement any sort of removal using custom destructors
 // TODO: Update documentation to reflect generic keys now supported
@@ -52,17 +57,12 @@ static const char* ht_set_entry(struct ht_entry* entries,
 static bool ht_expand(struct ht* table);
 
 /**
- * ht_create - Creates a new hash table.
- * @hash_size: The initial size of the hash table (must be a power of 2).
+ * @brief Creates a new hash table.
  *
- * This function allocates and initializes a hash table structure. The hash
- * table uses the specified size to allocate memory for its entries and sets
- * up default operations. If memory allocation fails, the function returns
- * NULL.
+ * @param hash_size Initial size of the hash table. Must be a power of 2.
  *
- * Return:
- *  - Pointer to the newly created hash table on success.
- *  - NULL if memory allocation fails.
+ * @return A pointer to the new hash table, or NULL if memory allocation
+ * fails.
  */
 struct ht* ht_create(size_t hash_size)
 {
@@ -95,8 +95,7 @@ void ht_destroy(struct ht* table)
 {
 	// Free allocated keys and values if they have a custom destructor
 	for (size_t i = 0; i < table->capacity; i++) {
-		if (table->ops->destructor)
-			table->ops->destructor(table->entries[i].value);
+		if (table->ops->destructor) table->ops->destructor(table->entries[i].value);
 		kfree((void*)table->entries[i].key);
 	}
 
@@ -165,12 +164,7 @@ const char* ht_set(struct ht* table, const void* key, void* value)
 		if (!ht_expand(table)) return NULL;
 	}
 
-	return ht_set_entry(table->entries,
-			    table->capacity,
-			    key,
-			    value,
-			    &table->length,
-			    table->ops);
+	return ht_set_entry(table->entries, table->capacity, key, value, &table->length, table->ops);
 }
 
 /**
@@ -214,7 +208,8 @@ struct ht_iter ht_iterator(struct ht* table)
  * item's key and value. If there are no more items, the function returns
  * `false`.
  *
- * @note: Do not modify the hash table (e.g., using `ht_set`) while iterating.
+ * @note Do not modify the hash table (for example, with `ht_set`) while
+ * iterating.
  *
  * @param it Pointer to the hash table iterator.
  * @return `true` if the iterator was advanced to a valid item, `false` if no
@@ -238,9 +233,8 @@ bool ht_next(struct ht_iter* it)
 	return false;
 }
 
-static constexpr u64 FNV_PRIME = 0x01000193; ///< The FNV prime constant.
-static constexpr u64 FNV_OFFSET =
-	0x811c9dc5;			     ///< The FNV offset basis constant.
+static constexpr u64 FNV_PRIME = 0x01000193;  ///< The FNV prime constant.
+static constexpr u64 FNV_OFFSET = 0x811c9dc5; ///< The FNV offset basis constant.
 
 // https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
 /**
@@ -288,6 +282,7 @@ bool compare_key(const void* key1, const void* key2)
  * @param value     Pointer to the value to associate with the key.
  * @param plength   Pointer to the current length of the hash table, or NULL if
  *                  not needed.
+ * @param ops       Hash, compare, and destructor callbacks for this table.
  *
  * @return Pointer to the key in the hash table,
  *         or NULL if memory allocation fails.
@@ -341,20 +336,14 @@ static bool ht_expand(struct ht* table)
 {
 	size_t new_capacity = table->capacity * 2;
 	if (new_capacity < table->capacity) return false; // overflow
-	struct ht_entry* new_entries =
-		kcalloc(new_capacity, sizeof(struct ht_entry));
+	struct ht_entry* new_entries = kcalloc(new_capacity, sizeof(struct ht_entry));
 	if (new_entries == NULL) return false;
 
 	// Iterate entries, move non-empty to new table
 	for (size_t i = 0; i < table->capacity; i++) {
 		struct ht_entry entry = table->entries[i];
 		if (entry.key != NULL) {
-			ht_set_entry(new_entries,
-				     new_capacity,
-				     entry.key,
-				     entry.value,
-				     NULL,
-				     table->ops);
+			ht_set_entry(new_entries, new_capacity, entry.key, entry.value, NULL, table->ops);
 		}
 	}
 
@@ -365,3 +354,4 @@ static bool ht_expand(struct ht* table)
 	table->capacity = new_capacity;
 	return true;
 }
+/** @} */

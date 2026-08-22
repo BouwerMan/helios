@@ -13,9 +13,7 @@ int __puts(const char* str);
 int __fputs(const char* __restrict s, FILE* stream);
 
 int __fprintf(FILE* __restrict stream, const char* __restrict format, ...);
-int __vfprintf(FILE* __restrict stream,
-	       const char* __restrict format,
-	       va_list arg);
+int __vfprintf(FILE* __restrict stream, const char* __restrict format, va_list arg);
 
 int __getchar(void);
 int __fgetc(FILE* stream);

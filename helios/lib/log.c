@@ -40,11 +40,7 @@ void log_output(const char* msg, int len)
 		term_write(msg, (size_t)len);
 		break;
 	case LOG_KLOG:
-		bool st = klog_try_write(kernel.klog,
-					 KLOG_ALERT,
-					 msg,
-					 (u32)len,
-					 nullptr);
+		bool st = klog_try_write(kernel.klog, KLOG_ALERT, msg, (u32)len, nullptr);
 		(void)st;
 		break;
 	}

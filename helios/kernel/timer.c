@@ -30,6 +30,11 @@
 #include <kernel/types.h>
 #include <lib/log.h>
 
+/**
+ * @addtogroup kernel
+ * @{
+ */
+
 static struct timer_subsystem ts = {
 	.active_timers = LIST_HEAD_INIT(ts.active_timers),
 	.lock = SPINLOCK_INIT,
@@ -41,7 +46,7 @@ static struct timer_subsystem ts = {
 static uint32_t ts_phase = 18;
 
 /**
- * timer_create() - Create and initialize a new timer
+ * @brief Creates and initializes a new timer.
  */
 struct timer* timer_create()
 {
@@ -53,23 +58,20 @@ struct timer* timer_create()
 }
 
 /**
- * timer_schedule() - Schedule a timer to expire after a delay
- * @timer:    Pointer to the timer to schedule
- * @delay_ms: Delay in milliseconds before the timer expires
- * @callback: Function to call when the timer expires
- * @data:     Data to pass to the callback function
+ * @brief Schedules a timer to expire after a delay.
+ *
+ * @param timer Pointer to the timer to schedule.
+ * @param delay_ms Delay in milliseconds before the timer expires.
+ * @param callback Function to call when the timer expires.
+ * @param data Data to pass to the callback function.
  */
-void timer_schedule(struct timer* timer,
-		    u64 delay_ms,
-		    timer_callback_t callback,
-		    void* data)
+void timer_schedule(struct timer* timer, u64 delay_ms, timer_callback_t callback, void* data)
 {
 	if (timer->active) {
 		return; // Already scheduled
 	}
 
-	unsigned long flags;
-	spin_lock_irqsave(&ts.lock, &flags);
+	spin_guard(&ts.lock);
 
 	timer->expires_at = ts.current_ticks + millis_to_ticks(delay_ms);
 	timer->callback = callback;
@@ -88,24 +90,21 @@ void timer_schedule(struct timer* timer,
 	list_add_tail(insert_point, &timer->list);
 
 	timer->active = true;
-
-	spin_unlock_irqrestore(&ts.lock, flags);
 }
 
 void timer_cancel(struct timer* timer)
 {
 	if (!timer->active) return;
-	unsigned long flags;
-	spin_lock_irqsave(&ts.lock, &flags);
+	spin_guard(&ts.lock);
 	timer->active = false;
 	list_del(&timer->list);
-	spin_unlock_irqrestore(&ts.lock, flags);
 }
 
 /**
- * timer_reschedule() - Reschedule an existing timer with a new delay
- * @timer: Pointer to the timer to reschedule
- * @new_delay_ms: New delay in milliseconds
+ * @brief Reschedules an existing timer with a new delay.
+ *
+ * @param timer Pointer to the timer to reschedule.
+ * @param new_delay_ms New delay in milliseconds.
  */
 void timer_reschedule(struct timer* timer, u64 new_delay_ms)
 {
@@ -119,12 +118,11 @@ void timer_destroy(struct timer* timer)
 }
 
 /**
- * timer_tick() - Check for expired timers and call their callbacks
+ * @brief Checks for expired timers and calls their callbacks.
  */
 static void timer_tick(void)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&ts.lock, &flags);
+	ulong flags = spin_lock_irqsave(&ts.lock);
 	struct timer* pos = nullptr;
 	struct timer* temp = nullptr;
 
@@ -140,29 +138,26 @@ static void timer_tick(void)
 
 		pos->callback(pos->data);
 
-		spin_lock_irqsave(&ts.lock, &flags);
+		flags = spin_lock_irqsave(&ts.lock);
 	}
 
 	spin_unlock_irqrestore(&ts.lock, flags);
 }
 
 /**
- * timer_handler() - Called on each timer tick (from IRQ context)
+ * @brief Runs on each timer tick, from IRQ context.
  */
 void timer_handler(void)
 {
 	// Called from IRQ context, source depends on arch (Ex: PIT)
-	unsigned long flags;
-	spin_lock_irqsave(&ts.lock, &flags);
+	scoped_spin_guard(&ts.lock)
+	{
+		struct scheduler_queue* squeue = get_scheduler_queue();
 
-	struct scheduler_queue* squeue = get_scheduler_queue();
-
-	ts.current_ticks++;
-	if (ts.current_ticks % ts_phase == 0) ts.seconds_since_start++;
-	if (ts.current_ticks % SCHEDULER_TIME == 0)
-		squeue->need_reschedule = true;
-
-	spin_unlock_irqrestore(&ts.lock, flags);
+		ts.current_ticks++;
+		if (ts.current_ticks % ts_phase == 0) ts.seconds_since_start++;
+		if (ts.current_ticks % SCHEDULER_TIME == 0) squeue->need_reschedule = true;
+	}
 
 	timer_tick();
 	scheduler_tick();
@@ -172,3 +167,5 @@ void timer_init(u32 phase)
 {
 	ts_phase = phase;
 }
+
+/** @} */

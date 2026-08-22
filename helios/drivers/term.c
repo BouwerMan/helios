@@ -4,7 +4,6 @@
 #include "kernel/timer.h"
 #include "lib/log.h"
 #include "lib/string.h"
-#include "mm/kmalloc.h"
 #include "mm/page.h"
 
 // https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797?permalink_comment_id=4102710
@@ -162,47 +161,43 @@ void term_init()
 {
 	spin_init(&g_terminal.lock);
 
-	unsigned long flags;
-	spin_lock_irqsave(&g_terminal.lock, &flags);
+	scoped_spin_guard(&g_terminal.lock)
+	{
+		struct screen_info* sc = get_screen_info();
+		g_terminal.sc = sc;
+		g_terminal.cols = sc->fb->width / (sc->font->width + 1);
+		g_terminal.rows = sc->fb->height / sc->font->height;
 
-	struct screen_info* sc = get_screen_info();
-	g_terminal.sc = sc;
-	g_terminal.cols = sc->fb->width / (sc->font->width + 1);
-	g_terminal.rows = sc->fb->height / sc->font->height;
+		g_terminal.write_x = 0;
+		g_terminal.write_y = 0;
 
-	g_terminal.write_x = 0;
-	g_terminal.write_y = 0;
+		g_terminal.state = PARSER_NORMAL;
+		g_terminal.param_len = 0;
+		g_terminal.param_count = 0;
 
-	g_terminal.state = PARSER_NORMAL;
-	g_terminal.param_len = 0;
-	g_terminal.param_count = 0;
+		g_terminal.current_attrs = default_attrs;
+		g_terminal.default_attrs = default_attrs;
 
-	g_terminal.current_attrs = default_attrs;
-	g_terminal.default_attrs = default_attrs;
+		g_terminal.saved_x = 0;
+		g_terminal.saved_y = 0;
 
-	g_terminal.saved_x = 0;
-	g_terminal.saved_y = 0;
+		g_terminal.scroll_top = 0;
+		g_terminal.scroll_bottom = g_terminal.rows - 1;
 
-	g_terminal.scroll_top = 0;
-	g_terminal.scroll_bottom = g_terminal.rows - 1;
+		g_terminal.mode_flags = 0;
 
-	g_terminal.mode_flags = 0;
+		list_init(&g_terminal.cursor.timer.list);
+		g_terminal.cursor.visible = true;
 
-	list_init(&g_terminal.cursor.timer.list);
-	g_terminal.cursor.visible = true;
+		size_t pages = CEIL_DIV(g_terminal.rows * g_terminal.cols * sizeof(struct screen_cell), PAGE_SIZE);
+		g_terminal.screen_buffer = get_free_pages(AF_KERNEL, pages);
 
-	size_t pages = CEIL_DIV(g_terminal.rows * g_terminal.cols *
-					sizeof(struct screen_cell),
-				PAGE_SIZE);
-	g_terminal.screen_buffer = get_free_pages(AF_KERNEL, pages);
-
-	for (size_t r = 0; r < g_terminal.rows; r++) {
-		for (size_t c = 0; c < g_terminal.cols; c++) {
-			__screen_buffer_putchar_at(' ', c, r);
+		for (size_t r = 0; r < g_terminal.rows; r++) {
+			for (size_t c = 0; c < g_terminal.cols; c++) {
+				__screen_buffer_putchar_at(' ', c, r);
+			}
 		}
 	}
-
-	spin_unlock_irqrestore(&g_terminal.lock, flags);
 
 	g_terminal.cursor.active = true;
 	timer_schedule(&g_terminal.cursor.timer, 500, cursor_callback, nullptr);
@@ -227,8 +222,7 @@ void term_putchar(char c)
 {
 	if (g_terminal.sc == nullptr) return;
 
-	unsigned long flags;
-	spin_lock_irqsave(&g_terminal.lock, &flags);
+	spin_guard(&g_terminal.lock);
 
 	switch (g_terminal.state) {
 	case PARSER_NORMAL: {
@@ -258,8 +252,6 @@ void term_putchar(char c)
 		break;
 	}
 	}
-
-	spin_unlock_irqrestore(&g_terminal.lock, flags);
 }
 
 void __hide_cursor()
@@ -369,14 +361,11 @@ static void erase_to_end_of_screen(size_t x, size_t y)
 
 void term_clear()
 {
-	unsigned long flags;
-	spin_lock_irqsave(&g_terminal.lock, &flags);
+	spin_guard(&g_terminal.lock);
 
 	g_terminal.write_x = 0;
 	g_terminal.write_y = 0;
 	erase_to_end_of_screen(0, 0);
-
-	spin_unlock_irqrestore(&g_terminal.lock, flags);
 }
 
 // Expects to be called with g_terminal.lock held
@@ -392,9 +381,7 @@ void __term_putchar(char c)
 		--g_terminal.write_x;
 		__putchar_at(' ', g_terminal.write_x, g_terminal.write_y);
 		break;
-	case '\t':
-		g_terminal.write_x = (g_terminal.write_x + 4) & (int)(~3ULL);
-		break;
+	case '\t': g_terminal.write_x = (g_terminal.write_x + 4) & (int)(~3ULL); break;
 	default:
 		__putchar_at(c, g_terminal.write_x, g_terminal.write_y);
 		g_terminal.write_x++;
@@ -406,7 +393,6 @@ void __term_putchar(char c)
 		g_terminal.write_y++;
 	}
 	if (g_terminal.write_y >= (int)g_terminal.rows) {
-		// TODO: Scroll region and scroll screen_buffer
 		scroll();
 		screen_buffer_scroll();
 		g_terminal.write_y = g_terminal.write_y - 1;
@@ -425,13 +411,8 @@ void term_resume_text()
 		for (size_t col = 0; col < g_terminal.cols; col++) {
 			size_t index = row * g_terminal.cols + col;
 			char c = g_terminal.screen_buffer[index].character;
-			struct terminal_attrs* attrs =
-				&g_terminal.screen_buffer[index].attrs;
-			screen_putchar_at((u16)c,
-					  col,
-					  row,
-					  attrs->fg_color,
-					  attrs->bg_color);
+			struct terminal_attrs* attrs = &g_terminal.screen_buffer[index].attrs;
+			screen_putchar_at((u16)c, col, row, attrs->fg_color, attrs->bg_color);
 		}
 	}
 	term_resume_cursor();
@@ -462,6 +443,7 @@ static void handle_escape_char(char c)
 {
 	switch (c) {
 	case '[': g_terminal.state = PARSER_CSI; break;
+	default:  break;
 	}
 }
 
@@ -510,8 +492,7 @@ static size_t parse_csi_param()
 
 static int get_csi_param(size_t index, int default_val)
 {
-	return (index < g_terminal.param_count) ? g_terminal.params[index] :
-						  default_val;
+	return (index < g_terminal.param_count) ? g_terminal.params[index] : default_val;
 }
 
 static void process_sgr_param(int param)
@@ -525,14 +506,9 @@ static void process_sgr_param(int param)
 		g_terminal.current_attrs.flags |= ATTR_BOLD;
 		return;
 		// Figure I may as well handle these here as well
-	case DEFAULT_FG:
-		g_terminal.current_attrs.fg_color =
-			g_terminal.default_attrs.fg_color;
-		return;
-	case DEFAULT_BG:
-		g_terminal.current_attrs.bg_color =
-			g_terminal.default_attrs.bg_color;
-		return;
+	case DEFAULT_FG: g_terminal.current_attrs.fg_color = g_terminal.default_attrs.fg_color; return;
+	case DEFAULT_BG: g_terminal.current_attrs.bg_color = g_terminal.default_attrs.bg_color; return;
+	default:	 break;
 	}
 
 	// Handle foreground colors (30-37)
@@ -550,16 +526,13 @@ static void process_sgr_param(int param)
 static void handle_erase_seq()
 {
 	if (g_terminal.param_len == 0) {
-		erase_to_end_of_screen((size_t)g_terminal.cursor.x,
-				       (size_t)g_terminal.cursor.y);
+		erase_to_end_of_screen((size_t)g_terminal.cursor.x, (size_t)g_terminal.cursor.y);
 	}
 
 	switch (g_terminal.param_buffer[0]) {
-	case '0':
-		erase_to_end_of_screen((size_t)g_terminal.cursor.x,
-				       (size_t)g_terminal.cursor.y);
-		break;
+	case '0': erase_to_end_of_screen((size_t)g_terminal.cursor.x, (size_t)g_terminal.cursor.y); break;
 	case '2': erase_to_end_of_screen(0, 0); break;
+	default:  break;
 	}
 }
 
@@ -671,8 +644,7 @@ static void handle_csi_char(char c)
 		break;
 	}
 	default: {
-		if (g_terminal.param_len >=
-		    sizeof(g_terminal.param_buffer) - 1) {
+		if (g_terminal.param_len >= sizeof(g_terminal.param_buffer) - 1) {
 			// Buffer overflow, reset state
 			g_terminal.state = PARSER_NORMAL;
 			log_error("CSI parameter buffer overflow");
@@ -689,25 +661,23 @@ static void cursor_callback(void* data)
 {
 	(void)data;
 
-	unsigned long flags;
-	spin_lock_irqsave(&g_terminal.lock, &flags);
+	scoped_spin_guard(&g_terminal.lock)
+	{
+		struct term_cursor* cursor = &g_terminal.cursor;
 
-	struct term_cursor* cursor = &g_terminal.cursor;
+		if (cursor->active) {
 
-	if (cursor->active) {
-
-		if (cursor->visible) {
-			__hide_cursor();
+			if (cursor->visible) {
+				__hide_cursor();
+			} else {
+				__show_cursor(g_terminal.write_x, g_terminal.write_y);
+			}
 		} else {
-			__show_cursor(g_terminal.write_x, g_terminal.write_y);
+			__hide_cursor();
 		}
-	} else {
-		__hide_cursor();
-	}
 
-	spin_unlock_irqrestore(&g_terminal.lock, flags);
-
-	if (cursor->active) {
-		timer_reschedule(&cursor->timer, 500);
+		if (cursor->active) {
+			timer_reschedule(&cursor->timer, 500);
+		}
 	}
 }

@@ -32,8 +32,8 @@ typedef struct __file_stream {
 	buffer_mode_t __mode;
 
 	// Stream state flags
-	unsigned int __eof : 1;	     // End of file reached
-	unsigned int __error : 1;    // Error occurred
+	unsigned int __eof	: 1; // End of file reached
+	unsigned int __error	: 1; // Error occurred
 	unsigned int __readable : 1; // Stream supports reading
 	unsigned int __writable : 1; // Stream supports writing
 
@@ -52,10 +52,7 @@ extern FILE* stderr;
 int fclose(FILE* __restrict __stream) __nothrow;
 int fflush(FILE* __restrict __stream) __nothrow;
 FILE* fopen(const char* __filename, const char* __mode) __nothrow;
-size_t fwrite(const void* __buffer,
-	      size_t __size,
-	      size_t __count,
-	      FILE* __restrict __stream) __nothrow;
+size_t fwrite(const void* __buffer, size_t __size, size_t __count, FILE* __restrict __stream) __nothrow;
 size_t fread(void*, size_t, size_t, FILE*);
 int fseek(FILE*, long, int);
 long ftell(FILE*);
@@ -66,9 +63,8 @@ void perror(const char* __s) __nothrow;
 #include <printf.h>
 int fprintf(FILE* __restrict __stream, const char* __restrict __format, ...)
 	__attribute__((format(printf, 2, 3))) __nothrow;
-int vfprintf(FILE* __restrict __stream,
-	     const char* __restrict __format,
-	     va_list __arg) __attribute__((format(printf, 2, 0))) __nothrow;
+int vfprintf(FILE* __restrict __stream, const char* __restrict __format, va_list __arg)
+	__attribute__((format(printf, 2, 0))) __nothrow;
 
 int putchar(int __c) __nothrow;
 int fputc(int __c, FILE* __stream) __nothrow;

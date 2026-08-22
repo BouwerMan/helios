@@ -8,6 +8,11 @@
 #include "kernel/bitops.h"
 
 /**
+ * @addtogroup kernel
+ * @{
+ */
+
+/**
  * @brief Computes the integer base-2 logarithm of an unsigned long value.
  * @param v  Unsigned long value. Must be non-zero; behavior is undefined for zero.
  * @return   Zero-based index of the most significant set bit in v.
@@ -48,3 +53,5 @@ static inline bool is_pow_of_two(unsigned long n)
 {
 	return (n != 0 && ((n & (n - 1)) == 0));
 }
+
+/** @} */

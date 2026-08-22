@@ -1,6 +1,11 @@
 #include "lib/string.h"
 
 /**
+ * @addtogroup lib
+ * @{
+ */
+
+/**
  * @brief Locates the first occurrence of a character in a string.
  *
  * @param   str         The null-terminated string to search.
@@ -41,14 +46,16 @@ char* strrchr(const char* s, int c)
 }
 
 /**
- * strrnechr - Find the last character in a string that is not equal to c
- * 
- * @param s    String to search (must not be NULL)
- * @param c    Character to avoid (cast to char internally)
- * @return     Pointer to last non-matching character, or NULL if not found
- * 
- * @note       Excludes null terminator from search
- * @example    strrnechr("hello", 'l') returns pointer to 'o'
+ * @brief Finds the last character in a string that is not equal to c.
+ *
+ * @param s String to search. Must not be NULL.
+ * @param c Character to avoid. Cast to char internally.
+ *
+ * @return Pointer to the last non-matching character, or NULL if not
+ * found.
+ *
+ * @note Excludes the null terminator from the search. For example,
+ * strrnechr("hello", 'l') returns a pointer to 'o'.
  */
 char* strrnechr(const char* s, int c)
 {
@@ -67,3 +74,4 @@ char* strrnechr(const char* s, int c)
 
 	return nullptr;
 }
+/** @} */

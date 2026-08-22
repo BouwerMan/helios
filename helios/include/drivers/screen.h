@@ -8,6 +8,11 @@
 #include <kernel/types.h>
 #include <limine.h>
 
+/**
+ * @addtogroup drivers
+ * @{
+ */
+
 static constexpr int CHAR_SPACING = 0;
 
 enum COLORS {
@@ -76,11 +81,7 @@ void scroll();
  * @param fg The foreground color (e.g., 0xFFFFFF for white).
  * @param bg The background color (e.g., 0x000000 for black).
  */
-void screen_putchar_at(uint16_t c,
-		       size_t cx,
-		       size_t cy,
-		       uint32_t fg,
-		       uint32_t bg);
+void screen_putchar_at(uint16_t c, size_t cx, size_t cy, uint32_t fg, uint32_t bg);
 
 void screen_putchar(char c);
 
@@ -90,3 +91,5 @@ void screen_draw_cursor_at(size_t cx, size_t cy);
 
 void screen_enable();
 void screen_disable();
+
+/** @} */

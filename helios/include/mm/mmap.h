@@ -6,6 +6,11 @@
 #include <stddef.h>
 #include <uapi/helios/mman.h>
 
+/**
+ * @addtogroup mm
+ * @{
+ */
+
 #define DEF_ADDR ((void*)0x555555554000)
 
 /**
@@ -34,12 +39,7 @@
  * MAP_FAILED is returned, and errno is set to indicate the cause
  * of the error.
  */
-void* mmap_sys(void* addr,
-	       size_t length,
-	       int prot,
-	       int flags,
-	       int fd,
-	       off_t offset);
+void* mmap_sys(void* addr, size_t length, int prot, int flags, int fd, off_t offset);
 
 /**
  * @brief Removes a memory mapping.
@@ -57,3 +57,4 @@ void* mmap_sys(void* addr,
  * indicate the cause of the error.
  */
 int munmap(void* addr, size_t length);
+/** @} */

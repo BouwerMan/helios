@@ -6,6 +6,11 @@
 #include <lib/list.h>
 #include <stddef.h>
 
+/**
+ * @addtogroup mm
+ * @{
+ */
+
 // TODO: Try using a free list stored in the freed object's slab slice similar to the linux kernel
 
 static constexpr int MAX_CACHE_NAME_LEN = 32;
@@ -118,7 +123,8 @@ struct slab {
  * @param cache         Pointer to an uninitialized slab_cache structure to set up.
  * @param name          Human-readable identifier for this cache (max length MAX_CACHE_NAME_LEN).
  * @param object_size   Desired size of each object; will be rounded up to object_align.
- * @param object_align  Alignment boundary for each object; must be power of two. Defaults to L1_CACHE_SIZE if 0 is passed through.
+ * @param object_align  Alignment boundary for each object; must be power of two. Defaults to L1_CACHE_SIZE if 0 is
+ * passed through.
  * @param constructor   Optional callback invoked on each object when a new slab is populated.
  * @param destructor    Optional callback invoked on each object before it’s recycled or cache is destroyed.
  * @return              0 on success, or a negative error code on failure.
@@ -170,10 +176,10 @@ void slab_free(struct slab_cache* cache, void* object);
 void slab_cache_purge_corrupt(struct slab_cache* cache);
 
 /*******************************************************************************
-*
-* TESTING FUNCTIONS
-*
-*******************************************************************************/
+ *
+ * TESTING FUNCTIONS
+ *
+ *******************************************************************************/
 
 /**
  * @brief Dump statistics of a slab cache for debugging purposes.
@@ -182,3 +188,4 @@ void slab_cache_purge_corrupt(struct slab_cache* cache);
  *              If the cache is NULL or uninitialized, an error is logged.
  */
 void slab_dump_stats(struct slab_cache* cache);
+/** @} */

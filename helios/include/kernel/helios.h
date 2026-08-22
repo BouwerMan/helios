@@ -11,6 +11,11 @@
 #include <lib/list.h>
 #include <limine.h>
 
+/**
+ * @addtogroup kernel
+ * @{
+ */
+
 /* Kernel Strings */
 #define KERNEL_NAME    "HELIOS"
 #define KERNEL_VERSION "0.0.0"
@@ -21,7 +26,7 @@
 
 /**
  * @brief Computes the ceiling of the division of two numbers.
- * 
+ *
  * @param a The numerator.
  * @param b The denominator.
  * @return The smallest integer greater than or equal to a / b.
@@ -56,14 +61,12 @@
 /**
  * @brief Clamp a value between lower and upper bounds.
  */
-#define CLAMP(val, lo, hi)                             \
-	({                                             \
-		__typeof__(val) _clamp_val = (val);    \
-		__typeof__(lo) _clamp_lo = (lo);       \
-		__typeof__(hi) _clamp_hi = (hi);       \
-		(_clamp_val < _clamp_lo) ? _clamp_lo : \
-		(_clamp_val > _clamp_hi) ? _clamp_hi : \
-					   _clamp_val; \
+#define CLAMP(val, lo, hi)                                                                                \
+	({                                                                                                \
+		__typeof__(val) _clamp_val = (val);                                                       \
+		__typeof__(lo) _clamp_lo = (lo);                                                          \
+		__typeof__(hi) _clamp_hi = (hi);                                                          \
+		(_clamp_val < _clamp_lo) ? _clamp_lo : (_clamp_val > _clamp_hi) ? _clamp_hi : _clamp_val; \
 	})
 
 /**
@@ -145,3 +148,5 @@ extern struct kernel_context kernel;
 
 void init_kernel_structure();
 void kernel_main();
+
+/** @} */

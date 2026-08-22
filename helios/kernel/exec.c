@@ -37,8 +37,14 @@
 #include <uapi/helios/errno.h>
 
 /**
- * validate() - Validates the ELF file header.
- * @header: Pointer to the ELF file header.
+ * @addtogroup kernel
+ * @{
+ */
+
+/**
+ * @brief Validates the ELF file header.
+ *
+ * @param header Pointer to the ELF file header.
  */
 static bool validate(struct elf_file_header* header)
 {
@@ -69,31 +75,29 @@ static bool validate(struct elf_file_header* header)
 }
 
 /**
- * load_program_header() - Loads a program header from an ELF file into the task's address space.
- * @ctx:   The exec context containing the new address space.
- * @inode: Pointer to the inode of the ELF file, or nullptr for anonymous mapping.
- * @prog:  Pointer to the ELF program header loaded in memory.
- * Return: 0 on success, -errno on failure.
+ * @brief Loads a program header from an ELF file into the task's address
+ * space.
+ *
+ * @param ctx The exec context containing the new address space.
+ * @param inode Pointer to the inode of the ELF file, or nullptr for
+ * anonymous mapping.
+ * @param prog Pointer to the ELF program header loaded in memory.
+ *
+ * @return 0 on success, -errno on failure.
  */
-static int load_program_header(struct exec_context* ctx,
-			       struct vfs_inode* inode,
-			       struct elf_program_header* prog)
+static int load_program_header(struct exec_context* ctx, struct vfs_inode* inode, struct elf_program_header* prog)
 {
-	log_debug(
-		"PT_LOAD: vaddr=0x%lx off=0x%lx filesz=0x%llx memsz=0x%llx flags=0x%lx",
-		(unsigned long)prog->virtual_address,
-		(unsigned long)prog->offset,
-		(unsigned long long)prog->size_in_file,
-		(unsigned long long)prog->size_in_memory,
-		(unsigned long)prog->flags);
+	log_debug("PT_LOAD: vaddr=0x%lx off=0x%lx filesz=0x%llx memsz=0x%llx flags=0x%lx",
+		  (unsigned long)prog->virtual_address,
+		  (unsigned long)prog->offset,
+		  (unsigned long long)prog->size_in_file,
+		  (unsigned long long)prog->size_in_memory,
+		  (unsigned long)prog->flags);
 
-	if ((prog->virtual_address & (PAGE_SIZE - 1)) !=
-	    (prog->offset & (PAGE_SIZE - 1))) {
-		log_error(
-			"ELF invariant violated: vaddr%%PAGE=0x%lx, off%%PAGE=0x%lx",
-			(unsigned long)(prog->virtual_address &
-					(PAGE_SIZE - 1)),
-			(unsigned long)(prog->offset & (PAGE_SIZE - 1)));
+	if ((prog->virtual_address & (PAGE_SIZE - 1)) != (prog->offset & (PAGE_SIZE - 1))) {
+		log_error("ELF invariant violated: vaddr%%PAGE=0x%lx, off%%PAGE=0x%lx",
+			  (unsigned long)(prog->virtual_address & (PAGE_SIZE - 1)),
+			  (unsigned long)(prog->offset & (PAGE_SIZE - 1)));
 		return -ENOEXEC;
 	}
 
@@ -101,11 +105,9 @@ static int load_program_header(struct exec_context* ctx,
 	u16 delta = (u16)(prog->virtual_address - vstart);
 	uptr fstart = align_down_page((uptr)prog->offset);
 
-	uptr file_vend = align_up_page(
-		(uptr)(prog->virtual_address + prog->size_in_file));
+	uptr file_vend = align_up_page((uptr)(prog->virtual_address + prog->size_in_file));
 	uptr bss_vstart = file_vend;
-	uptr bss_vend = align_up_page(
-		(uptr)(prog->virtual_address + prog->size_in_memory));
+	uptr bss_vend = align_up_page((uptr)(prog->virtual_address + prog->size_in_memory));
 
 	unsigned long prot = (prog->flags & PF_EXEC) ? PROT_EXEC : 0;
 	prot |= prog->flags & PF_WRITE ? PROT_WRITE : 0;
@@ -128,13 +130,12 @@ static int load_program_header(struct exec_context* ctx,
 
 	if (prog->size_in_file == 0) {
 		// Pure BSS
-		log_debug(
-			"map ANON: [0x%lx..0x%lx) prot=0x%lx (%s) flags=0x%lx",
-			(unsigned long)vstart,
-			(unsigned long)bss_vend,
-			(unsigned long)prot,
-			pstr,
-			(unsigned long)(MAP_PRIVATE | MAP_ANONYMOUS));
+		log_debug("map ANON: [0x%lx..0x%lx) prot=0x%lx (%s) flags=0x%lx",
+			  (unsigned long)vstart,
+			  (unsigned long)bss_vend,
+			  (unsigned long)prot,
+			  pstr,
+			  (unsigned long)(MAP_PRIVATE | MAP_ANONYMOUS));
 
 		int err = map_region(ctx->new_vas,
 				     (struct mr_file) { 0 },
@@ -167,12 +168,7 @@ static int load_program_header(struct exec_context* ctx,
 		  (size_t)f.pgoff,
 		  (unsigned)f.delta);
 
-	int err = map_region(ctx->new_vas,
-			     f,
-			     vstart,
-			     file_vend,
-			     prot,
-			     MAP_PRIVATE);
+	int err = map_region(ctx->new_vas, f, vstart, file_vend, prot, MAP_PRIVATE);
 	if (err) {
 		log_error("map FILE failed: err=%d", err);
 		return err;
@@ -180,13 +176,12 @@ static int load_program_header(struct exec_context* ctx,
 
 	// ANON tail
 	if (bss_vstart < bss_vend) {
-		log_debug(
-			"map ANON tail: [0x%lx..0x%lx) prot=0x%lx (%s) flags=0x%lx",
-			(unsigned long)bss_vstart,
-			(unsigned long)bss_vend,
-			(unsigned long)prot,
-			pstr,
-			(unsigned long)(MAP_PRIVATE | MAP_ANONYMOUS));
+		log_debug("map ANON tail: [0x%lx..0x%lx) prot=0x%lx (%s) flags=0x%lx",
+			  (unsigned long)bss_vstart,
+			  (unsigned long)bss_vend,
+			  (unsigned long)prot,
+			  pstr,
+			  (unsigned long)(MAP_PRIVATE | MAP_ANONYMOUS));
 
 		err = map_region(ctx->new_vas,
 				 (struct mr_file) { 0 },
@@ -213,25 +208,22 @@ static size_t arg_len(const char** args)
 }
 
 /**
- * setup_user_stack() - Sets up the user stack for the task.
- * @ctx:         The exec context containing the new address space.
- * @stack_top:   The top address of the stack.
- * @stack_pages: The number of pages to allocate for the stack.
- * @argv:        The argument vector.
- * @envp:        The environment vector.
- * Return: 0 on success, -errno on failure.
+ * @brief Sets up the user stack for the task.
+ *
+ * @param ctx The exec context containing the new address space.
+ * @param stack_top The top address of the stack.
+ * @param stack_pages The number of pages to allocate for the stack.
+ * @param argv The argument vector.
+ * @param envp The environment vector.
+ *
+ * @return 0 on success, -errno on failure.
  */
-static int setup_user_stack(struct exec_context* ctx,
-			    uptr stack_top,
-			    size_t stack_pages,
-			    const char** argv,
-			    const char** envp)
+static int
+setup_user_stack(struct exec_context* ctx, uptr stack_top, size_t stack_pages, const char** argv, const char** envp)
 {
 	uptr stack_base = stack_top - stack_pages * PAGE_SIZE;
 	// uptr stack_top = stack_base + stack_pages * PAGE_SIZE;
-	log_debug("Setting up user stack at base: 0x%lx, top: 0x%lx",
-		  stack_base,
-		  stack_top);
+	log_debug("Setting up user stack at base: 0x%lx, top: 0x%lx", stack_base, stack_top);
 
 	map_region(ctx->new_vas,
 		   (struct mr_file) { 0 },
@@ -328,8 +320,7 @@ static int exec_load_elf(struct exec_context* ctx, struct vfs_file* file)
 		return -ENOEXEC;
 	}
 
-	log_debug("Loading ELF binary with entry point at 0x%lx",
-		  header->entry);
+	log_debug("Loading ELF binary with entry point at 0x%lx", header->entry);
 
 	if (header->type != ET_EXE) {
 		log_error("Invalid elf type: %d", header->type);
@@ -340,35 +331,28 @@ static int exec_load_elf(struct exec_context* ctx, struct vfs_file* file)
 
 	// TODO: Proper section header handling for .bss and such
 
-	struct elf_program_header* prog =
-		(struct elf_program_header*)((uintptr_t)header +
-					     header->header_size);
+	struct elf_program_header* prog = (struct elf_program_header*)((uintptr_t)header + header->header_size);
 	for (size_t i = 0; i < header->program_header_entry_count; i++) {
 
-		log_debug(
-			"ELF Program Header: type=0x%x, flags=0x%x, offset=0x%lx,"
-			" virtual_address=0x%lx, size_in_file=0x%lx, size_in_memory=0x%lx, align=0x%lx",
-			prog->type,
-			prog->flags,
-			prog->offset,
-			prog->virtual_address,
-			prog->size_in_file,
-			prog->size_in_memory,
-			prog->align);
+		log_debug("ELF Program Header: type=0x%x, flags=0x%x, offset=0x%lx,"
+			  " virtual_address=0x%lx, size_in_file=0x%lx, size_in_memory=0x%lx, align=0x%lx",
+			  prog->type,
+			  prog->flags,
+			  prog->offset,
+			  prog->virtual_address,
+			  prog->size_in_file,
+			  prog->size_in_memory,
+			  prog->align);
 
 		switch (prog->type) {
 		case PT_LOAD:
-			if (load_program_header(ctx,
-						file->dentry->inode,
-						prog) < 0) {
+			if (load_program_header(ctx, file->dentry->inode, prog) < 0) {
 				// TODO: Free previous program sections
 				log_error("Failed to load program header");
 				return -1;
 			}
 			break;
-		default:
-			log_error("Unknown program type %d", prog->type);
-			return -1;
+		default: log_error("Unknown program type %d", prog->type); return -1;
 		}
 		prog++;
 	}
@@ -382,24 +366,23 @@ static int exec_load_elf(struct exec_context* ctx, struct vfs_file* file)
 }
 
 /**
- * prepare_exec() - Build a new exec context for a userspace image
- * @path: Path to executable
- * @argv: NULL-terminated argument vector
- * @envp: NULL-terminated environment vector
- * Return: New exec_context* on success, NULL on failure
- * Context: May sleep; performs I/O and allocations.
+ * @brief Builds a new exec context for a userspace image.
  *
- * Creates a fresh address space and PML4, loads the ELF image, and
- * constructs a user stack per @argv/@envp. Marks the context prepared
- * on success; on failure, cleans up all intermediate resources.
+ * @param path Path to the executable.
+ * @param argv NULL-terminated argument vector.
+ * @param envp NULL-terminated environment vector.
+ *
+ * @return A pointer to the new exec context on success, or NULL on failure.
+ *
+ * @note This function may sleep. It performs I/O and memory allocation.
+ *
+ * On failure, this function frees all allocated resources.
  */
-struct exec_context*
-prepare_exec(const char* path, const char** argv, const char** envp)
+struct exec_context* prepare_exec(const char* path, const char** argv, const char** envp)
 {
 	log_debug("Preparing exec for %s", path);
 
-	struct exec_context* ctx =
-		(struct exec_context*)kzalloc(sizeof(struct exec_context));
+	struct exec_context* ctx = (struct exec_context*)kzalloc(sizeof(struct exec_context));
 	if (!ctx) {
 		log_error("OOM when creating ctx");
 		return nullptr;
@@ -424,11 +407,7 @@ prepare_exec(const char* path, const char** argv, const char** envp)
 
 	vfs_close(fd);
 
-	int err = setup_user_stack(ctx,
-				   DEFAULT_STACK_TOP,
-				   STACK_SIZE_PAGES,
-				   argv,
-				   envp);
+	int err = setup_user_stack(ctx, DEFAULT_STACK_TOP, STACK_SIZE_PAGES, argv, envp);
 
 	if (err < 0) {
 		log_error("Failed to setup user stack");
@@ -443,16 +422,17 @@ prepare_exec(const char* path, const char** argv, const char** envp)
 }
 
 /**
- * commit_exec() - Install a prepared exec context into a task
- * @task: Task to reinitialize
- * @ctx:  Prepared exec context from prepare_exec()
- * Return: 0 on success, -EINVAL if @ctx is NULL or not prepared
- * Context: Disables preemption internally; caller must ensure @task is
- *          not executing concurrently on another CPU.
+ * @brief Installs a prepared exec context into a task.
  *
- * If @task is current, switches CR3 to the new address space, updates
- * the task's VAS, tears down the old VAS, resets registers, seeds user
- * CS/DS/SS/RFLAGS, updates @task->name, frees @ctx, and returns.
+ * @param task Task to reinitialize.
+ * @param ctx Prepared exec context from prepare_exec().
+ *
+ * @return 0 on success, or -EINVAL if the context is NULL or not prepared.
+ *
+ * @note This function disables preemption internally. The caller must
+ * ensure the task does not run concurrently on another CPU.
+ *
+ * This function frees the exec context after it installs it.
  */
 int commit_exec(struct task* task, struct exec_context* ctx)
 {
@@ -497,13 +477,13 @@ int commit_exec(struct task* task, struct exec_context* ctx)
 }
 
 /**
- * destroy_exec_context() - Free an exec context (best-effort cleanup)
- * @ctx: Exec context (may be partially initialized)
- * Return: none
- * Context: May sleep.
+ * @brief Destroys the new address space, if present, and frees the exec
+ * context.
  *
- * Destroys the new address space if present and frees @ctx. Safe to call
- * after a failed prepare_exec().
+ * @param ctx Exec context to free. It may be partially initialized.
+ *
+ * @note This function may sleep. It is safe to call after a failed
+ * prepare_exec() call.
  */
 void destroy_exec_context(struct exec_context* ctx)
 {
@@ -516,3 +496,5 @@ void destroy_exec_context(struct exec_context* ctx)
 	}
 	kfree(ctx);
 }
+
+/** @} */

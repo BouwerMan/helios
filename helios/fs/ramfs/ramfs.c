@@ -1,5 +1,5 @@
 /**
- * @file drivers/fs/ramfs.c
+ * @file fs/ramfs/ramfs.c
  *
  * Copyright (C) 2025  Dylan Parks
  *
@@ -35,6 +35,11 @@
 #include "mm/page_alloc.h"
 
 #include <uapi/helios/errno.h>
+
+/**
+ * @addtogroup fs
+ * @{
+ */
 
 // TODO: Locking
 
@@ -79,17 +84,14 @@ static struct inode_mapping_ops ramfs_imops = {
 /**
  * Scans dir for name in it's child list.
  */
-static struct ramfs_dentry* scan_dir(struct ramfs_dentry* dir,
-				     const char* name);
+static struct ramfs_dentry* scan_dir(struct ramfs_dentry* dir, const char* name);
 static bool does_name_exist(struct ramfs_dentry* dir, const char* name);
 static struct vfs_inode* get_root_inode(struct vfs_superblock* sb);
-static int add_child_to_list(struct ramfs_dentry* parent,
-			     struct ramfs_dentry* child);
+static int add_child_to_list(struct ramfs_dentry* parent, struct ramfs_dentry* child);
 /**
  * Finds inode by id in the hashtable.
  */
-static struct ramfs_inode_info* find_private_inode(struct vfs_superblock* sb,
-						   size_t id);
+static struct ramfs_inode_info* find_private_inode(struct vfs_superblock* sb, size_t id);
 
 /**
  * Adds info to the hashtable.
@@ -107,8 +109,7 @@ static void sync_to_info(struct vfs_inode* inode);
  */
 static struct vfs_inode* _alloc_inode_raw(struct vfs_superblock* sb);
 
-static struct vfs_dentry* find_child(struct vfs_dentry* parent,
-				     const char* name);
+static struct vfs_dentry* find_child(struct vfs_dentry* parent, const char* name);
 
 /*******************************************************************************
  * Public Function Definitions
@@ -220,51 +221,37 @@ int ramfs_mkdir(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode)
 	(void)mode;
 
 	// TODO: Make sure we put some sort of info into our hashtable
-	if (!dir || !dentry || !dentry->parent ||
-	    dentry->parent->inode != dir) {
-		log_error("mkdir: failed to create dir '%s': %s",
-			  dentry->name,
-			  __get_error_string(EINVAL));
+	if (!dir || !dentry || !dentry->parent || dentry->parent->inode != dir) {
+		log_error("mkdir: failed to create dir '%s': %s", dentry->name, __get_error_string(EINVAL));
 		return -EINVAL;
 	}
 
 	if (dir->filetype != FILETYPE_DIR) {
-		log_error("mkdir: failed to create dir '%s': %s",
-			  dentry->name,
-			  __get_error_string(ENOTDIR));
+		log_error("mkdir: failed to create dir '%s': %s", dentry->name, __get_error_string(ENOTDIR));
 		return -ENOTDIR;
 	}
 
 	if (strlen(dentry->name) > VFS_MAX_NAME) {
-		log_error("mkdir: failed to create dir '%s': %s",
-			  dentry->name,
-			  __get_error_string(ENAMETOOLONG));
+		log_error("mkdir: failed to create dir '%s': %s", dentry->name, __get_error_string(ENAMETOOLONG));
 		return -ENAMETOOLONG;
 	}
 
 	struct vfs_dentry* parent = dentry->parent;
 
 	if (does_name_exist(RAMFS_DENTRY(parent), dentry->name)) {
-		log_error("mkdir: failed to create dir '%s': %s",
-			  dentry->name,
-			  __get_error_string(EEXIST));
+		log_error("mkdir: failed to create dir '%s': %s", dentry->name, __get_error_string(EEXIST));
 		return -EEXIST;
 	}
 
-	struct vfs_inode* node =
-		new_inode(dir->sb, RAMFS_SB_INFO(dir->sb)->next_inode_id++);
+	struct vfs_inode* node = new_inode(dir->sb, RAMFS_SB_INFO(dir->sb)->next_inode_id++);
 	if (!node) {
-		log_error("failed to create dir '%s': %s",
-			  dentry->name,
-			  __get_error_string(ENOMEM));
+		log_error("failed to create dir '%s': %s", dentry->name, __get_error_string(ENOMEM));
 		return -ENOMEM;
 	}
 
 	struct ramfs_dentry* rdent = kzalloc(sizeof(struct ramfs_dentry));
 	if (!rdent) {
-		log_error("failed to create dir '%s': %s",
-			  dentry->name,
-			  __get_error_string(ENOMEM));
+		log_error("failed to create dir '%s': %s", dentry->name, __get_error_string(ENOMEM));
 		// kfree(node);
 		return -ENOMEM;
 	}
@@ -288,9 +275,7 @@ int ramfs_mkdir(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode)
 	dentry->flags = DENTRY_DIR;
 	dir->nlink++;
 
-	log_debug("mkdir: created dir '%s' in parent '%s'",
-		  dentry->name,
-		  parent->name);
+	log_debug("mkdir: created dir '%s' in parent '%s'", dentry->name, parent->name);
 	return 0;
 }
 
@@ -308,8 +293,7 @@ int ramfs_close(struct vfs_inode* inode, struct vfs_file* file)
 	return 0;
 }
 
-ssize_t
-ramfs_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
+ssize_t ramfs_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
 {
 	struct ramfs_file* rf = file->private_data;
 
@@ -343,10 +327,7 @@ int ramfs_readpage(struct vfs_inode* inode, struct page* page)
 
 	size_t source_offset = (size_t)page->index * PAGE_SIZE;
 
-	log_debug("Reading page index %lu (offset %zu) from inode %zu",
-		  page->index,
-		  source_offset,
-		  inode->id);
+	log_debug("Reading page index %lu (offset %zu) from inode %zu", page->index, source_offset, inode->id);
 
 	if (source_offset >= rf->size) {
 		// Reading past end of file, so we just write a "hole"
@@ -363,18 +344,13 @@ int ramfs_readpage(struct vfs_inode* inode, struct page* page)
 
 	// Zero the remainder
 	if (bytes_to_copy < PAGE_SIZE) {
-		memset((void*)((uptr)page_vaddr + bytes_to_copy),
-		       0,
-		       PAGE_SIZE - bytes_to_copy);
+		memset((void*)((uptr)page_vaddr + bytes_to_copy), 0, PAGE_SIZE - bytes_to_copy);
 	}
 
 	return 0;
 }
 
-ssize_t ramfs_write(struct vfs_file* file,
-		    const char* buffer,
-		    size_t count,
-		    off_t* offset)
+ssize_t ramfs_write(struct vfs_file* file, const char* buffer, size_t count, off_t* offset)
 {
 	struct ramfs_file* rf = file->private_data;
 
@@ -408,12 +384,9 @@ ssize_t ramfs_write(struct vfs_file* file,
 	return (ssize_t)count;
 }
 
-struct vfs_dentry* ramfs_lookup(struct vfs_inode* dir_inode,
-				struct vfs_dentry* child)
+struct vfs_dentry* ramfs_lookup(struct vfs_inode* dir_inode, struct vfs_dentry* child)
 {
-	log_debug("Looking up '%s' in dir inode %zu",
-		  child->name,
-		  dir_inode ? dir_inode->id : 0);
+	log_debug("Looking up '%s' in dir inode %zu", child->name, dir_inode ? dir_inode->id : 0);
 	if (!dir_inode || dir_inode->filetype != FILETYPE_DIR) {
 		return nullptr;
 	}
@@ -423,8 +396,7 @@ struct vfs_dentry* ramfs_lookup(struct vfs_inode* dir_inode,
 		return nullptr;
 	}
 
-	struct ramfs_dentry* found =
-		scan_dir(RAMFS_DENTRY(parent), child->name);
+	struct ramfs_dentry* found = scan_dir(RAMFS_DENTRY(parent), child->name);
 	if (found) {
 		// We use _alloc_inode_raw here so we don't allocate a new
 		// inode_info struct since we have it saved in the dentry.
@@ -440,12 +412,9 @@ struct vfs_dentry* ramfs_lookup(struct vfs_inode* dir_inode,
 	return nullptr;
 }
 
-int ramfs_create(struct vfs_inode* dir,
-		 struct vfs_dentry* dentry,
-		 uint16_t mode)
+int ramfs_create(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode)
 {
-	struct vfs_inode* inode =
-		new_inode(dir->sb, RAMFS_SB_INFO(dir->sb)->next_inode_id++);
+	struct vfs_inode* inode = new_inode(dir->sb, RAMFS_SB_INFO(dir->sb)->next_inode_id++);
 	if (!inode) {
 		return -ENOMEM;
 	}
@@ -473,9 +442,7 @@ int ramfs_create(struct vfs_inode* dir,
 
 	struct ramfs_dentry* rdent = kzalloc(sizeof(struct ramfs_dentry));
 	if (!rdent) {
-		log_error("failed to create dir '%s': %s",
-			  dentry->name,
-			  __get_error_string(ENOMEM));
+		log_error("failed to create dir '%s': %s", dentry->name, __get_error_string(ENOMEM));
 		// kfree(node);
 		return -ENOMEM;
 	}
@@ -491,9 +458,7 @@ int ramfs_create(struct vfs_inode* dir,
 	register_child(dentry->parent, dentry);
 
 	log_debug("Created file '%s' (inode %zu)", dentry->name, inode->id);
-	log_debug("fs_data: %p, rfile: %p",
-		  (void*)inode->fs_data,
-		  (void*)rfile);
+	log_debug("fs_data: %p, rfile: %p", (void*)inode->fs_data, (void*)rfile);
 
 	return 0;
 }
@@ -510,8 +475,7 @@ struct vfs_inode* ramfs_alloc_inode(struct vfs_superblock* sb)
 		return nullptr;
 	}
 
-	struct ramfs_inode_info* rinode =
-		kzalloc(sizeof(struct ramfs_inode_info));
+	struct ramfs_inode_info* rinode = kzalloc(sizeof(struct ramfs_inode_info));
 	if (!rinode) {
 		kfree(inode);
 		return nullptr;
@@ -536,8 +500,7 @@ struct vfs_inode* ramfs_alloc_inode(struct vfs_superblock* sb)
 
 int ramfs_read_inode(struct vfs_inode* inode)
 {
-	struct ramfs_inode_info* info =
-		find_private_inode(inode->sb, inode->id);
+	struct ramfs_inode_info* info = find_private_inode(inode->sb, inode->id);
 	if (!info) {
 		log_error("inode %zu not found", inode->id);
 		return -ENOENT;
@@ -601,8 +564,7 @@ int ramfs_readdir(struct vfs_file* file, struct dirent* dirent, off_t offset)
  *******************************************************************************/
 
 [[gnu::unused]]
-static struct vfs_dentry* find_child(struct vfs_dentry* parent,
-				     const char* name)
+static struct vfs_dentry* find_child(struct vfs_dentry* parent, const char* name)
 {
 	struct vfs_dentry* child = nullptr;
 	list_for_each_entry (child, &parent->children, siblings) {
@@ -624,8 +586,7 @@ static struct vfs_inode* get_root_inode(struct vfs_superblock* sb)
 		return nullptr;
 	}
 
-	struct ramfs_inode_info* r_info =
-		kzalloc(sizeof(struct ramfs_inode_info));
+	struct ramfs_inode_info* r_info = kzalloc(sizeof(struct ramfs_inode_info));
 	if (!r_info) {
 		log_error("Failed to allocate root inode info");
 		kfree(r_node);
@@ -637,8 +598,7 @@ static struct vfs_inode* get_root_inode(struct vfs_superblock* sb)
 	r_node->ref_count = 1;
 
 	r_node->filetype = FILETYPE_DIR;
-	r_node->permissions =
-		VFS_PERM_ALL; // TODO: use stricter perms once supported.
+	r_node->permissions = VFS_PERM_ALL; // TODO: use stricter perms once supported.
 	r_node->flags = 0;
 	r_node->fs_data = r_info;
 
@@ -652,8 +612,7 @@ static struct vfs_inode* get_root_inode(struct vfs_superblock* sb)
 }
 
 // Adds child to parent's children list
-static int add_child_to_list(struct ramfs_dentry* parent,
-			     struct ramfs_dentry* child)
+static int add_child_to_list(struct ramfs_dentry* parent, struct ramfs_dentry* child)
 {
 	if (!parent || !child) {
 		return -EINVAL;
@@ -680,8 +639,7 @@ static bool does_name_exist(struct ramfs_dentry* dir, const char* name)
 	return scan_dir(dir, name) != nullptr;
 }
 
-static struct ramfs_inode_info* find_private_inode(struct vfs_superblock* sb,
-						   size_t id)
+static struct ramfs_inode_info* find_private_inode(struct vfs_superblock* sb, size_t id)
 {
 	struct ramfs_inode_info* candidate;
 	hash_for_each_possible (RAMFS_SB_INFO(sb)->ht, candidate, hash, id) {
@@ -697,8 +655,7 @@ static struct ramfs_inode_info* find_private_inode(struct vfs_superblock* sb,
 static void info_add(struct vfs_superblock* sb, struct ramfs_inode_info* info)
 {
 	struct ramfs_sb_info* sb_info = RAMFS_SB_INFO(sb);
-	struct hlist_head* bucket =
-		&sb_info->ht[hash_min(info->id, RAMFS_HASH_BITS)];
+	struct hlist_head* bucket = &sb_info->ht[hash_min(info->id, RAMFS_HASH_BITS)];
 	info->bucket = bucket;
 	// hash_add(i_ht, &info->hash, info->id);
 	hlist_add_head(bucket, &info->hash);
@@ -760,9 +717,7 @@ KTEST(test_ramfs_readpage)
 
 	int fd = vfs_open(file_path, O_CREAT | O_RDWR);
 	if (fd < 0) {
-		log_error("Failed to open file '%s': %s",
-			  file_path,
-			  __get_error_string(-fd));
+		log_error("Failed to open file '%s': %s", file_path, __get_error_string(-fd));
 		return 1;
 	}
 	vfs_write(fd, write_buffer, sizeof(write_buffer));
@@ -788,8 +743,7 @@ KTEST(test_ramfs_readpage)
 
 	int result = inode->mapping->imops->readpage(inode, dest_page);
 	if (result < 0) {
-		log_error("readpage failed with error: %s",
-			  __get_error_string(-result));
+		log_error("readpage failed with error: %s", __get_error_string(-result));
 		return 1;
 	}
 
@@ -797,10 +751,7 @@ KTEST(test_ramfs_readpage)
 	bool success = true;
 	for (size_t i = 0; i < PAGE_SIZE; i++) {
 		if (((char*)dest_vaddr)[i] != 'B') {
-			log_error(
-				"Verification failed at byte %zu! Expected 'B', got '%c'",
-				i,
-				((char*)dest_vaddr)[i]);
+			log_error("Verification failed at byte %zu! Expected 'B', got '%c'", i, ((char*)dest_vaddr)[i]);
 			success = false;
 			break;
 		}
@@ -822,3 +773,5 @@ KTEST(test_ramfs_readpage)
 }
 
 #endif
+
+/** @} */

@@ -57,11 +57,7 @@ void part_fill_partitions(sPartition* table, void* mbr)
 void part_print(sPartition* table)
 {
 	for (size_t i = 0; i < PARTITION_COUNT; i++) {
-		log_info("%zu: present=%d start=%zu size=%zu",
-			 i,
-			 table->present,
-			 table->start,
-			 table->size);
+		log_info("%zu: present=%d start=%zu size=%zu", i, table->present, table->start, table->size);
 		table++;
 	}
 }

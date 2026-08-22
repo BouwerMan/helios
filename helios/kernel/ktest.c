@@ -72,23 +72,17 @@ void ktest_run_all()
 
 		run++;
 		if (rc == 0) {
-			write_serial_string(LOG_COLOR_GREEN
-					    "ok\n" LOG_COLOR_RESET);
+			write_serial_string(LOG_COLOR_GREEN "ok\n" LOG_COLOR_RESET);
 			klog_discard_to_head(); // drop this test's captured records
 		} else {
 			failed++;
-			write_serial_string(LOG_COLOR_RED
-					    "FAILED\n" LOG_COLOR_RESET);
+			write_serial_string(LOG_COLOR_RED "FAILED\n" LOG_COLOR_RESET);
 			klog_flush(); // replay just this test's records
 		}
 	}
 
 	char buf[64];
-	int n = snprintf(buf,
-			 sizeof buf,
-			 "\n%u passed, %u failed\n",
-			 run - failed,
-			 failed);
+	int n = snprintf(buf, sizeof buf, "\n%u passed, %u failed\n", run - failed, failed);
 	write_serial_n(buf, (size_t)n);
 
 	qemu_exit(failed ? QEMU_EXIT_FAILURE : QEMU_EXIT_SUCCESS);

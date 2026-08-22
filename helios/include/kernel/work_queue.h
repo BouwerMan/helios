@@ -2,6 +2,7 @@
 #pragma once
 
 #include "kernel/spinlock.h"
+#include "kernel/tasks/scheduler.h"
 #include "kernel/types.h"
 
 typedef void (*work_func_t)(void* data);
@@ -13,6 +14,7 @@ struct work_item {
 };
 
 struct work_queue {
+	struct waitqueue wq;
 	struct list_head queue; // List of work items
 	spinlock_t lock;	// Lock to protect the queue
 };

@@ -1,5 +1,11 @@
 #include <lib/string.h>
 #include <stdint.h>
+
+/**
+ * @addtogroup lib
+ * @{
+ */
+
 // TODO: These implementations might not be exactly what standard c libraries do. Need to investigate how null
 // terminators and/or bounds are handled.
 
@@ -31,6 +37,7 @@ int strcmp(const char* str1, const char* str2)
 		}
 	}
 }
+/** @} */
 
 /**
  * @brief Compares up to a specified number of characters of two strings.

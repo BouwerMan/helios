@@ -25,6 +25,11 @@
 #pragma once
 
 /**
+ * @addtogroup kernel
+ * @{
+ */
+
+/**
  * @brief Get pointer to container structure from member pointer.
  * @param ptr    Pointer to the member.
  * @param type   Type of the container struct.
@@ -35,3 +40,5 @@
 		const typeof(((type*)0)->member)* __mptr = (ptr); \
 		(type*)((char*)__mptr - offsetof(type, member));  \
 	})
+
+/** @} */

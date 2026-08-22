@@ -14,9 +14,9 @@
 #define __attribute_const __attribute__((const))
 
 /**
-* Means that the function has no side effects and the value returned
-* depends on the arguments and the state of global variables.
-*/
+ * Means that the function has no side effects and the value returned
+ * depends on the arguments and the state of global variables.
+ */
 #define __pure __attribute__((pure))
 
 #define __noreturn __attribute__((noreturn))

@@ -35,9 +35,7 @@ void clock_init(u64 (*read)(void), u64 counter_hz)
 
 	tsc.counter_hz = counter_hz;
 	tsc.count2ns_shift = 32;
-	tsc.count2ns_mul =
-		(u64)(((unsigned __int128)1000000000ULL << tsc.count2ns_shift) /
-		      tsc.counter_hz);
+	tsc.count2ns_mul = (u64)(((unsigned __int128)1000000000ULL << tsc.count2ns_shift) / tsc.counter_hz);
 	tsc.base_ns = 0;
 }
 
