@@ -76,8 +76,7 @@ static bool validate_args(const void* k, const void __user* u, size_t len)
  */
 long copy_from_user(void* dst, const void __user* src, size_t len)
 {
-	kassert(!is_in_interrupt_context(),
-		"copy_from_user called from interrupt context");
+	kassert(!is_in_interrupt_context(), "copy_from_user called from interrupt context");
 
 	if (len == 0) {
 		return 0;
@@ -119,8 +118,7 @@ long copy_from_user(void* dst, const void __user* src, size_t len)
  */
 long copy_to_user(void __user* dst, const void* src, size_t len)
 {
-	kassert(!is_in_interrupt_context(),
-		"copy_to_user called from interrupt context");
+	kassert(!is_in_interrupt_context(), "copy_to_user called from interrupt context");
 
 	if (len == 0) {
 		return 0;
@@ -160,12 +158,10 @@ KTEST(test_uaccess_address_validation)
 	KTEST_ASSERT_FALSE(validate_args(valid_k, NULL, len));
 
 	// kernel pointer overflow: k + len wraps past UINTPTR_MAX
-	KTEST_ASSERT_FALSE(
-		validate_args((void*)(UINTPTR_MAX - 10), valid_u, 20));
+	KTEST_ASSERT_FALSE(validate_args((void*)(UINTPTR_MAX - 10), valid_u, 20));
 
 	// user range overflows into the kernel half without u itself being there
-	KTEST_ASSERT_FALSE(
-		validate_args(valid_k, (void*)(HHDM_OFFSET - 5), 10));
+	KTEST_ASSERT_FALSE(validate_args(valid_k, (void*)(HHDM_OFFSET - 5), 10));
 
 	// user pointer already at/above the kernel half
 	KTEST_ASSERT_FALSE(validate_args(valid_k, (void*)HHDM_OFFSET, len));
@@ -196,9 +192,7 @@ KTEST(test_copy_from_user)
 
 	char dst[len];
 	memset(dst, 0, len);
-	KTEST_ASSERT_EQ_GOTO(copy_from_user(dst, (void*)ustart, len),
-			     0,
-			     err_unmap_region);
+	KTEST_ASSERT_EQ_GOTO(copy_from_user(dst, (void*)ustart, len), 0, err_unmap_region);
 	KTEST_ASSERT_EQ_GOTO(memcmp(dst, msg, len), 0, err_unmap_region);
 
 	rc = 0;
@@ -230,13 +224,9 @@ KTEST(test_copy_to_user)
 	char dst[len];
 	memset(dst, 0, len);
 
-	KTEST_ASSERT_EQ_GOTO(copy_to_user((void*)ustart, msg, len),
-			     0,
-			     err_unmap_region);
+	KTEST_ASSERT_EQ_GOTO(copy_to_user((void*)ustart, msg, len), 0, err_unmap_region);
 
-	KTEST_ASSERT_EQ_GOTO(copy_from_user(dst, (void*)ustart, len),
-			     0,
-			     err_unmap_region);
+	KTEST_ASSERT_EQ_GOTO(copy_from_user(dst, (void*)ustart, len), 0, err_unmap_region);
 	KTEST_ASSERT_EQ_GOTO(memcmp(dst, msg, len), 0, err_unmap_region);
 
 	rc = 0;
@@ -255,18 +245,11 @@ KTEST(test_copy_to_user_readonly_rejected)
 	uptr ustart = 0x10001000;
 	uptr uend = ustart + PAGE_SIZE;
 
-	KTEST_ASSERT_EQ(map_region(vas,
-				   (struct mr_file) { 0 },
-				   ustart,
-				   uend,
-				   PROT_READ,
-				   MAP_PRIVATE | MAP_ANONYMOUS),
+	KTEST_ASSERT_EQ(map_region(vas, (struct mr_file) { 0 }, ustart, uend, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS),
 			0);
 
 	char msg[] = "should not land";
-	KTEST_ASSERT_EQ_GOTO(copy_to_user((void*)ustart, msg, ARRAY_SIZE(msg)),
-			     -EFAULT,
-			     err_unmap_region);
+	KTEST_ASSERT_EQ_GOTO(copy_to_user((void*)ustart, msg, ARRAY_SIZE(msg)), -EFAULT, err_unmap_region);
 
 	rc = 0;
 

@@ -27,12 +27,7 @@ void address_space_init()
 	if (*mem_cache.name) {
 		return;
 	}
-	int res = slab_cache_init(&mem_cache,
-				  "Memory Regions",
-				  sizeof(struct memory_region),
-				  0,
-				  nullptr,
-				  nullptr);
+	int res = slab_cache_init(&mem_cache, "Memory Regions", sizeof(struct memory_region), 0, nullptr, nullptr);
 	if (res < 0) {
 		panic("Could not init memory region slab cache");
 	}
@@ -74,8 +69,7 @@ struct address_space* alloc_address_space()
  * This function may sleep. It does not insert the region into any list.
  * The caller must call add_region().
  */
-struct memory_region*
-alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags)
+struct memory_region* alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags)
 {
 	struct memory_region* mr = slab_alloc(&mem_cache);
 	if (!mr) return nullptr;
@@ -122,10 +116,7 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
 
 	down_read(&src->vma_lock);
 	list_for_each_entry (pos, &src->mr_list, list) {
-		struct memory_region* new_mr = alloc_mem_region(pos->start,
-								pos->end,
-								pos->prot,
-								pos->flags);
+		struct memory_region* new_mr = alloc_mem_region(pos->start, pos->end, pos->prot, pos->flags);
 
 		if (!new_mr) {
 			log_error("Could not allocate mem region");
@@ -169,11 +160,7 @@ int address_space_dup(struct address_space* dest, struct address_space* src)
  *
  * This function may sleep and acquires vas->vma_lock for reading.
  */
-int check_access(struct address_space* vas,
-		 vaddr_t vaddr,
-		 bool need_read,
-		 bool need_write,
-		 bool need_exec)
+int check_access(struct address_space* vas, vaddr_t vaddr, bool need_read, bool need_write, bool need_exec)
 {
 	if (!vas) {
 		return -EINVAL;
@@ -189,40 +176,31 @@ int check_access(struct address_space* vas,
 		goto out;
 	}
 
-	const char* kind = (mr->kind == MR_FILE) ? "FILE" :
-			   (mr->kind == MR_ANON) ? "ANON" :
-						   "DEVICE";
+	const char* kind = (mr->kind == MR_FILE) ? "FILE" : (mr->kind == MR_ANON) ? "ANON" : "DEVICE";
 	char prot_str[4] = { (mr->prot & PROT_READ) ? 'r' : '-',
 			     (mr->prot & PROT_WRITE) ? 'w' : '-',
 			     (mr->prot & PROT_EXEC) ? 'x' : '-',
 			     '\0' };
-	log_debug(
-		"VMA: [%016lx..%016lx) kind=%s prot=%s flags=0x%lx private=%d",
-		(unsigned long)mr->start,
-		(unsigned long)mr->end,
-		kind,
-		prot_str,
-		(unsigned long)mr->flags,
-		(int)mr->is_private);
+	log_debug("VMA: [%016lx..%016lx) kind=%s prot=%s flags=0x%lx private=%d",
+		  (unsigned long)mr->start,
+		  (unsigned long)mr->end,
+		  kind,
+		  prot_str,
+		  (unsigned long)mr->flags,
+		  (int)mr->is_private);
 
 	if (need_exec && !(mr->prot & PROT_EXEC)) {
-		log_error("NX violation at vaddr=0x%lx in %s VMA",
-			  (unsigned long)vaddr,
-			  kind);
+		log_error("NX violation at vaddr=0x%lx in %s VMA", (unsigned long)vaddr, kind);
 		err = -EACCES;
 		goto out;
 	}
 	if (need_write && !(mr->prot & PROT_WRITE)) {
-		log_error("Write disallowed at vaddr=0x%lx in %s VMA",
-			  (unsigned long)vaddr,
-			  kind);
+		log_error("Write disallowed at vaddr=0x%lx in %s VMA", (unsigned long)vaddr, kind);
 		err = -EACCES;
 		goto out;
 	}
 	if (need_read && !(mr->prot & PROT_READ)) {
-		log_error("Read disallowed at vaddr=0x%lx in %s VMA",
-			  (unsigned long)vaddr,
-			  kind);
+		log_error("Read disallowed at vaddr=0x%lx in %s VMA", (unsigned long)vaddr, kind);
 		err = -EACCES;
 		goto out;
 	}
@@ -302,11 +280,7 @@ int map_region(struct address_space* vas,
 	       unsigned long prot,
 	       unsigned long flags)
 {
-	log_debug("Mapping region: %lx - %lx, prot: %lx, flags: %lx",
-		  start,
-		  end,
-		  prot,
-		  flags);
+	log_debug("Mapping region: %lx - %lx, prot: %lx, flags: %lx", start, end, prot, flags);
 
 	if (!is_page_aligned(start) || !is_page_aligned(end) || start >= end) {
 		return -EINVAL;
@@ -334,8 +308,7 @@ int map_region(struct address_space* vas,
 			destroy_mem_region(mr);
 			return -EINVAL;
 		}
-		if (!is_page_aligned((uptr)file.file_lo) ||
-		    file.file_hi < file.file_lo) {
+		if (!is_page_aligned((uptr)file.file_lo) || file.file_hi < file.file_lo) {
 			destroy_mem_region(mr);
 			return -EINVAL;
 		}
@@ -374,11 +347,7 @@ int map_device_region(struct address_space* vas,
 		      unsigned long prot,
 		      unsigned long flags)
 {
-	log_debug("Mapping region: %lx - %lx, prot: %lx, flags: %lx",
-		  start,
-		  end,
-		  prot,
-		  flags);
+	log_debug("Mapping region: %lx - %lx, prot: %lx, flags: %lx", start, end, prot, flags);
 
 	if (!is_page_aligned(start) || !is_page_aligned(end) || start >= end) {
 		return -EINVAL;

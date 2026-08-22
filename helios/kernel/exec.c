@@ -80,25 +80,19 @@ static bool validate(struct elf_file_header* header)
  *
  * @return 0 on success, -errno on failure.
  */
-static int load_program_header(struct exec_context* ctx,
-			       struct vfs_inode* inode,
-			       struct elf_program_header* prog)
+static int load_program_header(struct exec_context* ctx, struct vfs_inode* inode, struct elf_program_header* prog)
 {
-	log_debug(
-		"PT_LOAD: vaddr=0x%lx off=0x%lx filesz=0x%llx memsz=0x%llx flags=0x%lx",
-		(unsigned long)prog->virtual_address,
-		(unsigned long)prog->offset,
-		(unsigned long long)prog->size_in_file,
-		(unsigned long long)prog->size_in_memory,
-		(unsigned long)prog->flags);
+	log_debug("PT_LOAD: vaddr=0x%lx off=0x%lx filesz=0x%llx memsz=0x%llx flags=0x%lx",
+		  (unsigned long)prog->virtual_address,
+		  (unsigned long)prog->offset,
+		  (unsigned long long)prog->size_in_file,
+		  (unsigned long long)prog->size_in_memory,
+		  (unsigned long)prog->flags);
 
-	if ((prog->virtual_address & (PAGE_SIZE - 1)) !=
-	    (prog->offset & (PAGE_SIZE - 1))) {
-		log_error(
-			"ELF invariant violated: vaddr%%PAGE=0x%lx, off%%PAGE=0x%lx",
-			(unsigned long)(prog->virtual_address &
-					(PAGE_SIZE - 1)),
-			(unsigned long)(prog->offset & (PAGE_SIZE - 1)));
+	if ((prog->virtual_address & (PAGE_SIZE - 1)) != (prog->offset & (PAGE_SIZE - 1))) {
+		log_error("ELF invariant violated: vaddr%%PAGE=0x%lx, off%%PAGE=0x%lx",
+			  (unsigned long)(prog->virtual_address & (PAGE_SIZE - 1)),
+			  (unsigned long)(prog->offset & (PAGE_SIZE - 1)));
 		return -ENOEXEC;
 	}
 
@@ -106,11 +100,9 @@ static int load_program_header(struct exec_context* ctx,
 	u16 delta = (u16)(prog->virtual_address - vstart);
 	uptr fstart = align_down_page((uptr)prog->offset);
 
-	uptr file_vend = align_up_page(
-		(uptr)(prog->virtual_address + prog->size_in_file));
+	uptr file_vend = align_up_page((uptr)(prog->virtual_address + prog->size_in_file));
 	uptr bss_vstart = file_vend;
-	uptr bss_vend = align_up_page(
-		(uptr)(prog->virtual_address + prog->size_in_memory));
+	uptr bss_vend = align_up_page((uptr)(prog->virtual_address + prog->size_in_memory));
 
 	unsigned long prot = (prog->flags & PF_EXEC) ? PROT_EXEC : 0;
 	prot |= prog->flags & PF_WRITE ? PROT_WRITE : 0;
@@ -133,13 +125,12 @@ static int load_program_header(struct exec_context* ctx,
 
 	if (prog->size_in_file == 0) {
 		// Pure BSS
-		log_debug(
-			"map ANON: [0x%lx..0x%lx) prot=0x%lx (%s) flags=0x%lx",
-			(unsigned long)vstart,
-			(unsigned long)bss_vend,
-			(unsigned long)prot,
-			pstr,
-			(unsigned long)(MAP_PRIVATE | MAP_ANONYMOUS));
+		log_debug("map ANON: [0x%lx..0x%lx) prot=0x%lx (%s) flags=0x%lx",
+			  (unsigned long)vstart,
+			  (unsigned long)bss_vend,
+			  (unsigned long)prot,
+			  pstr,
+			  (unsigned long)(MAP_PRIVATE | MAP_ANONYMOUS));
 
 		int err = map_region(ctx->new_vas,
 				     (struct mr_file) { 0 },
@@ -172,12 +163,7 @@ static int load_program_header(struct exec_context* ctx,
 		  (size_t)f.pgoff,
 		  (unsigned)f.delta);
 
-	int err = map_region(ctx->new_vas,
-			     f,
-			     vstart,
-			     file_vend,
-			     prot,
-			     MAP_PRIVATE);
+	int err = map_region(ctx->new_vas, f, vstart, file_vend, prot, MAP_PRIVATE);
 	if (err) {
 		log_error("map FILE failed: err=%d", err);
 		return err;
@@ -185,13 +171,12 @@ static int load_program_header(struct exec_context* ctx,
 
 	// ANON tail
 	if (bss_vstart < bss_vend) {
-		log_debug(
-			"map ANON tail: [0x%lx..0x%lx) prot=0x%lx (%s) flags=0x%lx",
-			(unsigned long)bss_vstart,
-			(unsigned long)bss_vend,
-			(unsigned long)prot,
-			pstr,
-			(unsigned long)(MAP_PRIVATE | MAP_ANONYMOUS));
+		log_debug("map ANON tail: [0x%lx..0x%lx) prot=0x%lx (%s) flags=0x%lx",
+			  (unsigned long)bss_vstart,
+			  (unsigned long)bss_vend,
+			  (unsigned long)prot,
+			  pstr,
+			  (unsigned long)(MAP_PRIVATE | MAP_ANONYMOUS));
 
 		err = map_region(ctx->new_vas,
 				 (struct mr_file) { 0 },
@@ -228,17 +213,12 @@ static size_t arg_len(const char** args)
  *
  * @return 0 on success, -errno on failure.
  */
-static int setup_user_stack(struct exec_context* ctx,
-			    uptr stack_top,
-			    size_t stack_pages,
-			    const char** argv,
-			    const char** envp)
+static int
+setup_user_stack(struct exec_context* ctx, uptr stack_top, size_t stack_pages, const char** argv, const char** envp)
 {
 	uptr stack_base = stack_top - stack_pages * PAGE_SIZE;
 	// uptr stack_top = stack_base + stack_pages * PAGE_SIZE;
-	log_debug("Setting up user stack at base: 0x%lx, top: 0x%lx",
-		  stack_base,
-		  stack_top);
+	log_debug("Setting up user stack at base: 0x%lx, top: 0x%lx", stack_base, stack_top);
 
 	map_region(ctx->new_vas,
 		   (struct mr_file) { 0 },
@@ -335,8 +315,7 @@ static int exec_load_elf(struct exec_context* ctx, struct vfs_file* file)
 		return -ENOEXEC;
 	}
 
-	log_debug("Loading ELF binary with entry point at 0x%lx",
-		  header->entry);
+	log_debug("Loading ELF binary with entry point at 0x%lx", header->entry);
 
 	if (header->type != ET_EXE) {
 		log_error("Invalid elf type: %d", header->type);
@@ -347,35 +326,28 @@ static int exec_load_elf(struct exec_context* ctx, struct vfs_file* file)
 
 	// TODO: Proper section header handling for .bss and such
 
-	struct elf_program_header* prog =
-		(struct elf_program_header*)((uintptr_t)header +
-					     header->header_size);
+	struct elf_program_header* prog = (struct elf_program_header*)((uintptr_t)header + header->header_size);
 	for (size_t i = 0; i < header->program_header_entry_count; i++) {
 
-		log_debug(
-			"ELF Program Header: type=0x%x, flags=0x%x, offset=0x%lx,"
-			" virtual_address=0x%lx, size_in_file=0x%lx, size_in_memory=0x%lx, align=0x%lx",
-			prog->type,
-			prog->flags,
-			prog->offset,
-			prog->virtual_address,
-			prog->size_in_file,
-			prog->size_in_memory,
-			prog->align);
+		log_debug("ELF Program Header: type=0x%x, flags=0x%x, offset=0x%lx,"
+			  " virtual_address=0x%lx, size_in_file=0x%lx, size_in_memory=0x%lx, align=0x%lx",
+			  prog->type,
+			  prog->flags,
+			  prog->offset,
+			  prog->virtual_address,
+			  prog->size_in_file,
+			  prog->size_in_memory,
+			  prog->align);
 
 		switch (prog->type) {
 		case PT_LOAD:
-			if (load_program_header(ctx,
-						file->dentry->inode,
-						prog) < 0) {
+			if (load_program_header(ctx, file->dentry->inode, prog) < 0) {
 				// TODO: Free previous program sections
 				log_error("Failed to load program header");
 				return -1;
 			}
 			break;
-		default:
-			log_error("Unknown program type %d", prog->type);
-			return -1;
+		default: log_error("Unknown program type %d", prog->type); return -1;
 		}
 		prog++;
 	}
@@ -401,13 +373,11 @@ static int exec_load_elf(struct exec_context* ctx, struct vfs_file* file)
  *
  * On failure, this function frees all allocated resources.
  */
-struct exec_context*
-prepare_exec(const char* path, const char** argv, const char** envp)
+struct exec_context* prepare_exec(const char* path, const char** argv, const char** envp)
 {
 	log_debug("Preparing exec for %s", path);
 
-	struct exec_context* ctx =
-		(struct exec_context*)kzalloc(sizeof(struct exec_context));
+	struct exec_context* ctx = (struct exec_context*)kzalloc(sizeof(struct exec_context));
 	if (!ctx) {
 		log_error("OOM when creating ctx");
 		return nullptr;
@@ -432,11 +402,7 @@ prepare_exec(const char* path, const char** argv, const char** envp)
 
 	vfs_close(fd);
 
-	int err = setup_user_stack(ctx,
-				   DEFAULT_STACK_TOP,
-				   STACK_SIZE_PAGES,
-				   argv,
-				   envp);
+	int err = setup_user_stack(ctx, DEFAULT_STACK_TOP, STACK_SIZE_PAGES, argv, envp);
 
 	if (err < 0) {
 		log_error("Failed to setup user stack");

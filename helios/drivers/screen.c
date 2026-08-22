@@ -28,8 +28,8 @@
 #include <stddef.h>
 
 /*******************************************************************************
-* Global Variable Definitions
-*******************************************************************************/
+ * Global Variable Definitions
+ *******************************************************************************/
 
 // import our font that's in the object file we've created above
 extern char _binary_fonts_font_psf_start[];
@@ -48,8 +48,8 @@ struct screen_info sc = {
 };
 
 /*******************************************************************************
-* Private Function Prototypes
-*******************************************************************************/
+ * Private Function Prototypes
+ *******************************************************************************/
 
 /**
  * @brief Draws a single scanline of a glyph onto a framebuffer row.
@@ -61,10 +61,7 @@ struct screen_info sc = {
  * @param fg            Foreground color.
  * @param bg            Background color.
  */
-static inline void draw_glyph_scanline(const uint8_t* glyph_row,
-				       PIXEL* dst,
-				       uint32_t fg,
-				       uint32_t bg);
+static inline void draw_glyph_scanline(const uint8_t* glyph_row, PIXEL* dst, uint32_t fg, uint32_t bg);
 
 /**
  * @brief Renders a full glyph bitmap to the framebuffer at a specified byte offset.
@@ -76,26 +73,23 @@ static inline void draw_glyph_scanline(const uint8_t* glyph_row,
  * @param fg            Foreground color (used for set bits).
  * @param bg            Background color (used for cleared bits).
  */
-static inline void
-draw_glyph(uint8_t* glyph, size_t offset, uint32_t fg, uint32_t bg);
+static inline void draw_glyph(uint8_t* glyph, size_t offset, uint32_t fg, uint32_t bg);
 
 /*******************************************************************************
-* Public Function Definitions
-*******************************************************************************/
+ * Public Function Definitions
+ *******************************************************************************/
 
 void screen_init(uint32_t fg_color, uint32_t bg_color)
 {
 	// TODO: properly init psf, though the one im using currently isnt unicode
 
 	// Ensure we got a framebuffer.
-	if (framebuffer_request.response == NULL ||
-	    framebuffer_request.response->framebuffer_count < 1) {
+	if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) {
 		for (;;)
 			halt();
 	}
 
-	struct limine_framebuffer* fb =
-		framebuffer_request.response->framebuffers[0];
+	struct limine_framebuffer* fb = framebuffer_request.response->framebuffers[0];
 
 	sc.cx = 0;
 	sc.cy = 0;
@@ -187,9 +181,7 @@ void screen_putchar(char c)
 		screen_putchar_at(' ', --sc.cx, sc.cy, sc.fgc, sc.bgc);
 		break;
 	case '\t': sc.cx = (sc.cx + 4) & ~3ULL; break;
-	default:
-		screen_putchar_at((uint16_t)c, sc.cx++, sc.cy, sc.fgc, sc.bgc);
-		break;
+	default:   screen_putchar_at((uint16_t)c, sc.cx++, sc.cy, sc.fgc, sc.bgc); break;
 	}
 
 	if (sc.cx >= sc.fb->width / (sc.font->width + 1)) {
@@ -230,11 +222,7 @@ void scroll()
 	}
 }
 
-void screen_putchar_at(uint16_t c,
-		       size_t cx,
-		       size_t cy,
-		       uint32_t fg,
-		       uint32_t bg)
+void screen_putchar_at(uint16_t c, size_t cx, size_t cy, uint32_t fg, uint32_t bg)
 {
 	/* unicode translation */
 	if (unicode != NULL) {
@@ -244,8 +232,8 @@ void screen_putchar_at(uint16_t c,
 	uint32_t numglyphs = sc.font->numglyph;
 	uint32_t glyph_index = (c > 0 && c < numglyphs) ? c : 0;
 
-	unsigned char* glyph = (unsigned char*)sc.font + sc.font->headersize +
-			       (size_t)glyph_index * sc.font->bytesperglyph;
+	unsigned char* glyph =
+		(unsigned char*)sc.font + sc.font->headersize + (size_t)glyph_index * sc.font->bytesperglyph;
 	size_t pixel_x = cx * sc.char_width;
 	size_t pixel_y = cy * sc.char_height;
 	size_t fb_offset = (pixel_y * sc.scanline) + (pixel_x * sizeof(PIXEL));
@@ -255,10 +243,8 @@ void screen_putchar_at(uint16_t c,
 void screen_draw_cursor_at(size_t cx, size_t cy)
 {
 	for (size_t y = 0; y < sc.char_height; y++) {
-		PIXEL* dst_line =
-			(PIXEL*)(sc.fb_buffer +
-				 (cy * sc.char_height + y) * sc.scanline +
-				 (cx * sc.char_width) * sizeof(PIXEL));
+		PIXEL* dst_line = (PIXEL*)(sc.fb_buffer + (cy * sc.char_height + y) * sc.scanline +
+					   (cx * sc.char_width) * sizeof(PIXEL));
 		for (size_t x = 0; x < sc.char_width; x++) {
 			dst_line[x] ^= 0xFFFFFF; // Invert color
 		}
@@ -266,13 +252,10 @@ void screen_draw_cursor_at(size_t cx, size_t cy)
 }
 
 /*******************************************************************************
-* Private Function Definitions
-*******************************************************************************/
+ * Private Function Definitions
+ *******************************************************************************/
 
-static inline void draw_glyph_scanline(const uint8_t* glyph_row,
-				       PIXEL* dst,
-				       uint32_t fg,
-				       uint32_t bg)
+static inline void draw_glyph_scanline(const uint8_t* glyph_row, PIXEL* dst, uint32_t fg, uint32_t bg)
 {
 	uint32_t pixel_index = 0; // Horizontal pixel index across the row
 
@@ -291,13 +274,11 @@ static inline void draw_glyph_scanline(const uint8_t* glyph_row,
 	}
 }
 
-static inline void
-draw_glyph(uint8_t* glyph, size_t offset, uint32_t fg, uint32_t bg)
+static inline void draw_glyph(uint8_t* glyph, size_t offset, uint32_t fg, uint32_t bg)
 {
 	for (size_t y = 0; y < sc.char_height; y++) {
 		const uint8_t* glyph_row = glyph + (y * sc.bytesperline);
-		PIXEL* dst_line =
-			(PIXEL*)(sc.fb_buffer + offset + (y * sc.scanline));
+		PIXEL* dst_line = (PIXEL*)(sc.fb_buffer + offset + (y * sc.scanline));
 		draw_glyph_scanline(glyph_row, dst_line, fg, bg);
 	}
 }

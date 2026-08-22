@@ -22,12 +22,7 @@ int liballoc_unlock()
 // Returns and allocs [pages] number of contiguous pages
 void* liballoc_alloc(size_t pages)
 {
-	void* alloc = mmap(nullptr,
-			   pages * 4096,
-			   PROT_READ | PROT_WRITE,
-			   MAP_PRIVATE | MAP_ANONYMOUS,
-			   -1,
-			   0);
+	void* alloc = mmap(nullptr, pages * 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	return alloc;
 }
 

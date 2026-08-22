@@ -14,9 +14,9 @@ typedef u32 dev_t;
  */
 struct chrdev {
 	/** @brief First device number in this range. */
-	dev_t base;	  // Base dev_t for this range
+	dev_t base; // Base dev_t for this range
 	/** @brief Number of minors in the range (at least 1). */
-	u16 count;	  // How many minors in this range
+	u16 count; // How many minors in this range
 	/** @brief Canonical base name, e.g. "ttyS". Advisory only. */
 	const char* name; // Canonical name: "ttyS", "null", etc.
 	/** @brief Immutable VFS operation table for this device family. */
@@ -49,8 +49,4 @@ void release_chrdev_region(dev_t base, unsigned count);
 int chrdev_add(struct chrdev* c, dev_t dev, unsigned count);
 void chrdev_del(struct chrdev* c);
 
-int chrdev_lookup(dev_t dev,
-		  const struct file_ops** fops_out,
-		  void** drvdata_out,
-		  dev_t* base_out,
-		  size_t* count_out);
+int chrdev_lookup(dev_t dev, const struct file_ops** fops_out, void** drvdata_out, dev_t* base_out, size_t* count_out);

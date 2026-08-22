@@ -61,8 +61,7 @@ struct inode_ops tty_device_ops = {
  *
  * @return Number of bytes copied to the ring buffer.
  */
-static ssize_t
-tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_t count);
+static ssize_t tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_t count);
 
 /*******************************************************************************
  * Public Function Definitions
@@ -94,9 +93,7 @@ void tty_init()
 		dev_t base;
 		int e = alloc_chrdev_region(&base, 1, tty->name);
 		if (e < 0) {
-			log_error(
-				"Failed to allocate chrdev region for tty: %d",
-				e);
+			log_error("Failed to allocate chrdev region for tty: %d", e);
 			panic("Cannot continue without console");
 		}
 
@@ -115,16 +112,9 @@ void tty_init()
 
 		chrdev_add(c, c->base, c->count);
 
-		devfs_map_name(devfs_sb,
-			       c->name,
-			       c->base,
-			       FILETYPE_CHAR_DEV,
-			       0666,
-			       0);
+		devfs_map_name(devfs_sb, c->name, c->base, FILETYPE_CHAR_DEV, 0666, 0);
 
-		log_debug("Console chrdev major: %u minor: %u",
-			  MAJOR(c->base),
-			  MINOR(c->base));
+		log_debug("Console chrdev major: %u minor: %u", MAJOR(c->base), MINOR(c->base));
 		log_debug("Mounted at %s/%s", devfs_sb->mount_point, c->name);
 	}
 }
@@ -180,10 +170,7 @@ ssize_t __write_to_tty(struct tty* tty, const char* buffer, size_t count)
  *
  * @return Number of bytes written to the TTY.
  */
-ssize_t tty_write(struct vfs_file* file,
-		  const char* buffer,
-		  size_t count,
-		  off_t* offset)
+ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count, off_t* offset)
 {
 	(void)offset;
 	struct tty* tty = file->private_data;
@@ -202,8 +189,7 @@ void tty_add_input_char(struct tty* tty, char c)
 		rb->buffer[rb->head] = c;
 		rb->head = (rb->head + 1) % rb->size;
 		if (rb->head == rb->tail) {
-			rb->tail =
-				(rb->tail + 1) % rb->size; // Overwrite old data
+			rb->tail = (rb->tail + 1) % rb->size; // Overwrite old data
 		}
 	}
 
@@ -238,8 +224,7 @@ ssize_t __read_from_tty(struct tty* tty, char* buffer, size_t count)
 	return (ssize_t)bytes_read;
 }
 
-ssize_t
-tty_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
+ssize_t tty_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
 {
 	(void)offset;
 	struct tty* tty = file->private_data;
@@ -292,8 +277,7 @@ void tty_drain_output_buffer(void* data)
 {
 	struct tty* tty_to_drain = (struct tty*)data;
 
-	if (tty_to_drain && tty_to_drain->driver &&
-	    tty_to_drain->driver->write) {
+	if (tty_to_drain && tty_to_drain->driver && tty_to_drain->driver->write) {
 		tty_to_drain->driver->write(tty_to_drain);
 	}
 }
@@ -311,8 +295,7 @@ void tty_drain_output_buffer(void* data)
  *
  * @return Number of bytes copied to the ring buffer.
  */
-static ssize_t
-tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_t count)
+static ssize_t tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_t count)
 {
 	size_t i = 0;
 	spin_guard(&rb->lock);

@@ -125,8 +125,7 @@ void release_chrdev_region(dev_t base, unsigned count)
 	}
 
 	if (!hlist_empty(&m->devlist)) {
-		log_warn("release_chrdev_region: major %u still has devices",
-			 major);
+		log_warn("release_chrdev_region: major %u still has devices", major);
 		return;
 	}
 
@@ -152,8 +151,7 @@ void release_chrdev_region(dev_t base, unsigned count)
  */
 int chrdev_add(struct chrdev* cdev, dev_t base, unsigned count)
 {
-	if (!cdev || !cdev->fops || count == 0 || count > 65536 ||
-	    (MINOR(base) + count) > 65536) {
+	if (!cdev || !cdev->fops || count == 0 || count > 65536 || (MINOR(base) + count) > 65536) {
 		return -EINVAL;
 	}
 
@@ -227,11 +225,7 @@ void chrdev_del(struct chrdev* cdev)
  * @note This function returns copies, not a borrowed chrdev pointer, to
  * avoid lifetime and use-after-free hazards in the fast path.
  */
-int chrdev_lookup(dev_t dev,
-		  const struct file_ops** fops_out,
-		  void** drvdata_out,
-		  dev_t* base_out,
-		  size_t* count_out)
+int chrdev_lookup(dev_t dev, const struct file_ops** fops_out, void** drvdata_out, dev_t* base_out, size_t* count_out)
 {
 	spin_guard(&chrdevs_lock);
 

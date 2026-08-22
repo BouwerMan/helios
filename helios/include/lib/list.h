@@ -76,8 +76,7 @@ static inline bool list_empty(const struct list_head* list)
  *
  * @return true if list is the first entry, false otherwise.
  */
-static inline bool list_is_first(const struct list_head* head,
-				 const struct list_head* list)
+static inline bool list_is_first(const struct list_head* head, const struct list_head* list)
 {
 	return list->prev == head;
 }
@@ -90,8 +89,7 @@ static inline bool list_is_first(const struct list_head* head,
  *
  * @return true if list is the last entry, false otherwise.
  */
-static inline bool list_is_last(const struct list_head* head,
-				const struct list_head* list)
+static inline bool list_is_last(const struct list_head* head, const struct list_head* list)
 {
 	return head == list->next;
 }
@@ -104,8 +102,7 @@ static inline bool list_is_last(const struct list_head* head,
  *
  * @return true if list is head, false otherwise.
  */
-static inline bool list_is_head(const struct list_head* head,
-				const struct list_head* list)
+static inline bool list_is_head(const struct list_head* head, const struct list_head* list)
 {
 	return list == head;
 }
@@ -116,9 +113,7 @@ static inline bool list_is_head(const struct list_head* head,
  * This is only for internal list manipulation where we know
  * the prev/next entries already!
  */
-static inline void __list_insert(struct list_head* new,
-				 struct list_head* next,
-				 struct list_head* prev)
+static inline void __list_insert(struct list_head* new, struct list_head* next, struct list_head* prev)
 {
 	next->prev = new;
 
@@ -204,16 +199,13 @@ static inline void list_move(struct list_head* list, struct list_head* head)
  * @param list Entry to move.
  * @param head Head that will follow the entry.
  */
-static inline void list_move_tail(struct list_head* list,
-				  struct list_head* head)
+static inline void list_move_tail(struct list_head* list, struct list_head* head)
 {
 	__list_del_entry(list);
 	list_add_tail(head, list);
 }
 
-static inline void __list_splice(const struct list_head* list,
-				 struct list_head* prev,
-				 struct list_head* next)
+static inline void __list_splice(const struct list_head* list, struct list_head* prev, struct list_head* next)
 {
 	struct list_head* first = list->next;
 	struct list_head* last = list->prev;
@@ -231,8 +223,7 @@ static inline void __list_splice(const struct list_head* list,
  * @param list New list to add.
  * @param head Place to add it in the first list.
  */
-static inline void list_splice(const struct list_head* list,
-			       struct list_head* head)
+static inline void list_splice(const struct list_head* list, struct list_head* head)
 {
 	if (!list_empty(list)) __list_splice(list, head, head->next);
 }
@@ -243,8 +234,7 @@ static inline void list_splice(const struct list_head* list,
  * @param list New list to add.
  * @param head Place to add it in the first list.
  */
-static inline void list_splice_tail(struct list_head* list,
-				    struct list_head* head)
+static inline void list_splice_tail(struct list_head* list, struct list_head* head)
 {
 	if (!list_empty(list)) __list_splice(list, head->prev, head);
 }
@@ -255,8 +245,7 @@ static inline void list_splice_tail(struct list_head* list,
  * @param list New list to add. Reinitialized after the join.
  * @param head Place to add it in the first list.
  */
-static inline void list_splice_init(struct list_head* list,
-				    struct list_head* head)
+static inline void list_splice_init(struct list_head* list, struct list_head* head)
 {
 	if (!list_empty(list)) {
 		__list_splice(list, head, head->next);
@@ -264,8 +253,7 @@ static inline void list_splice_init(struct list_head* list,
 	}
 }
 
-#define list_entry_is_head(pos, head, member) \
-	list_is_head((head), &(pos)->member)
+#define list_entry_is_head(pos, head, member) list_is_head((head), &(pos)->member)
 
 /**
  * @brief Gets the struct that contains a list_head entry.
@@ -285,8 +273,7 @@ static inline void list_splice_init(struct list_head* list,
  *
  * @note The list must not be empty.
  */
-#define list_first_entry(link, type, member) \
-	list_entry((link)->next, type, member)
+#define list_first_entry(link, type, member) list_entry((link)->next, type, member)
 
 /**
  * @brief Gets the first element from a list.
@@ -304,8 +291,7 @@ static inline void list_splice_init(struct list_head* list,
 		pos__ != head__ ? list_entry(pos__, type, member) : NULL; \
 	})
 
-#define list_last_entry(link, type, member) \
-	list_entry((link)->prev, type, member)
+#define list_last_entry(link, type, member) list_entry((link)->prev, type, member)
 
 #define list_head(list, type, member) list_entry((list)->next, type, member)
 
@@ -319,12 +305,9 @@ static inline void list_splice_init(struct list_head* list,
  * @param pos The type pointer to use as the cursor.
  * @param member Name of the list_head field within the struct.
  */
-#define list_next_entry(pos, member) \
-	list_entry((pos)->member.next, typeof(*(pos)), member)
+#define list_next_entry(pos, member) list_entry((pos)->member.next, typeof(*(pos)), member)
 
-#define list_for_each(pos, head)                               \
-	for ((pos) = (head)->next; !list_is_head((head), pos); \
-	     (pos) = (pos)->next)
+#define list_for_each(pos, head) for ((pos) = (head)->next; !list_is_head((head), pos); (pos) = (pos)->next)
 
 static inline size_t list_count_nodes(struct list_head* head)
 {
@@ -342,9 +325,8 @@ static inline size_t list_count_nodes(struct list_head* head)
  * @param head Head of the list.
  * @param member Name of the list_head field within the struct.
  */
-#define list_for_each_entry(pos, head, member)                       \
-	for ((pos) = list_first_entry(head, typeof(*(pos)), member); \
-	     !list_entry_is_head(pos, head, member);                 \
+#define list_for_each_entry(pos, head, member)                                                               \
+	for ((pos) = list_first_entry(head, typeof(*(pos)), member); !list_entry_is_head(pos, head, member); \
 	     (pos) = list_next_entry(pos, member))
 
 /**
@@ -355,10 +337,9 @@ static inline size_t list_count_nodes(struct list_head* head)
  * @param head Head of the list.
  * @param member Name of the list_head field within the struct.
  */
-#define list_for_each_entry_safe(pos, n, head, member)               \
-	for ((pos) = list_first_entry(head, typeof(*(pos)), member), \
-	    (n) = list_next_entry(pos, member);                      \
-	     !list_entry_is_head(pos, head, member);                 \
+#define list_for_each_entry_safe(pos, n, head, member)                                                   \
+	for ((pos) = list_first_entry(head, typeof(*(pos)), member), (n) = list_next_entry(pos, member); \
+	     !list_entry_is_head(pos, head, member);                                                     \
 	     (pos) = (n), (n) = list_next_entry(n, member))
 
 /**
@@ -367,9 +348,7 @@ static inline size_t list_count_nodes(struct list_head* head)
  * @param pos The list_head to use as the loop cursor.
  * @param head Head of the list.
  */
-#define list_for_each_continue(pos, head)                     \
-	for ((pos) = (pos)->next; !list_is_head(pos, (head)); \
-	     (pos) = (pos)->next)
+#define list_for_each_continue(pos, head) for ((pos) = (pos)->next; !list_is_head(pos, (head)); (pos) = (pos)->next)
 
 /**
  * @brief Continues iteration over a list of a given type from the current
@@ -379,9 +358,8 @@ static inline size_t list_count_nodes(struct list_head* head)
  * @param head Head of the list.
  * @param member Name of the list_head field within the struct.
  */
-#define list_for_each_entry_continue(pos, head, member) \
-	for ((pos) = list_next_entry(pos, member);      \
-	     !list_entry_is_head(pos, head, member);    \
+#define list_for_each_entry_continue(pos, head, member)                                    \
+	for ((pos) = list_next_entry(pos, member); !list_entry_is_head(pos, head, member); \
 	     (pos) = list_next_entry(pos, member))
 
 /**
@@ -391,9 +369,8 @@ static inline size_t list_count_nodes(struct list_head* head)
  * @param head Head of the list.
  * @param member Name of the list_head field within the struct.
  */
-#define list_for_each_entry_from(pos, head, member)    \
-	for (; !list_entry_is_head(pos, head, member); \
-	     (pos) = list_next_entry(pos, member))
+#define list_for_each_entry_from(pos, head, member) \
+	for (; !list_entry_is_head(pos, head, member); (pos) = list_next_entry(pos, member))
 
 /**
  * @brief Gets the next element in a list, wrapping around at the end.
@@ -406,10 +383,9 @@ static inline size_t list_count_nodes(struct list_head* head)
  *
  * @note The list must not be empty.
  */
-#define list_next_entry_circular(pos, head, member)               \
-	(list_is_last(head, &(pos)->member) ?                     \
-		 list_first_entry(head, typeof(*(pos)), member) : \
-		 list_next_entry(pos, member))
+#define list_next_entry_circular(pos, head, member)                                            \
+	(list_is_last(head, &(pos)->member) ? list_first_entry(head, typeof(*(pos)), member) : \
+					      list_next_entry(pos, member))
 
 /*
  * Double linked lists with a single pointer list head.
@@ -519,8 +495,7 @@ static inline void hlist_add_head(struct hlist_head* h, struct hlist_node* n)
  * @param n New entry to add.
  * @param next hlist node to add it before. Must not be NULL.
  */
-static inline void hlist_add_before(struct hlist_node* n,
-				    struct hlist_node* next)
+static inline void hlist_add_before(struct hlist_node* n, struct hlist_node* next)
 {
 	n->pprev = next->pprev;
 	n->next = next;
@@ -534,8 +509,7 @@ static inline void hlist_add_before(struct hlist_node* n,
  * @param n New entry to add.
  * @param prev hlist node to add it after. Must not be NULL.
  */
-static inline void hlist_add_behind(struct hlist_node* n,
-				    struct hlist_node* prev)
+static inline void hlist_add_behind(struct hlist_node* n, struct hlist_node* prev)
 {
 	n->next = prev->next;
 	prev->next = n;
@@ -548,8 +522,7 @@ static inline void hlist_add_behind(struct hlist_node* n,
 
 #define hlist_entry(ptr, type, member) container_of(ptr, type, member)
 
-#define hlist_for_each(pos, head) \
-	for ((pos) = (head)->first; pos; (pos) = (pos)->next)
+#define hlist_for_each(pos, head) for ((pos) = (head)->first; pos; (pos) = (pos)->next)
 
 #define hlist_entry_safe(ptr, type, member)                             \
 	({                                                              \
@@ -564,12 +537,9 @@ static inline void hlist_add_behind(struct hlist_node* n,
  * @param head Head of the hlist.
  * @param member Name of the hlist_node field within the struct.
  */
-#define hlist_for_each_entry(pos, head, member)                               \
-	for ((pos) = hlist_entry_safe((head)->first, typeof(*(pos)), member); \
-	     pos;                                                             \
-	     (pos) = hlist_entry_safe((pos)->member.next,                     \
-				      typeof(*(pos)),                         \
-				      member))
+#define hlist_for_each_entry(pos, head, member)                                    \
+	for ((pos) = hlist_entry_safe((head)->first, typeof(*(pos)), member); pos; \
+	     (pos) = hlist_entry_safe((pos)->member.next, typeof(*(pos)), member))
 
 /**
  * @brief Iterates over an hlist of a given type, safe against entry removal.
@@ -579,12 +549,11 @@ static inline void hlist_add_behind(struct hlist_node* n,
  * @param head Head of the hlist.
  * @param member Name of the hlist_node field within the struct.
  */
-#define hlist_for_each_entry_safe(pos, n, head, member)                       \
-	for ((pos) = hlist_entry_safe((head)->first, typeof(*(pos)), member); \
-	     (pos) && ({                                                      \
-		     (n) = (pos)->member.next;                                \
-		     1;                                                       \
-	     });                                                              \
+#define hlist_for_each_entry_safe(pos, n, head, member)                                                         \
+	for ((pos) = hlist_entry_safe((head)->first, typeof(*(pos)), member); (pos) && ({                       \
+										      (n) = (pos)->member.next; \
+										      1;                        \
+									      });                               \
 	     (pos) = hlist_entry_safe(n, typeof(*(pos)), member))
 
 /**

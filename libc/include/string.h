@@ -20,8 +20,7 @@ extern void* memset8(uint8_t* s, uint8_t v, size_t n);
 
 /// Checks the alignment of dest and src while making sure num can be evenly
 /// divisible
-#define __STRING_H_CHECK_ALIGN(num, dest, src, size) \
-	((num % size == 0) && (dest % size == 0) && (src % size == 0))
+#define __STRING_H_CHECK_ALIGN(num, dest, src, size) ((num % size == 0) && (dest % size == 0) && (src % size == 0))
 
 #ifdef __cplusplus
 extern "C" {

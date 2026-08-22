@@ -91,14 +91,14 @@ struct mr_device {
  *  allocate zeroed page; map with 'prot'
  */
 struct memory_region {
-	uptr start;	     /* VMA start, inclusive (page-aligned) */
-	uptr end;	     /* VMA end, exclusive (page-aligned) */
+	uptr start;		      /* VMA start, inclusive (page-aligned) */
+	uptr end;		      /* VMA end, exclusive (page-aligned) */
 
-	unsigned long prot;  /* PROT_READ/WRITE/EXEC (ELF p_flags->prot). */
-	unsigned long flags; /* MAP_PRIVATE/SHARED and your VM bits. */
+	unsigned long prot;	      /* PROT_READ/WRITE/EXEC (ELF p_flags->prot). */
+	unsigned long flags;	      /* MAP_PRIVATE/SHARED and your VM bits. */
 
-	enum mr_kind kind;   /* MR_FILE vs MR_ANON (MR_DEVICE optional). */
-	bool is_private;     /* True for MAP_PRIVATE → CoW on first write. */
+	enum mr_kind kind;	      /* MR_FILE vs MR_ANON (MR_DEVICE optional). */
+	bool is_private;	      /* True for MAP_PRIVATE → CoW on first write. */
 
 	union {
 		struct mr_file file;  /* Valid when kind == MR_FILE */
@@ -128,11 +128,7 @@ static inline bool is_within_vas(struct address_space* vas, vaddr_t vaddr)
 	return res;
 }
 
-int check_access(struct address_space* vas,
-		 vaddr_t vaddr,
-		 bool need_read,
-		 bool need_write,
-		 bool need_exec);
+int check_access(struct address_space* vas, vaddr_t vaddr, bool need_read, bool need_write, bool need_exec);
 
 struct memory_region* get_region(struct address_space* vas, vaddr_t vaddr);
 
@@ -142,8 +138,7 @@ void remove_region(struct memory_region* mr);
 
 void address_space_init();
 
-struct memory_region*
-alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags);
+struct memory_region* alloc_mem_region(uptr start, uptr end, unsigned long prot, unsigned long flags);
 
 void destroy_mem_region(struct memory_region* mr);
 int address_space_dup(struct address_space* dest, struct address_space* src);

@@ -27,14 +27,9 @@ int __fputc(int c, FILE* stream)
 	bool should_flush = false;
 
 	switch (stream->__mode) {
-	case STREAM_UNBUFFERED: should_flush = true; break;
-	case STREAM_LINEBUFFERED:
-		should_flush = (c == '\n') ||
-			       (stream->__buffer_pos >= stream->__buffer_size);
-		break;
-	case STREAM_FULLYBUFFERED:
-		should_flush = (stream->__buffer_pos >= stream->__buffer_size);
-		break;
+	case STREAM_UNBUFFERED:	   should_flush = true; break;
+	case STREAM_LINEBUFFERED:  should_flush = (c == '\n') || (stream->__buffer_pos >= stream->__buffer_size); break;
+	case STREAM_FULLYBUFFERED: should_flush = (stream->__buffer_pos >= stream->__buffer_size); break;
 	}
 
 	if (should_flush) {

@@ -177,12 +177,9 @@ int devfs_readdir(struct vfs_file* file, struct dirent* dirent, off_t offset)
 	return 0;
 }
 
-struct vfs_dentry* devfs_lookup(struct vfs_inode* dir_inode,
-				struct vfs_dentry* child)
+struct vfs_dentry* devfs_lookup(struct vfs_inode* dir_inode, struct vfs_dentry* child)
 {
-	log_debug("devfs_lookup: dir_inode=%p, child=%s",
-		  (void*)dir_inode,
-		  child->name);
+	log_debug("devfs_lookup: dir_inode=%p, child=%s", (void*)dir_inode, child->name);
 
 	if (!dir_inode || dir_inode->filetype != FILETYPE_DIR) {
 		return nullptr;
@@ -195,8 +192,7 @@ struct vfs_dentry* devfs_lookup(struct vfs_inode* dir_inode,
 
 	struct vfs_inode* inode = devfs_alloc_inode(dir_inode->sb);
 	if (!inode) {
-		log_error("Failed to allocate inode for device '%s'",
-			  child->name);
+		log_error("Failed to allocate inode for device '%s'", child->name);
 		return nullptr;
 	}
 	struct devfs_sb_info* info = DEVFS_SB_INFO(dir_inode->sb);
@@ -204,12 +200,7 @@ struct vfs_dentry* devfs_lookup(struct vfs_inode* dir_inode,
 	spin_guard(&info->lock);
 
 	struct devfs_entry* entry;
-	int rc = __resolve_name(dir_inode->sb,
-				child->name,
-				nullptr,
-				nullptr,
-				nullptr,
-				&entry);
+	int rc = __resolve_name(dir_inode->sb, child->name, nullptr, nullptr, nullptr, &entry);
 	if (rc < 0) {
 		log_warn("Device '%s' not found in devfs", child->name);
 		return nullptr; // Not found
@@ -270,12 +261,7 @@ struct vfs_inode* devfs_alloc_inode(struct vfs_superblock* sb)
  * @note Does not create the inode immediately. devfs_lookup() creates and
  * caches it on first use.
  */
-int devfs_map_name(struct vfs_superblock* sb,
-		   const char* name,
-		   dev_t rdev,
-		   u16 type,
-		   u16 mode,
-		   unsigned flags)
+int devfs_map_name(struct vfs_superblock* sb, const char* name, dev_t rdev, u16 type, u16 mode, unsigned flags)
 {
 	if (!sb || rdev == 0) {
 		return -EINVAL;
@@ -285,13 +271,9 @@ int devfs_map_name(struct vfs_superblock* sb,
 		return -EINVAL;
 	}
 
-	if (chrdev_lookup(rdev, nullptr, nullptr, nullptr, nullptr) ==
-	    -ENODEV) {
+	if (chrdev_lookup(rdev, nullptr, nullptr, nullptr, nullptr) == -ENODEV) {
 		// Device not registered
-		log_warn("Mapping unregistered device %u,%u to /dev/%s",
-			 MAJOR(rdev),
-			 MINOR(rdev),
-			 name);
+		log_warn("Mapping unregistered device %u,%u to /dev/%s", MAJOR(rdev), MINOR(rdev), name);
 		return -EINVAL;
 	}
 
@@ -351,12 +333,7 @@ int devfs_unmap_name(struct vfs_superblock* sb, const char* name)
 
 	scoped_spin_guard(&DEVFS_SB_INFO(sb)->lock)
 	{
-		int rc = __resolve_name(sb,
-					name,
-					nullptr,
-					nullptr,
-					nullptr,
-					&entry);
+		int rc = __resolve_name(sb, name, nullptr, nullptr, nullptr, &entry);
 		if (rc < 0) {
 			return rc;
 		}
@@ -399,8 +376,7 @@ int devfs_resolve_name(struct vfs_superblock* sb,
 
 	spin_guard(&info->lock);
 
-	int rc =
-		__resolve_name(sb, name, out_rdev, out_type, out_mode, out_ent);
+	int rc = __resolve_name(sb, name, out_rdev, out_type, out_mode, out_ent);
 
 	return rc;
 }
@@ -450,22 +426,14 @@ int devnode_open(struct vfs_inode* inode, struct vfs_file* file)
 		return -EINVAL;
 	}
 
-	log_debug("Opening device inode %zu (rdev=%u,%u)",
-		  inode->id,
-		  MAJOR(inode->rdev),
-		  MINOR(inode->rdev));
-	log_debug("File name: %s",
-		  file->dentry ? file->dentry->name : "<null>");
+	log_debug("Opening device inode %zu (rdev=%u,%u)", inode->id, MAJOR(inode->rdev), MINOR(inode->rdev));
+	log_debug("File name: %s", file->dentry ? file->dentry->name : "<null>");
 
 	dev_t dev = inode->rdev;
 
 	struct file_ops* fops = nullptr;
 	void* drv = nullptr;
-	int rc = chrdev_lookup(dev,
-			       (const struct file_ops**)&fops,
-			       &drv,
-			       nullptr,
-			       nullptr);
+	int rc = chrdev_lookup(dev, (const struct file_ops**)&fops, &drv, nullptr, nullptr);
 	if (rc) {
 		log_warn("Could not find chrdev for device %u,%u: %s",
 			 MAJOR(dev),
@@ -561,8 +529,7 @@ static struct vfs_inode* get_root_inode(struct vfs_superblock* sb)
 	r_node->ref_count = 1;
 
 	r_node->filetype = FILETYPE_DIR;
-	r_node->permissions =
-		VFS_PERM_ALL; // TODO: use stricter perms once supported.
+	r_node->permissions = VFS_PERM_ALL; // TODO: use stricter perms once supported.
 	r_node->flags = 0;
 
 	// Add it to the cache so future lookups will find it.

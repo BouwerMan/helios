@@ -62,8 +62,7 @@ struct waitqueue {
 // Any changes to this structure needs to be reflected in switch.asm
 // This represents ANY schedulable task
 struct task {
-	struct registers*
-		regs; // Full CPU context, this address is loaded into rsp on switch
+	struct registers* regs; // Full CPU context, this address is loaded into rsp on switch
 	struct address_space* vas;
 	uintptr_t kernel_stack; // The top of the kernel stack
 	enum TASK_STATE state;
@@ -91,9 +90,8 @@ struct task {
 };
 
 struct scheduler_queue {
-	volatile bool
-		need_reschedule; // Must be first for interrupt handler access
-	spinlock_t lock;	 // Locks the lists
+	volatile bool need_reschedule; // Must be first for interrupt handler access
+	spinlock_t lock;	       // Locks the lists
 	struct list_head ready_list;
 	struct list_head blocked_list;
 	struct list_head terminated_list;
@@ -159,9 +157,7 @@ void waitqueue_prepare_wait(struct waitqueue* wqueue);
 void waitqueue_commit_sleep(struct waitqueue* wqueue);
 void waitqueue_cancel_wait(struct waitqueue* wqueue);
 void waitqueue_sleep(struct waitqueue* wqueue);
-void waitqueue_sleep_unlock(struct waitqueue* wqueue,
-			    spinlock_t* lock,
-			    unsigned long flags);
+void waitqueue_sleep_unlock(struct waitqueue* wqueue, spinlock_t* lock, unsigned long flags);
 void waitqueue_wake_one(struct waitqueue* wqueue);
 void waitqueue_wake_all(struct waitqueue* wqueue);
 void waitqueue_dump_waiters(struct waitqueue* wqueue);

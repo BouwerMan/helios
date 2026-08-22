@@ -93,25 +93,21 @@
 /**
  * Extract bits from position start to end (inclusive)
  */
-#define EXTRACT_BITS(x, start, end) \
-	(((x) >> (start)) & BITMASK((end) - (start) + 1))
+#define EXTRACT_BITS(x, start, end) (((x) >> (start)) & BITMASK((end) - (start) + 1))
 
 /**
  * Insert value into specific bit range [start, end]
  * Clears the range first, then sets the new value
  */
-#define INSERT_BITS(x, value, start, end)                                   \
-	do {                                                                \
-		typeof(x)* _ptr = &(x);                                     \
-		typeof(x) _mask = BITMASK_RANGE(start, end);                \
-		typeof(x) _val =                                            \
-			((typeof(x))(value) & BITMASK((end) - (start) + 1)) \
-			<< (start);                                         \
-		*_ptr = (*_ptr & ~_mask) | _val;                            \
+#define INSERT_BITS(x, value, start, end)                                                        \
+	do {                                                                                     \
+		typeof(x)* _ptr = &(x);                                                          \
+		typeof(x) _mask = BITMASK_RANGE(start, end);                                     \
+		typeof(x) _val = ((typeof(x))(value) & BITMASK((end) - (start) + 1)) << (start); \
+		*_ptr = (*_ptr & ~_mask) | _val;                                                 \
 	} while (0)
 
-#define CHECK_ALIGN(POINTER, BYTE_COUNT) \
-	(((uintptr_t)(const void*)(POINTER)) % (BYTE_COUNT) == 0)
+#define CHECK_ALIGN(POINTER, BYTE_COUNT) (((uintptr_t)(const void*)(POINTER)) % (BYTE_COUNT) == 0)
 
 /**
  * Count leading zeros (requires compiler builtin)

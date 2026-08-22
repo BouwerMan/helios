@@ -50,7 +50,5 @@ static size_t __strnlen_s(const char* str, size_t maxlen)
 }
 
 /* Alias both public names to the real implementation */
-extern size_t strnlen_s(const char* s, size_t n)
-	__attribute__((alias("__strnlen_s")));
-extern size_t strnlen(const char* s, size_t n)
-	__attribute__((alias("__strnlen_s")));
+extern size_t strnlen_s(const char* s, size_t n) __attribute__((alias("__strnlen_s")));
+extern size_t strnlen(const char* s, size_t n) __attribute__((alias("__strnlen_s")));

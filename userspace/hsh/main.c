@@ -31,9 +31,7 @@ const char* builtin_str[] = {
 	"cd", "pwd", "ls", "clear", "help", "exit", "shutdown",
 };
 
-int (*builtin_func[])(char**) = { &hsh_cd,	&hsh_pwd,  &hsh_ls,
-				  &hsh_clear,	&hsh_help, &hsh_exit,
-				  &hsh_shutdown };
+int (*builtin_func[])(char**) = { &hsh_cd, &hsh_pwd, &hsh_ls, &hsh_clear, &hsh_help, &hsh_exit, &hsh_shutdown };
 
 int lsh_num_builtins()
 {
@@ -47,7 +45,7 @@ int launch(const char* path, char** args)
 
 	pid = fork();
 	if (pid == 0) {
-		//Child process
+		// Child process
 		execvp(path, args);
 		exit(-1);
 	} else if (pid < 0) {
@@ -348,9 +346,7 @@ int main(void)
 	char* cols_str = getenv("COLUMNS");
 	char* rows_str = getenv("ROWS");
 
-	printf("Terminal size: %sx%s\n",
-	       cols_str ? cols_str : "?",
-	       rows_str ? rows_str : "?");
+	printf("Terminal size: %sx%s\n", cols_str ? cols_str : "?", rows_str ? rows_str : "?");
 
 	// hsh_shutdown(nullptr);
 

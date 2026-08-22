@@ -3,8 +3,7 @@
 
 #include "kernel/types.h"
 
-#define __STRING_H_CHECK_ALIGN(num, dest, src, size) \
-	((num % size == 0) && (dest % size == 0) && (src % size == 0))
+#define __STRING_H_CHECK_ALIGN(num, dest, src, size) ((num % size == 0) && (dest % size == 0) && (src % size == 0))
 
 void* __memset(void* restrict d, int c, size_t n);
 u16* __memset16(u16* restrict d, u16 v, size_t n);

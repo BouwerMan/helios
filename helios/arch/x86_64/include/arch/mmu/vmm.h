@@ -104,8 +104,7 @@ static inline paddr_t vmm_read_cr3(void)
 static inline void vmm_load_cr3(paddr_t pml4_phys_addr)
 {
 	// Ensure it's 4 KiB aligned
-	kassert((pml4_phys_addr & 0xFFF) == 0,
-		"CR3 address must be 4 KiB aligned");
+	kassert((pml4_phys_addr & 0xFFF) == 0, "CR3 address must be 4 KiB aligned");
 
 	__asm__ volatile("mov %0, %%cr3" ::"r"(pml4_phys_addr) : "memory");
 }
@@ -134,27 +133,18 @@ uint64_t* vmm_create_address_space(void);
 /* Region operations */
 int vmm_map_anon_region(struct address_space* vas, struct memory_region* mr);
 int vmm_map_device_region(struct address_space* vas, struct memory_region* mr);
-int vmm_fork_region(struct address_space* dest_vas,
-		    struct memory_region* src_mr);
+int vmm_fork_region(struct address_space* dest_vas, struct memory_region* src_mr);
 int vmm_unmap_region(struct address_space* vas, struct memory_region* mr);
 
 /* Page-granular operations */
 int vmm_map_page(pgd_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags);
-int vmm_map_frame_alias(pgd_t* pml4,
-			uintptr_t vaddr,
-			uintptr_t paddr,
-			flags_t flags);
+int vmm_map_frame_alias(pgd_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags);
 int vmm_unmap_page(pgd_t* pml4, uintptr_t vaddr);
 
-int vmm_protect_page(struct address_space* vas,
-		     vaddr_t vaddr,
-		     flags_t new_prot);
+int vmm_protect_page(struct address_space* vas, vaddr_t vaddr, flags_t new_prot);
 
 /* Byte-wise access into a region (slow path helper) */
-void vmm_write_region(struct address_space* vas,
-		      vaddr_t vaddr,
-		      const void* data,
-		      size_t len);
+void vmm_write_region(struct address_space* vas, vaddr_t vaddr, const void* data, size_t len);
 
 /* Maintenance / queries */
 int prune_page_tables(uint64_t* pml4, uintptr_t vaddr);

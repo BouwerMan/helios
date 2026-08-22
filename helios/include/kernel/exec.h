@@ -6,13 +6,13 @@
 
 static constexpr uptr DEFAULT_STACK_TOP = 0x7ffffffff000;
 
-#define ELFMAG0 0x7F	   // e_ident[EI_MAG0]
-#define ELFMAG1 'E'	   // e_ident[EI_MAG1]
-#define ELFMAG2 'L'	   // e_ident[EI_MAG2]
-#define ELFMAG3 'F'	   // e_ident[EI_MAG3]
+#define ELFMAG0 0x7F	// e_ident[EI_MAG0]
+#define ELFMAG1 'E'	// e_ident[EI_MAG1]
+#define ELFMAG2 'L'	// e_ident[EI_MAG2]
+#define ELFMAG3 'F'	// e_ident[EI_MAG3]
 
-#define ELFDATA2LSB (1)	   // Little Endian
-#define ELFCLASS32  (1)	   // 32-bit Architecture
+#define ELFDATA2LSB (1) // Little Endian
+#define ELFCLASS32  (1) // 32-bit Architecture
 
 enum elf_id {
 	EI_MAG0 = 0,	   // 0x7F
@@ -47,8 +47,8 @@ enum ELF_PROGRAM_FLAGS {
 	PF_READ = 4,
 };
 
-#define SHN_UNDEF (0x00)  // Undefined/Not Present
-#define SHN_ABS	  0xFFF1  // Absolute symbol
+#define SHN_UNDEF (0x00) // Undefined/Not Present
+#define SHN_ABS	  0xFFF1 // Absolute symbol
 
 enum ShT_Types {
 	SHT_NULL = 0,	  // Null section
@@ -101,8 +101,7 @@ struct exec_context {
 	char name[MAX_TASK_NAME_LEN];
 };
 
-struct exec_context*
-prepare_exec(const char* path, const char** argv, const char** envp);
+struct exec_context* prepare_exec(const char* path, const char** argv, const char** envp);
 
 int commit_exec(struct task* task, struct exec_context* ctx);
 

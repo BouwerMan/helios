@@ -121,9 +121,7 @@ void imap_remove(struct inode_mapping* mapping, struct page* page)
 		return;
 	}
 
-	log_debug("Removing page index %lu from mapping (ino: %zu)",
-		  page->index,
-		  mapping->owner->id);
+	log_debug("Removing page index %lu from mapping (ino: %zu)", page->index, mapping->owner->id);
 
 	spin_guard(&mapping->lock);
 

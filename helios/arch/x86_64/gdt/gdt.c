@@ -26,8 +26,8 @@
 #include "tss.h"
 
 /*******************************************************************************
-* Global Variable Definitions
-*******************************************************************************/
+ * Global Variable Definitions
+ *******************************************************************************/
 
 /* Our GDT, with 6 entries, and finally our special GDT pointer */
 struct gdt_entry gdt[GDT_ENTRIES];
@@ -35,8 +35,8 @@ struct gdt_ptr gp;
 struct tss_entry tss;
 
 /*******************************************************************************
-* Private Function Prototypes
-*******************************************************************************/
+ * Private Function Prototypes
+ *******************************************************************************/
 
 /* This will be a function in gdt.asm. We use this to properly
  *  reload the new segment registers */
@@ -47,8 +47,8 @@ static void set_tss_descriptor(void* tss_ptr, size_t tss_size);
 static void set_gate(u8 index, u64 base, u32 limit, u8 access, u8 gran);
 
 /*******************************************************************************
-* Public Function Definitions
-*******************************************************************************/
+ * Public Function Definitions
+ *******************************************************************************/
 
 /**
  * @brief Initializes the Global Descriptor Table (GDT).
@@ -63,8 +63,7 @@ static void set_gate(u8 index, u64 base, u32 limit, u8 access, u8 gran);
  */
 void gdt_init()
 {
-	memset((unsigned char*)&gdt,
-	       0,
+	memset((unsigned char*)&gdt, 0,
 	       sizeof(struct gdt_entry) * 6); // Clear the GDT
 
 	/* Setup the GDT pointer and limit */
@@ -72,19 +71,13 @@ void gdt_init()
 	gp.offset = gdt;
 
 	/* Our NULL descriptor */
-	set_gate(0, 0, 0, 0, 0); // NULL segment, offset 0x0000
-	set_gate(1,
-		 0,
-		 0xFFFFF,
-		 0x9A,
-		 0xA0); // Kernel code segment, offset 0x0008
-	set_gate(2,
-		 0,
-		 0xFFFFF,
-		 0x92,
-		 0xA0); // Kernel data segment, offset 0x0010
-	set_gate(3, 0, 0xFFFFF, 0xFA, 0xA0); // User code segment, offset 0x0018
-	set_gate(4, 0, 0xFFFFF, 0xF2, 0xA0); // User data segment, offset 0x0020
+	set_gate(0, 0, 0, 0, 0);	       // NULL segment, offset 0x0000
+	set_gate(1, 0, 0xFFFFF, 0x9A,
+		 0xA0);			       // Kernel code segment, offset 0x0008
+	set_gate(2, 0, 0xFFFFF, 0x92,
+		 0xA0);			       // Kernel data segment, offset 0x0010
+	set_gate(3, 0, 0xFFFFF, 0xFA, 0xA0);   // User code segment, offset 0x0018
+	set_gate(4, 0, 0xFFFFF, 0xF2, 0xA0);   // User data segment, offset 0x0020
 	set_tss_descriptor(&tss, sizeof(tss)); // TSS segment, offset 0x0028
 
 	/* Flush out the old GDT and install the new changes! */
@@ -104,8 +97,8 @@ void gdt_flush()
 }
 
 /*******************************************************************************
-* Private Function Definitions
-*******************************************************************************/
+ * Private Function Definitions
+ *******************************************************************************/
 
 /**
  * @brief Sets up a descriptor in the Global Descriptor Table (GDT).
@@ -120,11 +113,7 @@ void gdt_flush()
  * @param access The access flags that define the segment's type and permissions.
  * @param gran The granularity and size flags for the segment.
  */
-static void set_gate(uint8_t index,
-		     uint64_t base,
-		     uint32_t limit,
-		     uint8_t access,
-		     uint8_t gran)
+static void set_gate(uint8_t index, uint64_t base, uint32_t limit, uint8_t access, uint8_t gran)
 {
 	// Setup the descriptor base address
 	gdt[index].base_low = (base & 0xFFFF);
@@ -149,8 +138,7 @@ static void set_tss_descriptor(void* tss_ptr, size_t tss_size)
 	gdt[5].limit_low = limit & 0xFFFF;
 	gdt[5].base_low = base & 0xFFFF;
 	gdt[5].base_middle = (base >> 16) & 0xFF;
-	gdt[5].access =
-		0x89; // 10001001b: present, system, type = 9 (TSS 64-bit available)
+	gdt[5].access = 0x89;		// 10001001b: present, system, type = 9 (TSS 64-bit available)
 	gdt[5].granularity = ((limit >> 16) & 0x0F);
 	gdt[5].granularity |= (0 << 4); // AVL = 0, L = 0, D/B = 0, G = 0
 	gdt[5].base_high = (base >> 24) & 0xFF;

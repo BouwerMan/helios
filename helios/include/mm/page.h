@@ -204,8 +204,7 @@ static inline void put_page(struct page* pg)
  */
 static inline void* pages_clear(void* start, size_t num_pages)
 {
-	kassert(is_page_aligned((uintptr_t)start),
-		"pages_clear: pages not aligned");
+	kassert(is_page_aligned((uintptr_t)start), "pages_clear: pages not aligned");
 	kassert(num_pages > 0, "pages_clear: num_pages must be > 0");
 	if (!start) return start;
 	return __memset(start, 0, num_pages << PAGE_SHIFT);
@@ -223,8 +222,7 @@ static inline void* pages_clear(void* start, size_t num_pages)
  */
 static inline void* page_clear(void* page)
 {
-	kassert(is_page_aligned((uintptr_t)page),
-		"page_clear: page not aligned");
+	kassert(is_page_aligned((uintptr_t)page), "page_clear: page not aligned");
 	if (!page) return page;
 	return __memset(page, 0, PAGE_SIZE);
 }

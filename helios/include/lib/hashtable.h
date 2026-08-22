@@ -73,9 +73,8 @@ static inline u64 hash_64(u64 val, int bits)
 	return (val * GOLDEN_RATIO_64) >> (64 - bits);
 }
 
-#define DEFINE_HASHTABLE(name, bits)                                         \
-	struct hlist_head name[1 << (bits)] = { [0 ...((1 << (bits)) - 1)] = \
-							HLIST_HEAD_INIT }
+#define DEFINE_HASHTABLE(name, bits) \
+	struct hlist_head name[1 << (bits)] = { [0 ...((1 << (bits)) - 1)] = HLIST_HEAD_INIT }
 
 #define DECLARE_HASHTABLE(name, bits) struct hlist_head name[1 << (bits)]
 
@@ -83,9 +82,7 @@ static inline u64 hash_64(u64 val, int bits)
 #define HASH_BITS(name) ilog2((unsigned long)HASH_SIZE(name))
 
 /* Use hash_32 when possible to allow for fast 32bit hashing in 64bit kernels. */
-#define hash_min(val, bits)                             \
-	(sizeof(val) <= 4 ? hash_32((u32)(val), bits) : \
-			    hash_64((u64)(val), bits))
+#define hash_min(val, bits) (sizeof(val) <= 4 ? hash_32((u32)(val), bits) : hash_64((u64)(val), bits))
 
 static inline void __hash_init(struct hlist_head* ht, unsigned int sz)
 {
@@ -112,8 +109,7 @@ static inline void __hash_init(struct hlist_head* ht, unsigned int sz)
  * @param node The hlist_node of the object to add.
  * @param key Key of the object to add.
  */
-#define hash_add(hashtable, node, key) \
-	hlist_add_head(&(hashtable)[hash_min(key, HASH_BITS(hashtable))], node)
+#define hash_add(hashtable, node, key) hlist_add_head(&(hashtable)[hash_min(key, HASH_BITS(hashtable))], node)
 
 /**
  * @brief Checks whether an object is in any hash table.
@@ -167,10 +163,8 @@ static inline void hash_del(struct hlist_node* node)
  * @param obj The type pointer to use as the loop cursor for each entry.
  * @param member Name of the hlist_node field within the struct.
  */
-#define hash_for_each(name, bkt, obj, member)             \
-	for ((bkt) = 0, (obj) = nullptr;                  \
-	     (obj) == nullptr && (bkt) < HASH_SIZE(name); \
-	     (bkt)++)                                     \
+#define hash_for_each(name, bkt, obj, member)                                                  \
+	for ((bkt) = 0, (obj) = nullptr; (obj) == nullptr && (bkt) < HASH_SIZE(name); (bkt)++) \
 		hlist_for_each_entry (obj, &(name)[bkt], member)
 
 /**
@@ -181,7 +175,5 @@ static inline void hash_del(struct hlist_node* node)
  * @param member Name of the hlist_node field within the struct.
  * @param key Key of the objects to iterate over.
  */
-#define hash_for_each_possible(name, obj, member, key)                 \
-	hlist_for_each_entry (obj,                                     \
-			      &(name)[hash_min(key, HASH_BITS(name))], \
-			      member)
+#define hash_for_each_possible(name, obj, member, key) \
+	hlist_for_each_entry (obj, &(name)[hash_min(key, HASH_BITS(name))], member)

@@ -83,8 +83,7 @@ void work_queue_init()
 	list_init(&g_work_queue.queue);
 	spin_init(&g_work_queue.lock);
 	waitqueue_init(&g_work_queue.wq);
-	wq_task = kthread_create("Worker Queue task",
-				 (entry_func)worker_thread_entry);
+	wq_task = kthread_create("Worker Queue task", (entry_func)worker_thread_entry);
 	kthread_run(wq_task);
 	log_debug("Initialized work queues");
 }
@@ -100,9 +99,7 @@ void work_queue_init()
 int add_work_item(work_func_t func, void* data)
 {
 	if (!func) {
-		log_error("Invalid function supplied (%p) by caller: %p",
-			  (void*)func,
-			  __builtin_return_address(0));
+		log_error("Invalid function supplied (%p) by caller: %p", (void*)func, __builtin_return_address(0));
 	}
 	struct work_item* item = kmalloc(sizeof(struct work_item));
 	if (!item) {

@@ -106,64 +106,43 @@ struct vfs_inode {
 	int ref_count;
 	uint16_t permissions;
 	uint8_t flags;
-	dev_t rdev;	       // For device files, the device number
+	dev_t rdev;		   // For device files, the device number
 	semaphore_t lock;
 	struct inode_mapping* mapping;
-	struct inode_ops* ops; // What can you DO with this inode?
-	struct file_ops* fops; // Default file ops
+	struct inode_ops* ops;	   // What can you DO with this inode?
+	struct file_ops* fops;	   // Default file ops
 
-	struct vfs_superblock*
-		sb; // A pointer back to the superblock of its filesystem
+	struct vfs_superblock* sb; // A pointer back to the superblock of its filesystem
 
 	struct hlist_node hash;	   /* list of hash table entries */
 	struct hlist_head* bucket; /* hash bucket */
 
-	uint32_t nlink; // Number of hard links (dentries) pointing to this inode
+	uint32_t nlink;		   // Number of hard links (dentries) pointing to this inode
 
-	void* fs_data;	// Filesystem specific, for FAT it stores fat_inode_info
+	void* fs_data;		   // Filesystem specific, for FAT it stores fat_inode_info
 };
 
 struct inode_ops {
-	int (*mkdir)(struct vfs_inode* dir,
-		     struct vfs_dentry* dentry,
-		     uint16_t mode);
-	int (*create)(struct vfs_inode* dir,
-		      struct vfs_dentry* dentry,
-		      uint16_t mode);
+	int (*mkdir)(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode);
+	int (*create)(struct vfs_inode* dir, struct vfs_dentry* dentry, uint16_t mode);
 
-	struct vfs_dentry* (*lookup)(struct vfs_inode* dir_inode,
-				     struct vfs_dentry* child);
+	struct vfs_dentry* (*lookup)(struct vfs_inode* dir_inode, struct vfs_dentry* child);
 };
 
 struct file_ops {
 	int (*open)(struct vfs_inode* inode, struct vfs_file* file);
 	int (*close)(struct vfs_inode* inode, struct vfs_file* file);
 
-	ssize_t (*read)(struct vfs_file* file,
-			char* buffer,
-			size_t count,
-			off_t* offset);
-	ssize_t (*write)(struct vfs_file* file,
-			 const char __user* buffer,
-			 size_t count,
-			 off_t* offset);
+	ssize_t (*read)(struct vfs_file* file, char* buffer, size_t count, off_t* offset);
+	ssize_t (*write)(struct vfs_file* file, const char __user* buffer, size_t count, off_t* offset);
 
-	int (*readdir)(struct vfs_file* file,
-		       struct dirent* dirent,
-		       off_t offset);
+	int (*readdir)(struct vfs_file* file, struct dirent* dirent, off_t offset);
 
-	int (*ioctl)(struct vfs_file* file,
-		     unsigned long request,
-		     void __user* arg);
+	int (*ioctl)(struct vfs_file* file, unsigned long request, void __user* arg);
 
 	short (*poll)(struct vfs_file* file);
 
-	int (*mmap)(struct vfs_file* file,
-		    void* addr,
-		    size_t len,
-		    int prot,
-		    int flags,
-		    off_t off);
+	int (*mmap)(struct vfs_file* file, void* addr, size_t len, int prot, int flags, off_t off);
 };
 
 // TODO: Make helper function for creating new dentries???
@@ -172,15 +151,13 @@ struct vfs_dentry {
 	struct vfs_inode* inode;
 	struct vfs_dentry* parent; // Reference to parent's directory
 
-	struct list_head
-		children; // Points to the *first child* in this directory
-	struct list_head
-		siblings; // Points to the *next child* in the parent's list
+	struct list_head children; // Points to the *first child* in this directory
+	struct list_head siblings; // Points to the *next child* in the parent's list
 
 	struct hlist_node hash;	   /* list of hash table entries */
 	struct hlist_head* bucket; /* hash bucket */
 
-	void* fs_data; // Filesystem specific data, for FAT it stores fat_fs
+	void* fs_data;		   // Filesystem specific data, for FAT it stores fat_fs
 	int ref_count;
 	int flags;
 };
@@ -216,10 +193,7 @@ static inline struct vfs_inode* inode_from_file(struct vfs_file* file)
 // --- VFS Initialization and Mounting ---
 void vfs_init();
 int mount_initial_rootfs();
-int vfs_mount(const char* source,
-	      const char* target,
-	      const char* fstype,
-	      int flags);
+int vfs_mount(const char* source, const char* target, const char* fstype, int flags);
 void register_filesystem(struct vfs_fs_type* fs);
 struct vfs_superblock* vfs_get_sb(const char* path);
 
@@ -249,8 +223,7 @@ struct vfs_dentry* dentry_alloc(struct vfs_dentry* parent, const char* name);
 void dentry_dealloc(struct vfs_dentry* d);
 void register_child(struct vfs_dentry* parent, struct vfs_dentry* child);
 int __fill_dirent(struct vfs_dentry* dentry, struct dirent* dirent);
-struct vfs_dentry* vfs_resolve_path_from_cwd(const char* path,
-					     struct vfs_dentry* cwd);
+struct vfs_dentry* vfs_resolve_path_from_cwd(const char* path, struct vfs_dentry* cwd);
 
 // --- Inode Management ---
 struct vfs_inode* new_inode(struct vfs_superblock* sb, size_t id);
@@ -265,26 +238,19 @@ int vfs_close(int fd);
 ssize_t vfs_getdents(struct vfs_file* dir, struct dirent* dirp, size_t count);
 int vfs_readdir(struct vfs_file* dir, struct dirent* out, long pos);
 
-ssize_t __vfs_pwrite(struct vfs_file* file,
-		     const char* buffer,
-		     size_t count,
-		     off_t* offset);
+ssize_t __vfs_pwrite(struct vfs_file* file, const char* buffer, size_t count, off_t* offset);
 ssize_t vfs_pwrite(int fd, const char* buffer, size_t count, off_t offset);
 ssize_t vfs_file_write(struct vfs_file* file, const char* buffer, size_t count);
 ssize_t vfs_write(int fd, const char* buffer, size_t count);
 
-ssize_t
-__vfs_pread(struct vfs_file* file, char* buffer, size_t count, off_t* offset);
+ssize_t __vfs_pread(struct vfs_file* file, char* buffer, size_t count, off_t* offset);
 ssize_t vfs_pread(int fd, char* buffer, size_t count, off_t offset);
 ssize_t vfs_file_read(struct vfs_file* file, char* buffer, size_t count);
 ssize_t vfs_read(int fd, char* buffer, size_t count);
 
 off_t vfs_lseek(int fd, off_t offset, int whence);
 int vfs_mkdir(const char* path, uint16_t mode);
-int vfs_create(const char* path,
-	       uint16_t mode,
-	       int flags,
-	       struct vfs_dentry** out_dentry);
+int vfs_create(const char* path, uint16_t mode, int flags, struct vfs_dentry** out_dentry);
 
 // --- Utility Functions ---
 char* dentry_to_abspath(struct vfs_dentry* dentry);

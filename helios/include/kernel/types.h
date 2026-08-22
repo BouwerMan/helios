@@ -73,15 +73,14 @@ struct hlist_node {
 #define __same_type(a, b) __builtin_types_compatible_p(typeof(a), typeof(b))
 
 /*
-  * __unqual_scalar_typeof(x) - Declare an unqualified scalar type, leaving
-  *			       non-scalar types unchanged.
-  */
+ * __unqual_scalar_typeof(x) - Declare an unqualified scalar type, leaving
+ *			       non-scalar types unchanged.
+ */
 /*
-  * Prefer C11 _Generic for better compile-times and simpler code. Note: 'char'
-  * is not type-compatible with 'signed char', and we define a separate case.
-  */
-#define __scalar_type_to_expr_cases(type) \
-	unsigned type : (unsigned type)0, signed type : (signed type)0
+ * Prefer C11 _Generic for better compile-times and simpler code. Note: 'char'
+ * is not type-compatible with 'signed char', and we define a separate case.
+ */
+#define __scalar_type_to_expr_cases(type) unsigned type : (unsigned type)0, signed type : (signed type)0
 
 #define __unqual_scalar_typeof(x)                              \
 	typeof(_Generic((x),                                   \
@@ -94,8 +93,8 @@ struct hlist_node {
 		       default: (x)))
 
 /* Is this type a native word size -- useful for atomic operations */
-#define __native_word(t)                                            \
-	(sizeof(t) == sizeof(char) || sizeof(t) == sizeof(short) || \
-	 sizeof(t) == sizeof(int) || sizeof(t) == sizeof(long))
+#define __native_word(t)                                                                        \
+	(sizeof(t) == sizeof(char) || sizeof(t) == sizeof(short) || sizeof(t) == sizeof(int) || \
+	 sizeof(t) == sizeof(long))
 
-//NOLINTEND
+// NOLINTEND

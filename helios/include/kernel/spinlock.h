@@ -138,8 +138,7 @@ typedef struct {
 
 static inline spinlock_guard_t __spin_guard_init(spinlock_t* lock)
 {
-	return (spinlock_guard_t) { .lock = lock,
-				    .flags = spin_lock_irqsave(lock) };
+	return (spinlock_guard_t) { .lock = lock, .flags = spin_lock_irqsave(lock) };
 }
 
 static inline void __spin_guard_fini(spinlock_guard_t* guard)
@@ -152,9 +151,7 @@ static inline void __spin_guard_fini(spinlock_guard_t* guard)
  *
  * @param lockp Pointer to the spinlock to acquire.
  */
-#define spin_guard(lockp)               \
-	spinlock_guard_t __UNIQUE_ID(g) \
-		__cleanup(__spin_guard_fini) = __spin_guard_init(lockp)
+#define spin_guard(lockp) spinlock_guard_t __UNIQUE_ID(g) __cleanup(__spin_guard_fini) = __spin_guard_init(lockp)
 
 /**
  * @brief Holds a spinlock for the statement that follows.
@@ -166,9 +163,8 @@ static inline void __spin_guard_fini(spinlock_guard_t* guard)
  */
 #define scoped_spin_guard(lockp) __scoped_spin_guard(lockp, __COUNTER__)
 
-#define __scoped_spin_guard(lockp, id)                                        \
-	for (spinlock_guard_t __CONCAT(__uid_guard_, id)                      \
-		     __cleanup(__spin_guard_fini) = __spin_guard_init(lockp), \
-		     *__CONCAT(__uid_done_, id) = nullptr;                    \
-	     !__CONCAT(__uid_done_, id);                                      \
+#define __scoped_spin_guard(lockp, id)                                                                            \
+	for (spinlock_guard_t __CONCAT(__uid_guard_, id) __cleanup(__spin_guard_fini) = __spin_guard_init(lockp), \
+							 *__CONCAT(__uid_done_, id) = nullptr;                    \
+	     !__CONCAT(__uid_done_, id);                                                                          \
 	     __CONCAT(__uid_done_, id) = (void*)1)

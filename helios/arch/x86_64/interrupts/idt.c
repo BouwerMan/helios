@@ -30,13 +30,12 @@
 #include "mm/address_space_dump.h"
 
 /*******************************************************************************
-* Global Variable Definitions
-*******************************************************************************/
+ * Global Variable Definitions
+ *******************************************************************************/
 
 volatile int g_interrupt_nesting_level = 0;
 
-__attribute__((aligned(0x10))) static idt_entry_t
-	idt[256]; // Create an array of IDT entries; aligned for performance
+__attribute__((aligned(0x10))) static idt_entry_t idt[256]; // Create an array of IDT entries; aligned for performance
 static idtr_t idtr;
 
 // ISR Stuff
@@ -83,8 +82,8 @@ static const char* exception_messages[] = {
 };
 
 /*******************************************************************************
-* Private Function Prototypes
-*******************************************************************************/
+ * Private Function Prototypes
+ *******************************************************************************/
 
 /**
  * @brief Sets an entry in the Interrupt Descriptor Table (IDT).
@@ -104,8 +103,8 @@ static void set_descriptor(uint8_t vector, uint64_t isr, uint8_t flags);
 static void default_exception_handler(struct registers* registers);
 
 /*******************************************************************************
-* Public Function Definitions
-*******************************************************************************/
+ * Public Function Definitions
+ *******************************************************************************/
 
 /**
  * @brief Initializes the Interrupt Descriptor Table (IDT) and Programmable
@@ -179,9 +178,7 @@ void idt_init()
  */
 void isr_install_handler(int isr, void (*handler)(struct registers* r))
 {
-	log_debug("Installing ISR handler (%p) for interrupt %d",
-		  (void*)handler,
-		  isr);
+	log_debug("Installing ISR handler (%p) for interrupt %d", (void*)handler, isr);
 	interrupt_handlers[isr] = handler;
 }
 
@@ -346,9 +343,7 @@ void interrupt_handler(struct registers* r)
 		handler(r);
 	} else if (r->int_no < 32) {
 		// If the interrupt is an exception, log the error and halt
-		log_error("%s\n%s",
-			  (char*)exception_messages[r->int_no],
-			  "Exception. System Halted!");
+		log_error("%s\n%s", (char*)exception_messages[r->int_no], "Exception. System Halted!");
 		for (;;)
 			;
 	}
@@ -375,8 +370,8 @@ bool is_in_interrupt_context()
 }
 
 /*******************************************************************************
-* Private Function Definitions
-*******************************************************************************/
+ * Private Function Definitions
+ *******************************************************************************/
 
 static void set_descriptor(uint8_t vector, uint64_t isr, uint8_t flags)
 {
@@ -397,10 +392,9 @@ static void default_exception_handler(struct registers* registers)
 	klog_flush();
 	console_flush();
 
-	log_error(
-		"Recieved interrupt #%lx with error code %lx on the default handler!",
-		registers->int_no,
-		registers->err_code);
+	log_error("Recieved interrupt #%lx with error code %lx on the default handler!",
+		  registers->int_no,
+		  registers->err_code);
 	log_error("Exception: %s", exception_messages[registers->int_no]);
 
 	scheduler_dump();
@@ -413,10 +407,7 @@ static void default_exception_handler(struct registers* registers)
 	void* return_address = (void*)(*(u64*)(registers->rbp + 8));
 
 	log_error("Return address: %p", return_address);
-	log_error("RIP: %lx, RSP: %lx, RBP: %lx",
-		  registers->rip,
-		  registers->rsp,
-		  registers->rbp);
+	log_error("RIP: %lx, RSP: %lx, RBP: %lx", registers->rip, registers->rsp, registers->rbp);
 	log_error("RAX: %lx, RBX: %lx, RCX: %lx, RDX: %lx",
 		  registers->rax,
 		  registers->rbx,
@@ -428,11 +419,7 @@ static void default_exception_handler(struct registers* registers)
 		  registers->rflags,
 		  registers->ds);
 	log_error("CS: %lx, SS: %lx", registers->cs, registers->ss);
-	log_error("R8: %lx, R9: %lx, R10: %lx, R11: %lx",
-		  registers->r8,
-		  registers->r9,
-		  registers->r10,
-		  registers->r11);
+	log_error("R8: %lx, R9: %lx, R10: %lx, R11: %lx", registers->r8, registers->r9, registers->r10, registers->r11);
 	log_error("R12: %lx, R13: %lx, R14: %lx, R15: %lx",
 		  registers->r12,
 		  registers->r13,

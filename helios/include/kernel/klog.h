@@ -43,8 +43,7 @@ struct klog_header {
 
 static constexpr u8 KLOG_HDR_LEN_8 = 32 / 8;
 _Static_assert(KLOG_HDR_LEN_8 == 4, "log_header must be 32 bytes");
-_Static_assert(sizeof(struct klog_header) == (size_t)(KLOG_HDR_LEN_8 * 8U),
-	       "log_header must be 32 bytes");
+_Static_assert(sizeof(struct klog_header) == (size_t)(KLOG_HDR_LEN_8 * 8U), "log_header must be 32 bytes");
 
 struct klog_ring {
 	u8* buf;
@@ -63,10 +62,9 @@ struct klog_cursor {
 	struct timer timer;
 };
 
-typedef int (*klog_emit_fn)(const struct klog_header* hdr,
-			    const u8* payload,
-			    u32 payload_len,
-			    void* cookie /* sink context */
+typedef int (*klog_emit_fn)(const struct klog_header* hdr, const u8* payload, u32 payload_len, void* cookie /* sink
+													       context
+													     */
 );
 
 /**

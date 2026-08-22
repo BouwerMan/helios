@@ -14,13 +14,11 @@
 struct ring_buffer {
 	char* buffer;
 	size_t size;
-	volatile size_t head; // The producer (write syscall) writes here
-	volatile size_t tail; // The consumer (worker thread) reads from here
+	volatile size_t head;	  // The producer (write syscall) writes here
+	volatile size_t tail;	  // The consumer (worker thread) reads from here
 	spinlock_t lock;
-	struct waitqueue
-		readers;      // Tasks waiting to read from the TTY (for stdin)
-	struct waitqueue
-		writers; // Tasks waiting to write to the TTY (if buffer is full)
+	struct waitqueue readers; // Tasks waiting to read from the TTY (for stdin)
+	struct waitqueue writers; // Tasks waiting to write to the TTY (if buffer is full)
 };
 
 /**
@@ -66,14 +64,10 @@ void register_tty(struct tty* tty);
  *
  * @return Number of bytes written to the TTY.
  */
-ssize_t tty_write(struct vfs_file* file,
-		  const char* buffer,
-		  size_t count,
-		  off_t* offset);
+ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count, off_t* offset);
 
 void tty_add_input_char(struct tty* tty, char c);
-ssize_t
-tty_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset);
+ssize_t tty_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset);
 ssize_t __read_from_tty(struct tty* tty, char* buffer, size_t count);
 
 /**

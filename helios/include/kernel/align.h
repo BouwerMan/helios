@@ -21,25 +21,21 @@
 	})
 
 /* Compile-time check: only instantiated when 'a' is an ICE. */
-#define __ALIGN_CHECK_CT(a)                                                   \
-	((void)__builtin_choose_expr(                                         \
-		__builtin_constant_p(a),                                      \
-		sizeof(char[((a) > 0 && (((a) & ((a) - 1)) == 0)) ? 1 : -1]), \
-		0))
+#define __ALIGN_CHECK_CT(a)                                                                        \
+	((void)__builtin_choose_expr(__builtin_constant_p(a),                                      \
+				     sizeof(char[((a) > 0 && (((a) & ((a) - 1)) == 0)) ? 1 : -1]), \
+				     0))
 
 /* Constant-only API (for your *_CONST variants) */
-#define __ALIGN_CHECK_CONST(a) \
-	((void)sizeof(char[((a) > 0 && (((a) & ((a) - 1)) == 0)) ? 1 : -1]))
+#define __ALIGN_CHECK_CONST(a) ((void)sizeof(char[((a) > 0 && (((a) & ((a) - 1)) == 0)) ? 1 : -1]))
 
 /* Hybrid check: compile-time when possible, runtime otherwise */
-#define _ALIGN_CHECK(a)                                                      \
-	do {                                                                 \
-		__ALIGN_CHECK_CT(a);                                         \
-		if (!__builtin_constant_p(a)) {                              \
-			if (!__ALIGN_IS_POW2_RUNTIME(a))                     \
-				__ALIGN_PANIC(                               \
-					"align must be a power of two > 0"); \
-		}                                                            \
+#define _ALIGN_CHECK(a)                                                                                     \
+	do {                                                                                                \
+		__ALIGN_CHECK_CT(a);                                                                        \
+		if (!__builtin_constant_p(a)) {                                                             \
+			if (!__ALIGN_IS_POW2_RUNTIME(a)) __ALIGN_PANIC("align must be a power of two > 0"); \
+		}                                                                                           \
 	} while (0)
 
 /**
@@ -72,28 +68,22 @@
  * Safer versions that work with constant alignments only
  * Better for performance-critical code where alignment is known at compile time
  */
-#define ALIGN_UP_CONST(x, align)                            \
-	(__builtin_constant_p(align) ?                      \
-		 (__ALIGN_CHECK_CONST(align),               \
-		  (typeof(x))(((x) + (align) - 1) &         \
-			      ~((typeof(x))(align) - 1))) : \
+#define ALIGN_UP_CONST(x, align)                                                                              \
+	(__builtin_constant_p(align) ?                                                                        \
+		 (__ALIGN_CHECK_CONST(align), (typeof(x))(((x) + (align) - 1) & ~((typeof(x))(align) - 1))) : \
 		 ALIGN_UP(x, align))
 
-#define ALIGN_DOWN_CONST(x, align)                                \
-	(__builtin_constant_p(align) ?                            \
-		 (__ALIGN_CHECK_CONST(align),                     \
-		  (typeof(x))((x) & ~((typeof(x))(align) - 1))) : \
-		 ALIGN_DOWN(x, align))
+#define ALIGN_DOWN_CONST(x, align)                                                                                  \
+	(__builtin_constant_p(align) ? (__ALIGN_CHECK_CONST(align), (typeof(x))((x) & ~((typeof(x))(align) - 1))) : \
+				       ALIGN_DOWN(x, align))
 
 /**
  * Pointer-specific alignment macros
  * Handles pointer arithmetic correctly
  */
-#define ALIGN_PTR_UP(ptr, align) \
-	((typeof(ptr))ALIGN_UP((uintptr_t)(ptr), (align)))
+#define ALIGN_PTR_UP(ptr, align) ((typeof(ptr))ALIGN_UP((uintptr_t)(ptr), (align)))
 
-#define ALIGN_PTR_DOWN(ptr, align) \
-	((typeof(ptr))ALIGN_DOWN((uintptr_t)(ptr), (align)))
+#define ALIGN_PTR_DOWN(ptr, align) ((typeof(ptr))ALIGN_DOWN((uintptr_t)(ptr), (align)))
 
 /**
  * Check if value is aligned to boundary

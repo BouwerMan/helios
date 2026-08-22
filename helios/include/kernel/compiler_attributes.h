@@ -11,9 +11,8 @@
 #define __initdata __attribute__((section(".init.data")))
 
 /* Use when a non-init caller must reference an init symbol */
-#define __ref                       \
-	__attribute__((no_sanitize( \
-		"address"))) /* marker; you can also put it in a .ref.text if you add checks */
+#define __ref __attribute__((no_sanitize("address"))) /* marker; you can also put it in a .ref.text if you add checks \
+						       */
 
 // Always inline, even if the compiler thinks otherwise
 #ifndef __always_inline
@@ -78,13 +77,11 @@
 #endif
 
 #ifndef __weak_alias
-#define __weak_alias(old, new) \
-	extern __typeof(old) new __attribute__((__weak__, __alias__(#old)))
+#define __weak_alias(old, new) extern __typeof(old) new __attribute__((__weak__, __alias__(#old)))
 #endif
 
 #ifndef __strong_alias
-#define __strong_alias(old, new) \
-	extern __typeof(old) new __attribute__((__alias__(#old)))
+#define __strong_alias(old, new) extern __typeof(old) new __attribute__((__alias__(#old)))
 #endif
 
 #ifndef __cleanup

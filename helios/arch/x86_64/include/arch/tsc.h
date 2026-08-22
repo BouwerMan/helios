@@ -8,12 +8,11 @@ static inline uint64_t __rdtsc(void)
 	uint32_t lo, hi;
 
 	// Serialize previous instructions to prevent reordering
-	__asm__ __volatile__(
-		"lfence\n" // wait for all prior instructions to complete
-		"rdtsc\n"  // read time-stamp counter
-		: "=a"(lo), "=d"(hi)
-		:
-		: "memory");
+	__asm__ __volatile__("lfence\n" // wait for all prior instructions to complete
+			     "rdtsc\n"	// read time-stamp counter
+			     : "=a"(lo), "=d"(hi)
+			     :
+			     : "memory");
 
 	return ((uint64_t)hi << 32) | lo;
 }

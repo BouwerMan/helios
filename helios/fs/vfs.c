@@ -90,29 +90,15 @@ void vfs_init()
 {
 	sb_list = (struct vfs_superblock**)kmalloc(sizeof(*sb_list) * 8);
 
-	int res = slab_cache_init(&dentry_cache,
-				  "VFS Dentry",
-				  sizeof(struct vfs_dentry),
-				  0,
-				  NULL,
-				  NULL);
+	int res = slab_cache_init(&dentry_cache, "VFS Dentry", sizeof(struct vfs_dentry), 0, NULL, NULL);
 	if (res < 0) {
-		log_error(
-			"Could not init dentry cache, slab_cache_init() returned %d",
-			res);
+		log_error("Could not init dentry cache, slab_cache_init() returned %d", res);
 		panic("Dentry cache init failure");
 	}
 
-	res = slab_cache_init(&file_cache,
-			      "VFS Filesystem",
-			      sizeof(struct vfs_file),
-			      8,
-			      nullptr,
-			      nullptr);
+	res = slab_cache_init(&file_cache, "VFS Filesystem", sizeof(struct vfs_file), 8, nullptr, nullptr);
 	if (res < 0) {
-		log_error(
-			"Could not init file cache, slab_cache_init() returned %d",
-			res);
+		log_error("Could not init file cache, slab_cache_init() returned %d", res);
 		panic("file cache init failure");
 	}
 
@@ -212,9 +198,7 @@ mount_point_fail:
 struct vfs_inode* new_inode(struct vfs_superblock* sb, size_t id)
 {
 	if (inode_ht_check(sb, id)) {
-		log_error(
-			"Inode %zu already exists in cache, cannot create new.",
-			id);
+		log_error("Inode %zu already exists in cache, cannot create new.", id);
 		return nullptr;
 	}
 
@@ -383,9 +367,7 @@ void dentry_add(struct vfs_dentry* dentry)
 	dentry->bucket = bucket;
 	hash_add(d_ht, &dentry->hash, hash);
 	dget(dentry);
-	log_debug("Added dentry %s to hash table, ref_count: %d",
-		  dentry->name,
-		  dentry->ref_count);
+	log_debug("Added dentry %s to hash table, ref_count: %d", dentry->name, dentry->ref_count);
 }
 
 /**
@@ -438,8 +420,7 @@ struct vfs_dentry* __dentry_lookup(struct vfs_dentry* parent, const char* name)
 		return dget(found);
 	}
 
-	if (!parent->inode || !parent->inode->ops ||
-	    !parent->inode->ops->lookup) {
+	if (!parent->inode || !parent->inode->ops || !parent->inode->ops->lookup) {
 		log_error("Invalid inode operations");
 		dentry_dealloc(child);
 		return nullptr; // Handle invalid inode or missing lookup
@@ -513,8 +494,7 @@ u32 dentry_hash(const struct vfs_dentry* key)
  */
 bool dentry_compare(const struct vfs_dentry* d1, const struct vfs_dentry* d2)
 {
-	return (strcmp(d1->name, d2->name) == 0) &&
-	       (d1->parent->inode->id == d2->parent->inode->id);
+	return (strcmp(d1->name, d2->name) == 0) && (d1->parent->inode->id == d2->parent->inode->id);
 }
 
 /**
@@ -662,10 +642,7 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags)
 	if (!dentry || !dentry->inode) {
 		log_debug("Dentry not found for path: %s", path);
 		if (flags & O_CREAT) {
-			int res = vfs_create(norm_path,
-					     VFS_PERM_ALL,
-					     flags,
-					     &dentry);
+			int res = vfs_create(norm_path, VFS_PERM_ALL, flags, &dentry);
 			if (res < 0 || !dentry || !dentry->inode) {
 				kfree(norm_path);
 				return res;
@@ -709,10 +686,7 @@ int __vfs_open_for_task(struct task* t, const char* path, int flags)
 		kfree(norm_path);
 		return -EMFILE; // Is this the right code?
 	}
-	log_debug("Opened file %s with fd %d and dref_count %d",
-		  dentry->name,
-		  fd,
-		  dentry->ref_count);
+	log_debug("Opened file %s with fd %d and dref_count %d", dentry->name, fd, dentry->ref_count);
 
 	kfree(norm_path);
 	return fd;
@@ -881,8 +855,7 @@ static int __split_path(const char* path, char** parent_out, char** name_out)
 	}
 
 	// Name being "." or ".." is usually invalid (especially for creation)
-	if (name_begin[0] == '.' &&
-	    (name_begin[1] == '.' || name_begin[1] == '\0')) {
+	if (name_begin[0] == '.' && (name_begin[1] == '.' || name_begin[1] == '\0')) {
 		log_error("Invalid basename: '%s'", name_begin);
 		*parent_out = *name_out = nullptr;
 		return -EINVAL;
@@ -910,18 +883,14 @@ static int __split_path(const char* path, char** parent_out, char** name_out)
 }
 
 // TODO: Finish implementing
-static inline int vfs_create_args_valid(const char* path,
-					uint16_t mode,
-					int flags,
-					struct vfs_dentry** out)
+static inline int vfs_create_args_valid(const char* path, uint16_t mode, int flags, struct vfs_dentry** out)
 {
 	// Early validation of non-path parameters
 	if (!out) {
 		return -EINVAL;
 	}
 
-	static constexpr int FORBIDDEN_FLAG_MASK = O_TRUNC | O_APPEND |
-						   O_DIRECTORY;
+	static constexpr int FORBIDDEN_FLAG_MASK = O_TRUNC | O_APPEND | O_DIRECTORY;
 	if (flags & FORBIDDEN_FLAG_MASK) {
 		return -EINVAL;
 	}
@@ -961,10 +930,7 @@ static inline int vfs_create_args_valid(const char* path,
 	return 0;
 }
 
-int vfs_create(const char* path,
-	       uint16_t mode,
-	       int flags,
-	       struct vfs_dentry** out_dentry)
+int vfs_create(const char* path, uint16_t mode, int flags, struct vfs_dentry** out_dentry)
 {
 	if (!path) {
 		return -EINVAL;
@@ -992,8 +958,7 @@ int vfs_create(const char* path,
 	}
 
 	struct vfs_dentry* pdentry = vfs_lookup(parent);
-	if (!pdentry || !pdentry->inode ||
-	    !(pdentry->inode->filetype == FILETYPE_DIR)) {
+	if (!pdentry || !pdentry->inode || !(pdentry->inode->filetype == FILETYPE_DIR)) {
 		res = -ENOTDIR;
 		goto free_all;
 		// dput(pdentry);
@@ -1154,10 +1119,7 @@ int vfs_mkdir(const char* path, uint16_t mode)
 	return 0;
 }
 
-ssize_t __vfs_pwrite(struct vfs_file* file,
-		     const char* buffer,
-		     size_t count,
-		     off_t* offset)
+ssize_t __vfs_pwrite(struct vfs_file* file, const char* buffer, size_t count, off_t* offset)
 {
 	if (!file || !offset || !buffer) {
 		return -EINVAL;
@@ -1226,8 +1188,7 @@ ssize_t vfs_pwrite(int fd, const char* buffer, size_t count, off_t offset)
 	return __vfs_pwrite(file, buffer, count, &offset);
 }
 
-ssize_t
-__vfs_pread(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
+ssize_t __vfs_pread(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
 {
 	if (!file || !offset || !buffer) {
 		return -EINVAL;
@@ -1308,10 +1269,8 @@ off_t vfs_lseek(int fd, off_t offset, int whence)
 		if (file->f_pos + offset < 0) break;
 		file->f_pos += offset;
 		return file->f_pos;
-	case SEEK_END:
-		file->f_pos = (off_t)file->dentry->inode->f_size + offset;
-		return file->f_pos;
-	default: break;
+	case SEEK_END: file->f_pos = (off_t)file->dentry->inode->f_size + offset; return file->f_pos;
+	default:       break;
 	}
 
 	return -EINVAL;
@@ -1359,10 +1318,7 @@ static struct vfs_fs_type* find_filesystem(const char* fs_type)
  * @param fstype Filesystem type to mount.
  * @param flags Mount flags.
  */
-int vfs_mount(const char* source,
-	      const char* target,
-	      const char* fstype,
-	      int flags)
+int vfs_mount(const char* source, const char* target, const char* fstype, int flags)
 {
 	// Find the filesystem type (e.g., "fat32", "ramfs") in registered filesystems.
 	struct vfs_fs_type* fs = find_filesystem(fstype);
@@ -1397,8 +1353,7 @@ int vfs_mount(const char* source,
 		old->ref_count--;
 	}
 
-	struct vfs_mount* new_mount =
-		(struct vfs_mount*)kmalloc(sizeof(struct vfs_mount));
+	struct vfs_mount* new_mount = (struct vfs_mount*)kmalloc(sizeof(struct vfs_mount));
 	new_mount->mount_point = strdup(target);
 	sb->mount_point = new_mount->mount_point;
 	new_mount->sb = sb;
@@ -1419,12 +1374,10 @@ struct vfs_dentry* vfs_lookup(const char* path)
 
 	// This can be called with no cwd early in boot
 	struct task* t = get_current_task();
-	struct vfs_dentry* base = t ? t->cwd :
-				      g_vfs_root_mount->sb->root_dentry;
+	struct vfs_dentry* base = t ? t->cwd : g_vfs_root_mount->sb->root_dentry;
 	char* norm_path = vfs_normalize_path(path, base);
 
-	struct vfs_dentry* current_dentry =
-		__vfs_walk_path(g_vfs_root_mount->sb->root_dentry, norm_path);
+	struct vfs_dentry* current_dentry = __vfs_walk_path(g_vfs_root_mount->sb->root_dentry, norm_path);
 
 	kfree(norm_path);
 	return current_dentry;
@@ -1476,8 +1429,7 @@ static const char* path_next_token(struct path_tokenizer* tok, size_t* out_len)
 	const char* token_start = &tok->path[tok->offset];
 
 	// Scan forward to find the end of the current token
-	while (tok->path[tok->offset] != '/' &&
-	       tok->path[tok->offset] != '\0') {
+	while (tok->path[tok->offset] != '/' && tok->path[tok->offset] != '\0') {
 		tok->offset++;
 	}
 
@@ -1595,10 +1547,7 @@ char* dentry_to_abspath(struct vfs_dentry* dentry)
 	size_t result_len = 1;
 
 	for (int i = 0; i < stack_depth; i++) {
-		log_debug("Component %d: '%.*s'",
-			  i,
-			  (int)stack[i].len,
-			  stack[i].start);
+		log_debug("Component %d: '%.*s'", i, (int)stack[i].len, stack[i].start);
 		result_len += stack[i].len;
 		if (i < stack_depth - 1) {
 			result_len += 1; // Separator '/'
@@ -1629,8 +1578,7 @@ char* dentry_to_abspath(struct vfs_dentry* dentry)
 
 char* vfs_normalize_path(const char* path, struct vfs_dentry* base_dir)
 {
-	if (!base_dir || !base_dir->inode ||
-	    base_dir->inode->filetype != FILETYPE_DIR) {
+	if (!base_dir || !base_dir->inode || base_dir->inode->filetype != FILETYPE_DIR) {
 		panic("TATDEHJS");
 		log_error("Inavlid base dir");
 		return nullptr;
@@ -1706,10 +1654,7 @@ char* vfs_normalize_path(const char* path, struct vfs_dentry* base_dir)
 
 	size_t result_len = 1; // Leading '/'
 	for (int i = 0; i < stack_depth; i++) {
-		log_debug("Component %d: '%.*s'",
-			  i,
-			  (int)stack[i].len,
-			  stack[i].start);
+		log_debug("Component %d: '%.*s'", i, (int)stack[i].len, stack[i].start);
 		result_len += stack[i].len;
 		if (i < stack_depth - 1) {
 			result_len += 1; // '/' separator
@@ -1758,8 +1703,8 @@ KTEST(test_path_tokenizer)
 		{ "/foo/bar/baz/qux", { "foo", "bar", "baz", "qux" }, 4 },
 		{ "foo/bar", { "foo", "bar" }, 2 },
 		{ "//foo//bar//", { "foo", "bar" }, 2 },
-		{ "/", {}, 0 },
-		{ "", {}, 0 },
+		{ "/", { }, 0 },
+		{ "", { }, 0 },
 	};
 
 	int fails = 0;
@@ -1772,33 +1717,24 @@ KTEST(test_path_tokenizer)
 
 		while ((token = path_next_token(&tok, &len))) {
 			if (n >= cases[i].count) {
-				log_error("[T%zu] extra token '%.*s'",
-					  i,
-					  (int)len,
-					  token);
+				log_error("[T%zu] extra token '%.*s'", i, (int)len, token);
 				fails++;
 				break;
 			}
-			if (strlen(cases[i].expected[n]) != len ||
-			    strncmp(token, cases[i].expected[n], len) != 0) {
-				log_error(
-					"[T%zu] token[%d]: got '%.*s', want '%s'",
-					i,
-					n,
-					(int)len,
-					token,
-					cases[i].expected[n]);
+			if (strlen(cases[i].expected[n]) != len || strncmp(token, cases[i].expected[n], len) != 0) {
+				log_error("[T%zu] token[%d]: got '%.*s', want '%s'",
+					  i,
+					  n,
+					  (int)len,
+					  token,
+					  cases[i].expected[n]);
 				fails++;
 			}
 			n++;
 		}
 
 		if (n < cases[i].count) {
-			log_error("[T%zu] got %d tokens, want %d for path='%s'",
-				  i,
-				  n,
-				  cases[i].count,
-				  cases[i].path);
+			log_error("[T%zu] got %d tokens, want %d for path='%s'", i, n, cases[i].count, cases[i].path);
 			fails++;
 		}
 	}
@@ -1832,10 +1768,7 @@ KTEST(test_split_path)
 	/* Core success and error cases. */
 	static const struct test_case cases[] = {
 		/* --- Success cases --- */
-		{ "/a/b/c",
-		  0,
-		  "/",
-		  "c" }, /* parent will be "/a/b" (verified below) */
+		{ "/a/b/c", 0, "/", "c" }, /* parent will be "/a/b" (verified below) */
 		{ "/a/b//c///", 0, "/a/b", "c" },
 		{ "a/b/c", 0, "a/b", "c" },
 		{ "a////b", 0, "a", "b" },
@@ -1861,8 +1794,7 @@ KTEST(test_split_path)
 	/* Run the table-driven tests. */
 	for (size_t t = 0; t < sizeof(cases) / sizeof(cases[0]); ++t) {
 		const struct test_case* tc = &cases[t];
-		char* parent =
-			(char*)0x1; /* sentinel non-nullptr so we can verify error paths null them */
+		char* parent = (char*)0x1; /* sentinel non-nullptr so we can verify error paths null them */
 		char* name = (char*)0x1;
 
 		int rc = __split_path(tc->path, &parent, &name);
@@ -1870,51 +1802,39 @@ KTEST(test_split_path)
 
 		if (tc->exp_rc == 0) {
 			if (rc != 0) {
-				log_error(
-					"[T%zu] expected 0, got %d for path='%s'",
-					t,
-					rc,
-					tc->path);
+				log_error("[T%zu] expected 0, got %d for path='%s'", t, rc, tc->path);
 				++fails;
 			}
 			if (!parent || !name) {
-				log_error(
-					"[T%zu] outputs are nullptr on success for path='%s'",
-					t,
-					tc->path);
+				log_error("[T%zu] outputs are nullptr on success for path='%s'", t, tc->path);
 				++fails;
 			} else {
 				/* Parent can be more than just "/" or "."; check exact string expectations. */
-				if (strcmp(tc->exp_parent, "/") == 0 &&
-				    strcmp(tc->path, "/a/b/c") == 0) {
+				if (strcmp(tc->exp_parent, "/") == 0 && strcmp(tc->path, "/a/b/c") == 0) {
 					/* Special verify for the first test: parent should be "/a/b". */
 					if (strcmp(parent, "/a/b") != 0) {
-						log_error(
-							"[T%zu] parent mismatch path='%s' got='%s' want='/a/b'",
-							t,
-							tc->path,
-							parent);
+						log_error("[T%zu] parent mismatch path='%s' got='%s' want='/a/b'",
+							  t,
+							  tc->path,
+							  parent);
 						++fails;
 					}
 				} else {
-					if (strcmp(parent, tc->exp_parent) !=
-					    0) {
-						log_error(
-							"[T%zu] parent mismatch path='%s' got='%s' want='%s'",
-							t,
-							tc->path,
-							parent,
-							tc->exp_parent);
+					if (strcmp(parent, tc->exp_parent) != 0) {
+						log_error("[T%zu] parent mismatch path='%s' got='%s' want='%s'",
+							  t,
+							  tc->path,
+							  parent,
+							  tc->exp_parent);
 						++fails;
 					}
 				}
 				if (strcmp(name, tc->exp_name) != 0) {
-					log_error(
-						"[T%zu] name mismatch path='%s' got='%s' want='%s'",
-						t,
-						tc->path,
-						name,
-						tc->exp_name);
+					log_error("[T%zu] name mismatch path='%s' got='%s' want='%s'",
+						  t,
+						  tc->path,
+						  name,
+						  tc->exp_name);
 					++fails;
 				}
 			}
@@ -1924,25 +1844,18 @@ KTEST(test_split_path)
 		} else {
 			/* Expect an error. */
 			if (rc != tc->exp_rc) {
-				log_error(
-					"[T%zu] expected rc=%d, got %d for path='%s'",
-					t,
-					tc->exp_rc,
-					rc,
-					tc->path);
+				log_error("[T%zu] expected rc=%d, got %d for path='%s'", t, tc->exp_rc, rc, tc->path);
 				++fails;
 			}
 			if (parent != nullptr || name != nullptr) {
-				log_error(
-					"[T%zu] outputs must be nullptr on error for path='%s' (parent=%p, name=%p)",
-					t,
-					tc->path,
-					(void*)parent,
-					(void*)name);
+				log_error("[T%zu] outputs must be nullptr on error for path='%s' (parent=%p, name=%p)",
+					  t,
+					  tc->path,
+					  (void*)parent,
+					  (void*)name);
 				++fails;
 				/* Defensive: avoid freeing sentinels. */
-				if (parent && parent != (char*)0x1)
-					kfree(parent);
+				if (parent && parent != (char*)0x1) kfree(parent);
 				if (name && name != (char*)0x1) kfree(name);
 			}
 		}
@@ -1953,8 +1866,7 @@ KTEST(test_split_path)
 	/* Too-long name: "x/" + (VFS_MAX_NAME+1) of 'a' -> -VFS_ERR_NAMETOOLONG */
 	{
 		const size_t too_long = VFS_MAX_NAME + 1;
-		char buf[VFS_MAX_NAME + 4 +
-			 8]; /* "x/" + name + NUL; a little slack */
+		char buf[VFS_MAX_NAME + 4 + 8]; /* "x/" + name + NUL; a little slack */
 		char* p = buf;
 
 		*p++ = 'x';
@@ -1968,17 +1880,13 @@ KTEST(test_split_path)
 		int rc = __split_path(buf, &parent, &name);
 		++tests;
 		if (rc != -ENAMETOOLONG) {
-			log_error(
-				"[LEN1] expected -VFS_ERR_NAMETOOLONG, got %d for path of len=%zu",
-				rc,
-				strlen(buf));
+			log_error("[LEN1] expected -VFS_ERR_NAMETOOLONG, got %d for path of len=%zu", rc, strlen(buf));
 			++fails;
 		}
 		if (parent != nullptr || name != nullptr) {
-			log_error(
-				"[LEN1] outputs must be nullptr on error (parent=%p, name=%p)",
-				(void*)parent,
-				(void*)name);
+			log_error("[LEN1] outputs must be nullptr on error (parent=%p, name=%p)",
+				  (void*)parent,
+				  (void*)name);
 			++fails;
 			if (parent && parent != (char*)0x1) kfree(parent);
 			if (name && name != (char*)0x1) kfree(name);
@@ -2007,22 +1915,18 @@ KTEST(test_split_path)
 			++fails;
 		} else {
 			if (!parent || !name) {
-				log_error(
-					"[LEN2] outputs are nullptr on success");
+				log_error("[LEN2] outputs are nullptr on success");
 				++fails;
 			} else {
 				if (strcmp(parent, "x") != 0) {
-					log_error(
-						"[LEN2] parent mismatch got='%s' want='x'",
-						parent);
+					log_error("[LEN2] parent mismatch got='%s' want='x'", parent);
 					++fails;
 				}
 				size_t nlen = strlen(name);
 				if (nlen != VFS_MAX_NAME) {
-					log_error(
-						"[LEN2] name length mismatch got=%zu want=%zu",
-						nlen,
-						(size_t)VFS_MAX_NAME);
+					log_error("[LEN2] name length mismatch got=%zu want=%zu",
+						  nlen,
+						  (size_t)VFS_MAX_NAME);
 					++fails;
 				}
 			}
@@ -2031,9 +1935,7 @@ KTEST(test_split_path)
 		if (name) kfree(name);
 	}
 
-	log_info("parse_path_components: %zu/%zu tests passed",
-		 tests - fails,
-		 tests);
+	log_info("parse_path_components: %zu/%zu tests passed", tests - fails, tests);
 
 	return (int)fails;
 }

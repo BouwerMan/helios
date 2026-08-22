@@ -5,8 +5,7 @@
 #include "stdio.h"
 
 // TODO: Handle buffering properly
-size_t
-__fwrite(const void* buffer, size_t size, size_t count, FILE* __restrict stream)
+size_t __fwrite(const void* buffer, size_t size, size_t count, FILE* __restrict stream)
 {
 	if (!stream || !buffer) {
 		return 0;

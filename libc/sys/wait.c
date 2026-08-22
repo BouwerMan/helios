@@ -3,8 +3,7 @@
 
 pid_t waitpid(pid_t pid, int* stat_loc, int options)
 {
-	return (pid_t)__syscall3(
-		SYS_WAITPID, (long)pid, (long)stat_loc, (long)options);
+	return (pid_t)__syscall3(SYS_WAITPID, (long)pid, (long)stat_loc, (long)options);
 }
 
 // wait() is just waitpid() with specific arguments

@@ -116,9 +116,7 @@ static struct task* get_next_task()
 		return squeue.idle_task;
 	} else if (squeue.current_task == squeue.idle_task) {
 		// If we were the idle task and there is a ready task, pick it
-		struct task* next = list_first_entry(&squeue.ready_list,
-						     struct task,
-						     sched_list);
+		struct task* next = list_first_entry(&squeue.ready_list, struct task, sched_list);
 		return next;
 	}
 
@@ -134,13 +132,9 @@ static struct task* get_next_task()
 	// ready list is READY. So we don't have to do any looping for a simple
 	// round-robin scheduler. (This still sucks though)
 	if (current->state != READY) {
-		next = list_first_entry(&squeue.ready_list,
-					struct task,
-					sched_list);
+		next = list_first_entry(&squeue.ready_list, struct task, sched_list);
 	} else {
-		next = list_next_entry_circular(current,
-						&squeue.ready_list,
-						sched_list);
+		next = list_next_entry_circular(current, &squeue.ready_list, sched_list);
 	}
 
 	return next;
@@ -186,8 +180,7 @@ static int create_kernel_stack(struct task* task, entry_func entry)
 	uintptr_t stack_top = (uintptr_t)stack + STACK_SIZE_PAGES * PAGE_SIZE;
 
 	task->kernel_stack = stack_top;
-	task->regs = (struct registers*)(uintptr_t)(stack_top -
-						    sizeof(struct registers));
+	task->regs = (struct registers*)(uintptr_t)(stack_top - sizeof(struct registers));
 	// Simulate interrupt frame
 	task->regs->ss = KERNEL_DS; // optional for ring 0
 	task->regs->rsp = stack_top;
@@ -258,8 +251,7 @@ static void setup_first_kernel_task()
  */
 static void setup_idle_task()
 {
-	squeue.idle_task =
-		kthread_create("Idle task", (entry_func)idle_task_entry);
+	squeue.idle_task = kthread_create("Idle task", (entry_func)idle_task_entry);
 }
 
 /**
@@ -281,16 +273,9 @@ void scheduler_init(void)
 	list_init(&squeue.terminated_list);
 	spin_init(&squeue.lock);
 
-	int res = slab_cache_init(squeue.cache,
-				  "Scheduler Tasks",
-				  sizeof(struct task),
-				  0,
-				  NULL,
-				  NULL);
+	int res = slab_cache_init(squeue.cache, "Scheduler Tasks", sizeof(struct task), 0, NULL, NULL);
 	if (res < 0) {
-		log_error(
-			"Could not init scheduler tasks cache, slab_cache_init() returned %d",
-			res);
+		log_error("Could not init scheduler tasks cache, slab_cache_init() returned %d", res);
 		panic("Scheduler tasks cache init failure");
 	}
 
@@ -505,8 +490,7 @@ void reap_task(struct task* task)
 		log_info("Cleaning up task '%s' (PID %d)", pos->name, pos->pid);
 		task_remove(pos);
 		dput(pos->cwd);
-		void* stack_base = (void*)(task->kernel_stack -
-					   (STACK_SIZE_PAGES * PAGE_SIZE));
+		void* stack_base = (void*)(task->kernel_stack - (STACK_SIZE_PAGES * PAGE_SIZE));
 		free_pages(stack_base, STACK_SIZE_PAGES);
 
 		free_page(pos->vas->pml4);
@@ -520,10 +504,7 @@ void reap_task(struct task* task)
 void task_end(int status)
 {
 	struct task* task = get_current_task();
-	log_info("Task '%s' (PID %d) exiting with status %d",
-		 task->name,
-		 task->pid,
-		 status);
+	log_info("Task '%s' (PID %d) exiting with status %d", task->name, task->pid, status);
 
 	address_space_destroy(task->vas);
 	for (int i = 0; i < MAX_RESOURCES; i++) {
@@ -551,8 +532,7 @@ int copy_thread_state(struct task* child, struct registers* parent_regs)
 
 	uptr stack_top = (uptr)stack + (STACK_SIZE_PAGES * PAGE_SIZE);
 	child->kernel_stack = stack_top;
-	child->regs = (struct registers*)(uintptr_t)(stack_top -
-						     sizeof(struct registers));
+	child->regs = (struct registers*)(uintptr_t)(stack_top - sizeof(struct registers));
 
 	memcpy(child->regs, parent_regs, sizeof(struct registers));
 
@@ -664,25 +644,23 @@ void scheduler_dump()
 	struct task* pos;
 	log_info("Ready List:");
 	list_for_each_entry (pos, &squeue.ready_list, sched_list) {
-		log_info(
-			"  %d: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
-			pos->pid,
-			pos->name,
-			get_task_name(pos->type),
-			pos->state,
-			pos->kernel_stack,
-			pos->vas->pml4_phys);
+		log_info("  %d: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
+			 pos->pid,
+			 pos->name,
+			 get_task_name(pos->type),
+			 pos->state,
+			 pos->kernel_stack,
+			 pos->vas->pml4_phys);
 	}
 	log_info("Blocked List:");
 	list_for_each_entry (pos, &squeue.blocked_list, sched_list) {
-		log_info(
-			"  %d: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
-			pos->pid,
-			pos->name,
-			get_task_name(pos->type),
-			pos->state,
-			pos->kernel_stack,
-			pos->vas->pml4_phys);
+		log_info("  %d: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
+			 pos->pid,
+			 pos->name,
+			 get_task_name(pos->type),
+			 pos->state,
+			 pos->kernel_stack,
+			 pos->vas->pml4_phys);
 	}
 }
 
@@ -848,8 +826,7 @@ void waitqueue_wake_one(struct waitqueue* wqueue)
 		return;
 	}
 
-	struct task* next =
-		list_first_entry(&wqueue->waiters_list, struct task, wait_list);
+	struct task* next = list_first_entry(&wqueue->waiters_list, struct task, wait_list);
 
 	switch (next->wait_state) {
 	case WAIT_PREPARING:
@@ -887,14 +864,13 @@ void waitqueue_dump_waiters(struct waitqueue* wqueue)
 {
 	struct task* pos = nullptr;
 	list_for_each_entry (pos, &wqueue->waiters_list, wait_list) {
-		log_info(
-			"  %d: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
-			pos->pid,
-			pos->name,
-			get_task_name(pos->type),
-			pos->state,
-			pos->kernel_stack,
-			pos->vas->pml4_phys);
+		log_info("  %d: %s, type='%s', state=%d, kernel_stack=%lx, cr3=%lx",
+			 pos->pid,
+			 pos->name,
+			 get_task_name(pos->type),
+			 pos->state,
+			 pos->kernel_stack,
+			 pos->vas->pml4_phys);
 	}
 }
 

@@ -64,10 +64,7 @@ static inline int atomic_sub_and_test(int i, atomic_t* v)
 {
 	unsigned char c;
 
-	__asm__ volatile("subl %2,%0; sete %1"
-			 : "+m"(v->counter), "=qm"(c)
-			 : "ir"(i)
-			 : "memory");
+	__asm__ volatile("subl %2,%0; sete %1" : "+m"(v->counter), "=qm"(c) : "ir"(i) : "memory");
 	return c;
 }
 
@@ -117,48 +114,41 @@ static inline bool try_set_bit(volatile unsigned long* addr, unsigned bit)
 }
 
 // Returns true iff we transitioned 0->1 (you "won").
-static inline bool try_set_flag_mask(volatile unsigned long* addr,
-				     unsigned long mask)
+static inline bool try_set_flag_mask(volatile unsigned long* addr, unsigned long mask)
 {
 	unsigned char won;
-	__asm__ __volatile__(
-		"bsf %2, %%rcx\n\t"	 // RCX = index of the set bit in mask
-		"lock bts %%rcx, %1\n\t" // CF := old_bit; set bit
-		"setnc %0"		 // won = (CF == 0)
-		: "=q"(won), "+m"(*addr)
-		: "r"(mask)
-		: "rcx", "cc", "memory");
+	__asm__ __volatile__("bsf %2, %%rcx\n\t"      // RCX = index of the set bit in mask
+			     "lock bts %%rcx, %1\n\t" // CF := old_bit; set bit
+			     "setnc %0"		      // won = (CF == 0)
+			     : "=q"(won), "+m"(*addr)
+			     : "r"(mask)
+			     : "rcx", "cc", "memory");
 	return won;
 }
 
-static inline bool try_clear_flag_mask(volatile unsigned long* addr,
-				       unsigned long mask)
+static inline bool try_clear_flag_mask(volatile unsigned long* addr, unsigned long mask)
 {
 	unsigned char cleared;
-	__asm__ __volatile__(
-		"bsf %2, %%rcx\n\t"
-		"lock btr %%rcx, %1\n\t" // CF := old_bit; clear bit
-		"setc %0"		 // cleared = (CF == 1)
-		: "=q"(cleared), "+m"(*addr)
-		: "r"(mask)
-		: "rcx", "cc", "memory");
+	__asm__ __volatile__("bsf %2, %%rcx\n\t"
+			     "lock btr %%rcx, %1\n\t" // CF := old_bit; clear bit
+			     "setc %0"		      // cleared = (CF == 1)
+			     : "=q"(cleared), "+m"(*addr)
+			     : "r"(mask)
+			     : "rcx", "cc", "memory");
 	return cleared;
 }
 
-static inline void clear_flag_mask(volatile unsigned long* addr,
-				   unsigned long mask)
+static inline void clear_flag_mask(volatile unsigned long* addr, unsigned long mask)
 {
-	__asm__ __volatile__(
-		"bsf %1, %%rcx\n\t"	 /* RCX = bit index from one-hot mask */
-		"lock btr %%rcx, %0\n\t" /* clear bit */
-		: "+m"(*addr) /* %0: RMW memory operand (output list!) */
-		: "r"(mask)   /* %1: input mask */
-		: "rcx", "cc", "memory");
+	__asm__ __volatile__("bsf %1, %%rcx\n\t"      /* RCX = bit index from one-hot mask */
+			     "lock btr %%rcx, %0\n\t" /* clear bit */
+			     : "+m"(*addr)	      /* %0: RMW memory operand (output list!) */
+			     : "r"(mask)	      /* %1: input mask */
+			     : "rcx", "cc", "memory");
 }
 
 // TODO: Make READ_ONCE() macro
-static inline bool flags_test_acquire(const volatile unsigned long* addr,
-				      unsigned long mask)
+static inline bool flags_test_acquire(const volatile unsigned long* addr, unsigned long mask)
 {
 	unsigned long v = __atomic_load_n(addr, __ATOMIC_ACQUIRE);
 	return (v & mask) != 0;

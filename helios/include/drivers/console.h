@@ -15,15 +15,9 @@ void console_init();
  * @param buffer Source buffer containing the data to write.
  * @param count Number of bytes to write from the buffer.
  */
-ssize_t console_write(struct vfs_file* file,
-		      const char* buffer,
-		      size_t count,
-		      off_t* offset);
+ssize_t console_write(struct vfs_file* file, const char* buffer, size_t count, off_t* offset);
 
-ssize_t console_read(struct vfs_file* file,
-		     char* buffer,
-		     size_t count,
-		     off_t* offset);
+ssize_t console_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset);
 
 /**
  * @brief Attaches a TTY device to the console output.

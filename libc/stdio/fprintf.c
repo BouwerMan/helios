@@ -16,9 +16,7 @@ void __fputc_wrapper(char c, void* stream)
 	__fputc(c, (FILE*)stream);
 }
 
-int __vfprintf(FILE* __restrict stream,
-	       const char* __restrict format,
-	       va_list arg)
+int __vfprintf(FILE* __restrict stream, const char* __restrict format, va_list arg)
 {
 	return vfctprintf(__fputc_wrapper, stream, format, arg);
 }

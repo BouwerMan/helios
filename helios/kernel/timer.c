@@ -60,10 +60,7 @@ struct timer* timer_create()
  * @param callback Function to call when the timer expires.
  * @param data Data to pass to the callback function.
  */
-void timer_schedule(struct timer* timer,
-		    u64 delay_ms,
-		    timer_callback_t callback,
-		    void* data)
+void timer_schedule(struct timer* timer, u64 delay_ms, timer_callback_t callback, void* data)
 {
 	if (timer->active) {
 		return; // Already scheduled
@@ -152,8 +149,7 @@ void timer_handler(void)
 
 		ts.current_ticks++;
 		if (ts.current_ticks % ts_phase == 0) ts.seconds_since_start++;
-		if (ts.current_ticks % SCHEDULER_TIME == 0)
-			squeue->need_reschedule = true;
+		if (ts.current_ticks % SCHEDULER_TIME == 0) squeue->need_reschedule = true;
 	}
 
 	timer_tick();

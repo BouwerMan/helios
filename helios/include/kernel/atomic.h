@@ -66,12 +66,7 @@ static inline void smp_mb(void)
 
 static inline long atomic64_compare_and_swap(atomic64_t* v, long old, long new)
 {
-	return __atomic_compare_exchange_n(&v->counter,
-					   &old,
-					   new,
-					   false,
-					   __ATOMIC_SEQ_CST,
-					   __ATOMIC_SEQ_CST);
+	return __atomic_compare_exchange_n(&v->counter, &old, new, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 }
 
 /**
@@ -86,10 +81,5 @@ static inline long atomic64_compare_and_swap(atomic64_t* v, long old, long new)
  */
 static inline bool a64_cas_relaxed(atomic64_t* v, long* old, long new)
 {
-	return __atomic_compare_exchange_n(&v->counter,
-					   old,
-					   new,
-					   false,
-					   __ATOMIC_RELAXED,
-					   __ATOMIC_RELAXED);
+	return __atomic_compare_exchange_n(&v->counter, old, new, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 }

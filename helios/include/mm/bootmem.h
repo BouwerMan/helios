@@ -21,7 +21,7 @@ void bootmem_init();
  */
 void bootmem_free_all();
 
-/** 
+/**
  * @brief Reclaims memory marked as bootloader reclaimable.
  */
 void bootmem_reclaim_bootloader();

@@ -22,14 +22,11 @@ void exit(int __status) __noreturn __nothrow;
 
 // Memory allocation functions
 
-void* malloc(size_t __size) __malloc_like
-	__alloc_size(1) __nothrow __warn_unused_result;
+void* malloc(size_t __size) __malloc_like __alloc_size(1) __nothrow __warn_unused_result;
 
-void* calloc(size_t __nmemb, size_t __size) __malloc_like
-	__alloc_size(1, 2) __nothrow __warn_unused_result;
+void* calloc(size_t __nmemb, size_t __size) __malloc_like __alloc_size(1, 2) __nothrow __warn_unused_result;
 
-void* realloc(void* __ptr, size_t __size)
-	__alloc_size(2) __nothrow __warn_unused_result;
+void* realloc(void* __ptr, size_t __size) __alloc_size(2) __nothrow __warn_unused_result;
 
 void free(void* __ptr) __nothrow __nonnull(1);
 

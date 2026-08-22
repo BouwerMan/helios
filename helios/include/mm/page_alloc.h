@@ -18,7 +18,7 @@
 
 extern size_t total_mem_len;
 
-static constexpr int MAX_ORDER = 10; // 2^10 pages (1024 pages), or 4MiB blocks
+static constexpr int MAX_ORDER = 10;		    // 2^10 pages (1024 pages), or 4MiB blocks
 
 struct buddy_allocator {
 	struct list_head free_lists[MAX_ORDER + 1]; // One for each order
@@ -36,11 +36,11 @@ void page_alloc_init();
 void buddy_dump_free_lists();
 
 /*******************************************************************************
-* Allocation functions for the buddy allocator.
-*
-* Callers should be using get_free_page() or get_free_pages()
-* for 99% of page allocations.
-*******************************************************************************/
+ * Allocation functions for the buddy allocator.
+ *
+ * Callers should be using get_free_page() or get_free_pages()
+ * for 99% of page allocations.
+ *******************************************************************************/
 
 /**
  * @brief Allocates a contiguous block of pages, zeros them, and returns their virtual address.
@@ -127,11 +127,11 @@ static inline void* __get_free_page(aflags_t flags)
 }
 
 /*******************************************************************************
-* Deallocation functions for the buddy allocator.
-*
-* Callers should be using free_page() or free_pages()
-* for 99% of page deallocations.
-*******************************************************************************/
+ * Deallocation functions for the buddy allocator.
+ *
+ * Callers should be using free_page() or free_pages()
+ * for 99% of page deallocations.
+ *******************************************************************************/
 
 /**
  * @brief Frees a block of pages from a virtual address.

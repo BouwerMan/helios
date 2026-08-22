@@ -70,8 +70,7 @@ static inline bool klog_is_padding(u32 sf)
 
 static inline u32 klog_make_sf(u32 len_aligned, u32 flags)
 {
-	return (u32)((len_aligned & KFLAG_SIZE_MASK) |
-		     (flags & ~KFLAG_SIZE_MASK));
+	return (u32)((len_aligned & KFLAG_SIZE_MASK) | (flags & ~KFLAG_SIZE_MASK));
 }
 
 static inline u32 klog_sf_committed(u32 len_aligned)
@@ -106,17 +105,13 @@ static inline u8 klog_id_flags(u32 id)
 	return (u8)(id >> 24);
 }
 
-static inline bool klog_is_empty(const struct klog_ring* rb,
-				 const struct klog_cursor* cur)
+static inline bool klog_is_empty(const struct klog_ring* rb, const struct klog_cursor* cur)
 {
 	u64 head = (u64)atomic64_load_acquire(&rb->head_bytes);
 	return cur->bytes == head;
 }
 
-static int klog_emit_serial(const struct klog_header* hdr,
-			    const u8* payload,
-			    u32 payload_len,
-			    void* cookie)
+static int klog_emit_serial(const struct klog_header* hdr, const u8* payload, u32 payload_len, void* cookie)
 {
 	(void)hdr;
 	(void)cookie;
@@ -136,8 +131,7 @@ static int klog_emit_serial(const struct klog_header* hdr,
 static inline void emit_padding(struct klog_ring* rb, u32 pos, u32 len)
 {
 	kassert(rb && pos + len <= rb->size, "Invalid args to emit_padding");
-	kassert(len > 0 && (len % 8) == 0,
-		"len must be positive and 8-byte aligned");
+	kassert(len > 0 && (len % 8) == 0, "len must be positive and 8-byte aligned");
 
 	struct klog_header* hdr = (struct klog_header*)&rb->buf[pos];
 	u32 sf = klog_sf_padding(len);
@@ -161,8 +155,7 @@ static inline void emit_padding(struct klog_ring* rb, u32 pos, u32 len)
  * tail of the ring cannot fit the record, the function pads the tail and
  * retries at offset 0.
  */
-static bool
-klog_reserve_bytes(struct klog_ring* rb, u32 len, u64* start, u32* off)
+static bool klog_reserve_bytes(struct klog_ring* rb, u32 len, u64* start, u32* off)
 {
 	kassert(rb && start && off, "Invalid args to klog_reserve_bytes");
 	kassert(len % 8 == 0, "len must be 8-byte aligned");
@@ -175,9 +168,7 @@ klog_reserve_bytes(struct klog_ring* rb, u32 len, u64* start, u32* off)
 		u64 tail = rb->size - pos;
 
 		if (tail >= len) {
-			if (a64_cas_relaxed(&rb->head_bytes,
-					    &head,
-					    head + len)) {
+			if (a64_cas_relaxed(&rb->head_bytes, &head, head + len)) {
 				*start = (u64)head;
 				*off = (u32)pos;
 				return true;
@@ -189,9 +180,7 @@ klog_reserve_bytes(struct klog_ring* rb, u32 len, u64* start, u32* off)
 		}
 
 		if (tail > 0) {
-			if (a64_cas_relaxed(&rb->head_bytes,
-					    &head,
-					    head + (long)tail)) {
+			if (a64_cas_relaxed(&rb->head_bytes, &head, head + (long)tail)) {
 				emit_padding(rb, (u32)pos, (u32)tail);
 
 				// Now try to reserve real record
@@ -216,10 +205,8 @@ static void klog_fill_and_publish(struct klog_ring* rb,
 				  u64 seq)
 {
 	kassert(rb && msg, "Invalid args to klog_fill_and_publish");
-	kassert(total > 0 && (total % 8) == 0,
-		"total must be positive and 8-byte aligned");
-	kassert(msg_len <= total - (KLOG_HDR_LEN_8 * 8),
-		"msg_len exceeds payload");
+	kassert(total > 0 && (total % 8) == 0, "total must be positive and 8-byte aligned");
+	kassert(msg_len <= total - (KLOG_HDR_LEN_8 * 8), "msg_len exceeds payload");
 
 	struct klog_header* hdr = (struct klog_header*)&rb->buf[off];
 	hdr->magic = KLOG_MAGIC;
@@ -237,11 +224,7 @@ static void klog_fill_and_publish(struct klog_ring* rb,
 	smp_store_release_u32(&hdr->size_flags, klog_sf_committed(total));
 }
 
-bool klog_try_write(struct klog_ring* rb,
-		    klog_level_t level,
-		    const char* msg,
-		    u32 msg_len,
-		    u64* out_seq)
+bool klog_try_write(struct klog_ring* rb, klog_level_t level, const char* msg, u32 msg_len, u64* out_seq)
 {
 	kassert(rb && msg, "Invalid args to klog_try_write");
 	const u32 hdr = KLOG_HDR_LEN_8 * 8;
@@ -276,8 +259,7 @@ bool klog_try_write(struct klog_ring* rb,
 }
 
 /* Helper used inside drain when we detect an overrun */
-static u64
-klog_resync_scan(const struct klog_ring* rb, u64 scan_from, u64 head_snapshot)
+static u64 klog_resync_scan(const struct klog_ring* rb, u64 scan_from, u64 head_snapshot)
 {
 	u64 scan_pos = ALIGN_UP(scan_from, 8);
 	for (; scan_pos < head_snapshot; scan_pos += 8) {
@@ -290,8 +272,7 @@ klog_resync_scan(const struct klog_ring* rb, u64 scan_from, u64 head_snapshot)
 		}
 
 		u64 len = klog_len_from_sf(sf);
-		if (len < (u64)KLOG_HDR_LEN_8 * 8 || (len % 8) != 0 ||
-		    len > rb->size) {
+		if (len < (u64)KLOG_HDR_LEN_8 * 8 || (len % 8) != 0 || len > rb->size) {
 			continue;
 		}
 
@@ -299,8 +280,7 @@ klog_resync_scan(const struct klog_ring* rb, u64 scan_from, u64 head_snapshot)
 			return scan_pos;
 		}
 
-		if (hdr->hdr_len_8 < 4 || hdr->magic != KLOG_MAGIC ||
-		    len < (u64)hdr->hdr_len_8 * 8 ||
+		if (hdr->hdr_len_8 < 4 || hdr->magic != KLOG_MAGIC || len < (u64)hdr->hdr_len_8 * 8 ||
 		    hdr->payload_len > len - (u32)(hdr->hdr_len_8 * 8)) {
 			continue;
 		}
@@ -312,14 +292,10 @@ klog_resync_scan(const struct klog_ring* rb, u64 scan_from, u64 head_snapshot)
 }
 
 static constexpr u32 REFRESH_HEAD_EVERY = 64;
-_Static_assert((REFRESH_HEAD_EVERY & (REFRESH_HEAD_EVERY - 1)) == 0,
-	       "REFRESH_HEAD_EVERY must be a power of 2");
+_Static_assert((REFRESH_HEAD_EVERY & (REFRESH_HEAD_EVERY - 1)) == 0, "REFRESH_HEAD_EVERY must be a power of 2");
 
-static int klog_drain(struct klog_ring* rb,
-		      struct klog_cursor* cur,
-		      klog_emit_fn emit,
-		      void* cookie,
-		      u32 budget_records)
+static int
+klog_drain(struct klog_ring* rb, struct klog_cursor* cur, klog_emit_fn emit, void* cookie, u32 budget_records)
 {
 	if (!emit || !rb || !cur || budget_records == 0) {
 		return -EINVAL;
@@ -327,13 +303,12 @@ static int klog_drain(struct klog_ring* rb,
 
 	u64 head_snapshot = (u64)atomic64_load_relaxed(&rb->head_bytes);
 
-	u64 oldest = (head_snapshot >= rb->size) ? (head_snapshot - rb->size) :
-						   0;
+	u64 oldest = (head_snapshot >= rb->size) ? (head_snapshot - rb->size) : 0;
 
 	bool lost_records = false;
 
 	if (cur->bytes < oldest) {
-		//Fell behind
+		// Fell behind
 		u64 new_pos = klog_resync_scan(rb, oldest, head_snapshot);
 		if (new_pos == head_snapshot) {
 			// Nothing to catch up to
@@ -347,8 +322,7 @@ static int klog_drain(struct klog_ring* rb,
 	while (budget_records > 0 && cur->bytes < head_snapshot) {
 		if ((budget_records & (REFRESH_HEAD_EVERY - 1)) == 0) {
 			// Periodically refresh head snapshot to avoid spinning too long
-			head_snapshot =
-				(u64)atomic64_load_relaxed(&rb->head_bytes);
+			head_snapshot = (u64)atomic64_load_relaxed(&rb->head_bytes);
 			if (cur->bytes >= head_snapshot) {
 				break;
 			}
@@ -363,8 +337,7 @@ static int klog_drain(struct klog_ring* rb,
 		}
 
 		u64 len_total = klog_len_from_sf(sf);
-		if (len_total < (u64)KLOG_HDR_LEN_8 * 8 ||
-		    (len_total % 8) != 0 || len_total > rb->size) {
+		if (len_total < (u64)KLOG_HDR_LEN_8 * 8 || (len_total % 8) != 0 || len_total > rb->size) {
 			cur->bytes += 8;
 			if (cur->bytes >= head_snapshot) {
 				return KLOG_DRAIN_OK;
@@ -386,8 +359,7 @@ static int klog_drain(struct klog_ring* rb,
 			cur->lost += hdr->seq - (cur->last_seq + 1);
 		}
 
-		if (hdr->hdr_len_8 < 4 || hdr->magic != KLOG_MAGIC ||
-		    len_total < hdr_bytes ||
+		if (hdr->hdr_len_8 < 4 || hdr->magic != KLOG_MAGIC || len_total < hdr_bytes ||
 		    hdr->payload_len > len_total - hdr_bytes) {
 			// Invalid header, skip 8 bytes and try again
 			cur->bytes += 8;
@@ -397,15 +369,11 @@ static int klog_drain(struct klog_ring* rb,
 			continue;
 		}
 
-		u32 payload_len =
-			MIN(hdr->payload_len, (u32)len_total - (u32)hdr_bytes);
+		u32 payload_len = MIN(hdr->payload_len, (u32)len_total - (u32)hdr_bytes);
 
-		kassert(hdr->payload_len <= len_total - hdr_bytes,
-			"payload_len sanity");
+		kassert(hdr->payload_len <= len_total - hdr_bytes, "payload_len sanity");
 
-		kassert(len_total % 8 == 0 && len_total <= rb->size &&
-				len_total >= hdr_bytes,
-			"len_total sanity");
+		kassert(len_total % 8 == 0 && len_total <= rb->size && len_total >= hdr_bytes, "len_total sanity");
 
 		int res = emit(hdr, (u8*)hdr + hdr_bytes, payload_len, cookie);
 		cur->bytes += len_total;
@@ -417,17 +385,12 @@ static int klog_drain(struct klog_ring* rb,
 		budget_records--;
 	}
 
-	return budget_records == 0 ? KLOG_DRAIN_BUDGET_EXHAUSTED :
-				     KLOG_DRAIN_OK;
+	return budget_records == 0 ? KLOG_DRAIN_BUDGET_EXHAUSTED : KLOG_DRAIN_OK;
 }
 
 void klog_flush()
 {
-	klog_drain(&g_klog_ring,
-		   &g_klog_cursor,
-		   klog_emit_serial,
-		   nullptr,
-		   UINT32_MAX);
+	klog_drain(&g_klog_ring, &g_klog_cursor, klog_emit_serial, nullptr, UINT32_MAX);
 }
 
 static softirq_ret_t klog_softirq_action(size_t* item_budget, u64 ns_budget)
@@ -445,18 +408,12 @@ static softirq_ret_t klog_softirq_action(size_t* item_budget, u64 ns_budget)
 		u64 now = clock_now_ns();
 		if (now >= deadline) {
 			// Out of time
-			return klog_is_empty(&g_klog_ring, &g_klog_cursor) ?
-				       SOFTIRQ_DONE :
-				       SOFTIRQ_MORE;
+			return klog_is_empty(&g_klog_ring, &g_klog_cursor) ? SOFTIRQ_DONE : SOFTIRQ_MORE;
 		}
 
 		size_t n = *item_budget < chunk ? *item_budget : chunk;
 
-		int res = klog_drain(&g_klog_ring,
-				     &g_klog_cursor,
-				     klog_emit_serial,
-				     nullptr,
-				     (u32)n);
+		int res = klog_drain(&g_klog_ring, &g_klog_cursor, klog_emit_serial, nullptr, (u32)n);
 
 		switch ((enum KLOG_DRAIN_STATUS)res) {
 		case KLOG_DRAIN_BUDGET_EXHAUSTED:
@@ -503,8 +460,7 @@ static softirq_ret_t klog_softirq_action(size_t* item_budget, u64 ns_budget)
 		}
 	}
 
-	return klog_is_empty(&g_klog_ring, &g_klog_cursor) ? SOFTIRQ_DONE :
-							     SOFTIRQ_MORE;
+	return klog_is_empty(&g_klog_ring, &g_klog_cursor) ? SOFTIRQ_DONE : SOFTIRQ_MORE;
 }
 
 struct klog_ring* klog_init()
@@ -515,10 +471,8 @@ struct klog_ring* klog_init()
 		panic("klog_ring_init failed");
 	}
 
-	g_klog_cursor.bytes =
-		(u64)atomic64_load_relaxed(&g_klog_ring.head_bytes);
-	g_klog_cursor.last_seq =
-		(u64)atomic64_load_relaxed(&g_klog_ring.next_seq);
+	g_klog_cursor.bytes = (u64)atomic64_load_relaxed(&g_klog_ring.head_bytes);
+	g_klog_cursor.last_seq = (u64)atomic64_load_relaxed(&g_klog_ring.next_seq);
 
 	softirq_register(SOFTIRQ_KLOG, "klog", klog_softirq_action);
 
@@ -549,8 +503,6 @@ int klog_ring_init(struct klog_ring* rb, void* buf, u32 size_pow2)
 // since it mutates the shared g_klog_cursor.
 void klog_discard_to_head(void)
 {
-	g_klog_cursor.bytes =
-		(u64)atomic64_load_relaxed(&g_klog_ring.head_bytes);
-	g_klog_cursor.last_seq =
-		(u64)atomic64_load_relaxed(&g_klog_ring.next_seq);
+	g_klog_cursor.bytes = (u64)atomic64_load_relaxed(&g_klog_ring.head_bytes);
+	g_klog_cursor.last_seq = (u64)atomic64_load_relaxed(&g_klog_ring.next_seq);
 }

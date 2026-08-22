@@ -22,8 +22,7 @@ struct inode_mapping_ops {
 	int (*writepage)(struct vfs_inode* inode, struct page* page);
 };
 
-struct page* imap_lookup_or_create(struct inode_mapping* mapping,
-				   pgoff_t index);
+struct page* imap_lookup_or_create(struct inode_mapping* mapping, pgoff_t index);
 
 int imap_insert(struct inode_mapping* mapping, struct page* page);
 void imap_remove(struct inode_mapping* mapping, struct page* page);

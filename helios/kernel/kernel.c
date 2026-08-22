@@ -101,13 +101,12 @@ void kernel_main()
 	struct vfs_file* f2 = get_file(fd2);
 	struct dirent* dirent = kzalloc(sizeof(struct dirent));
 	while (vfs_readdir(f2, dirent, DIRENT_GET_NEXT)) {
-		log_debug(
-			"Found entry: %s, d_ino: %lu, d_off: %lu, d_reclen: %d, d_type: %d",
-			dirent->d_name,
-			dirent->d_ino,
-			dirent->d_off,
-			dirent->d_reclen,
-			dirent->d_type);
+		log_debug("Found entry: %s, d_ino: %lu, d_off: %lu, d_reclen: %d, d_type: %d",
+			  dirent->d_name,
+			  dirent->d_ino,
+			  dirent->d_off,
+			  dirent->d_reclen,
+			  dirent->d_type);
 	}
 
 	vfs_close(fd);
@@ -127,10 +126,7 @@ void kernel_main()
 	size_t total_mib = total_mem_len / (1024UL * 1024UL);
 	size_t free_mib = pages_to_bytes(free_pages) / (1024UL * 1024UL);
 	size_t used_mib = total_mib - free_mib;
-	log_info("Current free memory: %lu MiB out of %lu MiB. Used: %lu MiB",
-		 free_mib,
-		 total_mib,
-		 used_mib);
+	log_info("Current free memory: %lu MiB out of %lu MiB. Used: %lu MiB", free_mib, total_mib, used_mib);
 
 #if defined(HELIOS_TESTS)
 	ktest_run_all();

@@ -35,8 +35,7 @@ bool tsc_try_cpuid15(u64* out_hz)
 {
 	unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
 	int res = __get_cpuid(0x15, &eax, &ebx, &ecx, &edx);
-	if (eax == 0 || ebx == 0 || ecx == 0)
-		return false; // ratio/crystal missing
+	if (eax == 0 || ebx == 0 || ecx == 0) return false;  // ratio/crystal missing
 	*out_hz = (u64)((unsigned __int128)ecx * ebx / eax); // Hz
 	return true;
 	return res;
@@ -85,8 +84,7 @@ void tsc_init(void)
 		}
 		log_error("TSC is not invariant");
 		// TODO: Determine TSC frequency with HPET or PMTMR
-		log_warn(
-			"Falling back to hardcoded value (we are probably in GDB)");
+		log_warn("Falling back to hardcoded value (we are probably in GDB)");
 		__tsc_hz = 3609600000;
 		return;
 	}

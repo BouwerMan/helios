@@ -42,11 +42,11 @@ char* strrchr(const char* s, int c)
 
 /**
  * strrnechr - Find the last character in a string that is not equal to c
- * 
+ *
  * @param s    String to search (must not be NULL)
  * @param c    Character to avoid (cast to char internally)
  * @return     Pointer to last non-matching character, or NULL if not found
- * 
+ *
  * @note       Excludes null terminator from search
  * @example    strrnechr("hello", 'l') returns pointer to 'o'
  */

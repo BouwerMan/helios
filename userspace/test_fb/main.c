@@ -34,12 +34,7 @@ int main(void)
 		return 1;
 	}
 
-	void* fb = mmap(nullptr,
-			info.vram_len,
-			PROT_READ | PROT_WRITE,
-			MAP_SHARED,
-			fd,
-			0);
+	void* fb = mmap(nullptr, info.vram_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (!fb) {
 		close(fd);
 		return 1;
@@ -55,8 +50,7 @@ int main(void)
 			uint32_t b = (y * 255) / info.height;
 
 			// Map a combination of X and Y to Green (0-255)
-			uint32_t g =
-				((x + y) * 255) / (info.width + info.height);
+			uint32_t g = ((x + y) * 255) / (info.width + info.height);
 
 			// Pack the channels into a single 32-bit integer (0x00RRGGBB)
 			uint32_t color = (r << 16) | (g << 8) | (b << 0);
