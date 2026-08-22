@@ -19,16 +19,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/**
-* Unlike my original vmm implementation, this one only focuses on paging and address space magaement.
-* Overview:
-* 	1. Kernel inits bootmem
-* 	2. Kernel inits page_alloc
-* 	3. Kernel decommissions bootmem which then releases limine reclaimable resources
-* 	4. We init our kernel address space
-*
-* We will have a mapping of the entire physical memory space at hhdm_offset.
-*/
+/*
+ * Unlike my original vmm implementation, this one only focuses on paging and address space magaement.
+ * Overview:
+ * 	1. Kernel inits bootmem
+ * 	2. Kernel inits page_alloc
+ * 	3. Kernel decommissions bootmem which then releases limine reclaimable resources
+ * 	4. We init our kernel address space
+ *
+ * We will have a mapping of the entire physical memory space at hhdm_offset.
+ */
 
 #undef LOG_LEVEL
 #define LOG_LEVEL 1
@@ -58,11 +58,16 @@
 #include <uapi/helios/errno.h>
 #include <uapi/helios/mman.h>
 
+/**
+ * @addtogroup arch_x86_64
+ * @{
+ */
+
 extern char __kernel_start[], __kernel_end[];
 
 /*******************************************************************************
-* Private Function Prototypes
-*******************************************************************************/
+ * Private Function Prototypes
+ *******************************************************************************/
 
 static void page_fault(struct registers* r);
 
@@ -70,31 +75,27 @@ static void page_fault(struct registers* r);
 
 static int do_demand_paging(struct registers* r);
 
-static pte_t*
-walk_page_table(pgd_t* pml4, vaddr_t vaddr, bool create, flags_t flags);
+static pte_t* walk_page_table(pgd_t* pml4, vaddr_t vaddr, bool create, flags_t flags);
 
-static void map_memmap_entry(pgd_t* pml4,
-			     struct bootinfo_memmap_entry* entry,
-			     uptr k_vstart,
-			     uptr k_pstart,
-			     size_t k_size);
+static void
+map_memmap_entry(pgd_t* pml4, struct bootinfo_memmap_entry* entry, uptr k_vstart, uptr k_pstart, size_t k_size);
 
 static void log_page_table_walk(u64* pml4, vaddr_t vaddr);
 
 static bool is_table_empty(pgd_t* table);
 
-static bool
-prune_page_table_recursive(uint64_t* table, int level, uintptr_t vaddr);
+static bool prune_page_table_recursive(uint64_t* table, int level, uintptr_t vaddr);
 
 /*******************************************************************************
  * Private inline helpers
  ******************************************************************************/
 
 /**
- * invalidate - Invalidate a single TLB entry with invlpg
- * @vaddr: Virtual address whose translation to invalidate
+ * @brief Invalidates a single TLB entry with invlpg.
  *
- * Context: Local CPU only; does not broadcast. Callers handle shootdowns.
+ * @param vaddr Virtual address whose translation to invalidate.
+ *
+ * @note Local CPU only. Does not broadcast. Callers handle shootdowns.
  */
 static inline void invalidate(vaddr_t vaddr)
 {
@@ -102,10 +103,12 @@ static inline void invalidate(vaddr_t vaddr)
 }
 
 /**
- * _page_table_index - Extract 9-bit index for a page-table level
- * @vaddr: Virtual address
- * @shift: Bit position of the level's index (39, 30, 21, 12)
- * Return: Index in range [0, 511]
+ * @brief Extracts the 9-bit index for a page-table level.
+ *
+ * @param vaddr Virtual address.
+ * @param shift Bit position of the level's index (39, 30, 21, or 12).
+ *
+ * @return Index in the range [0, 511].
  */
 static inline size_t _page_table_index(vaddr_t vaddr, int shift)
 {
@@ -118,14 +121,16 @@ static inline size_t _page_table_index(vaddr_t vaddr, int shift)
 #define _pt_index(vaddr)   _page_table_index(vaddr, 12)
 
 /**
- * get_table_index - Extract 9-bit page-table index at a given level
- * @level: Walk level (0=PML4, 1=PDPT, 2=PD, 3=PT)
- * @vaddr: Virtual address to decode
- * Return: Index in range [0, 511]
- * Context: Pure; does not sleep; IRQ-safe; no locks.
+ * @brief Extracts the 9-bit page-table index at a given level.
  *
- * Computes the level-specific index used during a page-table walk. The
- * caller must ensure @level is valid for the current paging mode.
+ * @param level Walk level. 0 is PML4, 1 is PDPT, 2 is PD, 3 is PT.
+ * @param vaddr Virtual address to decode.
+ *
+ * @return Index in the range [0, 511].
+ *
+ * @note Pure. Does not sleep. IRQ-safe. Takes no locks.
+ *
+ * The caller must ensure @p level is valid for the current paging mode.
  */
 static inline size_t get_table_index(int level, uintptr_t vaddr)
 {
@@ -135,12 +140,14 @@ static inline size_t get_table_index(int level, uintptr_t vaddr)
 }
 
 /**
- * _alloc_page_table - Allocate a single 4 KiB page-table frame
- * @flags: Allocation flags for low-level page allocator
- * Return: Zeroed memory sized for one page-table
+ * @brief Allocates a single 4 KiB page-table frame.
  *
- * Note: New page tables must be zeroed per x86 paging rules. If the
- * allocator does not guarantee zeroed pages, ensure caller clears it.
+ * @param flags Allocation flags for the low-level page allocator.
+ *
+ * @return Zeroed memory sized for one page-table.
+ *
+ * @note x86 paging rules require new page tables to be zeroed. If the
+ * allocator does not guarantee zeroed pages, the caller must clear it.
  */
 static inline void* _alloc_page_table(aflags_t flags)
 {
@@ -148,8 +155,9 @@ static inline void* _alloc_page_table(aflags_t flags)
 }
 
 /**
- * _free_page_table - Free a single 4 KiB page-table frame
- * @table: Pointer previously returned by _alloc_page_table()
+ * @brief Frees a single 4 KiB page-table frame.
+ *
+ * @param table Pointer previously returned by _alloc_page_table().
  */
 static inline void _free_page_table(void* table)
 {
@@ -157,12 +165,11 @@ static inline void _free_page_table(void* table)
 }
 
 /**
- * flags_from_mr - Translate region protection to x86 PTE flags
- * @mr: Memory region descriptor
- * Return: Initial PTE flags for leaf mappings
+ * @brief Translates region protection to x86 PTE flags.
  *
- * Policy: Presence is decided by the mapper; user bit is controlled by
- * region flags (uncomment when wired). NX is set when !EXEC.
+ * @param mr Memory region descriptor.
+ *
+ * @return Initial PTE flags for leaf mappings.
  */
 static inline flags_t flags_from_mr(struct memory_region* mr)
 {
@@ -177,16 +184,13 @@ static inline flags_t flags_from_mr(struct memory_region* mr)
 }
 
 /*******************************************************************************
-* Public Function Definitions
-*******************************************************************************/
+ * Public Function Definitions
+ *******************************************************************************/
 
 /**
- * vmm_init - Initialize paging and the kernel address space
- * Return: none
- * Context: Early boot on the BSP; non-preemptible; IRQ state unspecified.
+ * @brief Initializes paging and the kernel address space.
  *
- * Sets up the kernel's top-level page table, maps regions described by the
- * boot info, installs the page-fault handler, and activates the new tables.
+ * @note Runs at early boot on the BSP. Non-preemptible.
  */
 void vmm_init()
 {
@@ -210,23 +214,18 @@ void vmm_init()
 	log_debug("Current PML4: %p", (void*)kernel.pml4);
 	for (size_t i = 0; i < bootinfo->memmap_entry_count; i++) {
 		struct bootinfo_memmap_entry* entry = &bootinfo->memmap[i];
-		map_memmap_entry((pgd_t*)kernel.pml4,
-				 entry,
-				 k_vstart,
-				 k_pstart,
-				 kernel_size);
+		map_memmap_entry((pgd_t*)kernel.pml4, entry, k_vstart, k_pstart, kernel_size);
 	}
 
 	vmm_load_cr3(HHDM_TO_PHYS(kernel.pml4));
 }
 
 /**
- * vmm_create_address_space - Allocate a fresh top-level page table
- * Return: Pointer to a new PML4 initialized from the kernel template.
- * Context: May sleep depending on allocator; IRQ-safe; no locks held.
+ * @brief Allocates a fresh top-level page table.
  *
- * Allocates a PML4 and seeds it from the current kernel address-space
- * template. Panics on out-of-memory.
+ * @return Pointer to a new PML4 initialized from the kernel template.
+ *
+ * @note May sleep depending on the allocator. Panics on out-of-memory.
  */
 uint64_t* vmm_create_address_space()
 {
@@ -244,36 +243,30 @@ uint64_t* vmm_create_address_space()
 }
 
 /**
- * vmm_map_page - Install a PRESENT PTE and take the mapping pin
- * @pml4:   page-table root
- * @vaddr:  page-aligned virtual address (must be unmapped)
- * @paddr:  page-aligned physical address to map
- * @flags:  PTE flags (USER/WRITE/PRESENT/NX/etc.)
+ * @brief Installs a PRESENT PTE and takes the mapping pin.
  *
- * Creates a new mapping for @vaddr to @paddr with @flags. Fails if a PRESENT
- * PTE already exists. Takes exactly one mapping reference (get_page) on the
- * mapped frame on success. Must not sleep; caller is responsible for higher-
- * level policy/locking.
+ * @param pml4 Page-table root.
+ * @param vaddr Page-aligned virtual address. Must be unmapped.
+ * @param paddr Page-aligned physical address to map.
+ * @param flags PTE flags (USER, WRITE, PRESENT, NX, and so on).
  *
- * Return: 0 on success; -EINVAL on misalignment; -EFAULT if PTE already
- *         present or walk failed; other -errno as implemented.
+ * @return 0 on success. -EINVAL on misalignment. -EFAULT if a PTE is
+ * already present or the walk failed. Other -errno values as implemented.
+ *
+ * Fails if a PRESENT PTE already exists for @p vaddr. Takes exactly one
+ * mapping reference (get_page) on the mapped frame on success. Must not
+ * sleep. The caller handles higher-level policy and locking.
  */
 int vmm_map_page(pgd_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
 {
 	if (!is_page_aligned(vaddr) || !is_page_aligned(paddr)) {
-		log_error(
-			"Something isn't aligned right, vaddr: %lx, paddr: %lx",
-			vaddr,
-			paddr);
+		log_error("Something isn't aligned right, vaddr: %lx, paddr: %lx", vaddr, paddr);
 		return -EINVAL;
 	}
 
 	// We want PAGE_PRESENT and PAGE_WRITE on almost all the higher levels
 	flags_t walk_flags = flags & (PAGE_USER | PAGE_PRESENT | PAGE_WRITE);
-	pte_t* pte = walk_page_table(pml4,
-				     vaddr,
-				     true,
-				     walk_flags | PAGE_PRESENT | PAGE_WRITE);
+	pte_t* pte = walk_page_table(pml4, vaddr, true, walk_flags | PAGE_PRESENT | PAGE_WRITE);
 
 	if (!pte || pte->pte & PAGE_PRESENT) {
 		log_warn("Could not find pte or pte is already present");
@@ -289,49 +282,36 @@ int vmm_map_page(pgd_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
 }
 
 /**
- * vmm_map_frame_alias - Map a PA at VA without owning a page ref
- * @pml4:   page-table root
- * @vaddr:  page-aligned virtual address
- * @paddr:  page-aligned physical address
- * @flags:  PTE flags
+ * @brief Maps a physical address at a virtual address without owning a
+ * page reference.
  *
- * Creates a non-owning alias mapping (no get_page / mapcount changes).
- * Intended for HHDM, identity maps, and MMIO.
+ * @param pml4 Page-table root.
+ * @param vaddr Page-aligned virtual address.
+ * @param paddr Page-aligned physical address.
+ * @param flags PTE flags.
  *
- * Return: 0 on success; -EINVAL on misalignment; -EFAULT if already mapped.
+ * @return 0 on success. -EINVAL on misalignment. -EFAULT if already mapped.
+ *
+ * Creates a non-owning alias mapping, with no get_page or mapcount
+ * changes. Intended for the HHDM, identity maps, and MMIO.
  */
-int vmm_map_frame_alias(pgd_t* pml4,
-			uintptr_t vaddr,
-			uintptr_t paddr,
-			flags_t flags)
+int vmm_map_frame_alias(pgd_t* pml4, uintptr_t vaddr, uintptr_t paddr, flags_t flags)
 {
 	if (!is_page_aligned(vaddr) || !is_page_aligned(paddr)) {
-		log_error(
-			"Something isn't aligned right, vaddr: %lx, paddr: %lx",
-			vaddr,
-			paddr);
+		log_error("Something isn't aligned right, vaddr: %lx, paddr: %lx", vaddr, paddr);
 		return -EINVAL;
 	}
 
 	// We want PAGE_PRESENT and PAGE_WRITE on almost all the higher levels
 	flags_t walk_flags = flags & (PAGE_USER | PAGE_PRESENT | PAGE_WRITE);
-	pte_t* pte = walk_page_table(pml4,
-				     vaddr,
-				     true,
-				     walk_flags | PAGE_PRESENT | PAGE_WRITE);
+	pte_t* pte = walk_page_table(pml4, vaddr, true, walk_flags | PAGE_PRESENT | PAGE_WRITE);
 
 	if (!pte) {
-		log_warn("Could not find pte, vaddr: %lx, paddr: %lx",
-			 vaddr,
-			 paddr);
+		log_warn("Could not find pte, vaddr: %lx, paddr: %lx", vaddr, paddr);
 		return -EFAULT;
 	}
 	if (pte->pte & PAGE_PRESENT) {
-		log_warn(
-			"PTE already present, vaddr: %lx, paddr: %lx, pte: %lx",
-			vaddr,
-			paddr,
-			pte->pte);
+		log_warn("PTE already present, vaddr: %lx, paddr: %lx, pte: %lx", vaddr, paddr, pte->pte);
 		return -EFAULT;
 	}
 
@@ -341,15 +321,17 @@ int vmm_map_frame_alias(pgd_t* pml4,
 }
 
 /**
- * vmm_unmap_page - Remove a PRESENT PTE and drop the mapping pin
- * @pml4:   page-table root
- * @vaddr:  page-aligned virtual address
+ * @brief Removes a PRESENT PTE and drops the mapping pin.
  *
- * Idempotently clears a PRESENT PTE at @vaddr (if any), drops exactly one
- * mapping reference (put_page) on the mapped frame, prunes now-empty page-table
- * levels, and invalidates the TLB for @vaddr.
+ * @param pml4 Page-table root.
+ * @param vaddr Page-aligned virtual address.
  *
- * Return: 0 on success (including “already unmapped”); -EINVAL on misalignment.
+ * @return 0 on success, including when already unmapped. -EINVAL on
+ * misalignment.
+ *
+ * Idempotently clears a PRESENT PTE at @p vaddr, if any. Drops exactly one
+ * mapping reference (put_page) on the mapped frame. Prunes now-empty
+ * page-table levels and invalidates the TLB for @p vaddr.
  */
 int vmm_unmap_page(pgd_t* pml4, uintptr_t vaddr)
 {
@@ -378,15 +360,19 @@ int vmm_unmap_page(pgd_t* pml4, uintptr_t vaddr)
 }
 
 /**
- * prune_page_tables - Free empty page-table nodes under an address
- * @pml4: Top-level page table to prune
- * @vaddr: Virtual address whose walk anchors the prune
- * Return: 0
- * Context: May sleep. IRQs enabled. Caller must synchronize page-table access.
+ * @brief Frees empty page-table nodes under an address.
  *
- * Recursively drops intermediate page-table levels that contain no present
- * entries along the walk rooted at @vaddr. Does not change leaf mappings and
- * does not perform TLB shootdowns; callers handle any required invalidation.
+ * @param pml4 Top-level page table to prune.
+ * @param vaddr Virtual address whose walk anchors the prune.
+ *
+ * @return 0.
+ *
+ * @note May sleep. IRQs must stay enabled. The caller must synchronize
+ * page-table access.
+ *
+ * Recursively drops intermediate page-table levels that hold no present
+ * entries along the walk rooted at @p vaddr. Does not change leaf mappings
+ * and does not perform TLB shootdowns. Callers handle any invalidation.
  */
 int prune_page_tables(uint64_t* pml4, uintptr_t vaddr)
 {
@@ -396,15 +382,17 @@ int prune_page_tables(uint64_t* pml4, uintptr_t vaddr)
 }
 
 /**
- * get_phys_addr - Resolve a virtual address to a physical address
- * @pml4: Top-level page table used for the walk
- * @vaddr: Virtual address to translate
- * Return: Physical address on success, 0 if unmapped or not present
- * Context: Does not sleep; IRQ-safe; no locks. No TLB changes.
+ * @brief Resolves a virtual address to a physical address.
  *
- * Performs a non-allocating walk (create=false) to find the leaf PTE for
- * @vaddr. If present, returns the PTE frame address plus the page offset.
- * No access checks (user/supervisor) are performed here.
+ * @param pml4 Top-level page table used for the walk.
+ * @param vaddr Virtual address to translate.
+ *
+ * @return The physical address on success, or 0 if unmapped or not present.
+ *
+ * @note Does not sleep. IRQ-safe. Takes no locks and makes no TLB changes.
+ *
+ * Performs a non-allocating walk to find the leaf PTE for @p vaddr. This
+ * function does not perform user or supervisor access checks.
  */
 paddr_t get_phys_addr(pgd_t* pml4, vaddr_t vaddr)
 {
@@ -420,13 +408,17 @@ paddr_t get_phys_addr(pgd_t* pml4, vaddr_t vaddr)
 }
 
 /**
- * vmm_map_anon_region - Map a region by allocating fresh pages
- * @vas: Target address space
- * @mr:  Region with [start,end) and protections
- * Return: 0 or -errno
- * Context: May sleep. Locks: acquires @vas->vma_lock (read) and @vas->pgt_lock.
- * Notes: Maps one zeroed page per PTE using flags from @mr->prot. On failure,
- *        unmaps pages created by this call.
+ * @brief Maps a region by allocating fresh pages.
+ *
+ * @param vas Target address space.
+ * @param mr Region with a [start, end) range and protections.
+ *
+ * @return 0 or -errno.
+ *
+ * @note May sleep. Acquires @p vas->vma_lock for read and @p vas->pgt_lock.
+ *
+ * Maps one zeroed page per PTE using flags from @p mr->prot. On failure,
+ * unmaps pages that this call created.
  */
 int vmm_map_anon_region(struct address_space* vas, struct memory_region* mr)
 {
@@ -447,8 +439,8 @@ int vmm_map_anon_region(struct address_space* vas, struct memory_region* mr)
 		}
 
 		/*
- 		 * Double check region didn't move while allocating
- 		 */
+		 * Double check region didn't move while allocating
+		 */
 		down_read(&vas->vma_lock);
 		if (!is_within_region(mr, v)) {
 			up_read(&vas->vma_lock);
@@ -472,9 +464,7 @@ int vmm_map_anon_region(struct address_space* vas, struct memory_region* mr)
 			continue;
 		}
 
-		err = vmm_map_page(vas->pml4,
-				   v,
-				   paddr,
+		err = vmm_map_page(vas->pml4, v, paddr,
 				   flags); // must not sleep
 
 		spin_unlock_irqrestore(&vas->pgt_lock, irqf);
@@ -499,11 +489,14 @@ clean:
 }
 
 /**
- * vmm_map_device_region - Map a region for MMIO
- * @vas: Target address space
- * @mr:  Region with [start,end) and protections
- * Return: 0 or -errno
- * Context: May sleep. Locks: acquires @vas->vma_lock (read) and @vas->pgt_lock.
+ * @brief Maps a region for MMIO.
+ *
+ * @param vas Target address space.
+ * @param mr Region with a [start, end) range and protections.
+ *
+ * @return 0 or -errno.
+ *
+ * @note May sleep. Acquires @p vas->vma_lock for read and @p vas->pgt_lock.
  */
 int vmm_map_device_region(struct address_space* vas, struct memory_region* mr)
 {
@@ -522,8 +515,7 @@ int vmm_map_device_region(struct address_space* vas, struct memory_region* mr)
 		// Make sure things aren't shifting around on us
 		if (!is_within_region(mr, v)) {
 			up_read(&vas->vma_lock);
-			log_error(
-				"virtual address moved outside of memory region");
+			log_error("virtual address moved outside of memory region");
 			err = -EFAULT;
 			goto clean;
 		}
@@ -558,20 +550,23 @@ clean:
 }
 
 /**
- * vmm_fork_region - Mirror a region into @dest_vas (COW for private)
- * @dest_vas: Destination address space (child)
- * @src_mr:   Source region in its owner address space (parent)
- * Return: 0 or -errno (-ENOTSUP for devices, -ENOMEM on alloc failure)
- * Context: May sleep. Locks: caller must hold @src_mr->owner->vma_lock
- *          (read). @dest_vas->vma_lock is not held during this call — safe
- *          only because @dest_vas isn't visible to any other task yet; if
- *          that ever changes, this needs @dest_vas->vma_lock too.
- * Notes: Present pages are mapped into @dest_vas. For private regions, clears
- *        PAGE_WRITE in both parent and child to arm COW. Non-present pages are
- *        skipped (handled by demand paging later).
+ * @brief Mirrors a region into a destination address space, with
+ * copy-on-write for private regions.
+ *
+ * @param dest_vas Destination address space (child).
+ * @param src_mr Source region in its owner address space (parent).
+ *
+ * @return 0 or -errno. -ENOTSUP for devices. -ENOMEM on allocation failure.
+ *
+ * @note May sleep. The caller must hold @p src_mr->owner->vma_lock for
+ * read. This call does not hold @p dest_vas->vma_lock, which is safe only
+ * because @p dest_vas is not yet visible to any other task.
+ *
+ * Maps present pages into @p dest_vas. For private regions, clears
+ * PAGE_WRITE in both parent and child to arm copy-on-write. Skips
+ * non-present pages; demand paging handles them later.
  */
-int vmm_fork_region(struct address_space* dest_vas,
-		    struct memory_region* src_mr)
+int vmm_fork_region(struct address_space* dest_vas, struct memory_region* src_mr)
 {
 	int err = 0;
 	int out_err = 0;
@@ -614,10 +609,8 @@ int vmm_fork_region(struct address_space* dest_vas,
 
 		bool priv = src_mr->is_private;
 		paddr_t p = snapshot & X86_PTE_ADDR_MASK;
-		flags_t current_flags = snapshot &
-					(X86_PTE_LOWFLAGS | X86_PTE_NX);
-		flags_t new_flags = priv ? (current_flags & ~PAGE_WRITE) :
-					   current_flags;
+		flags_t current_flags = snapshot & (X86_PTE_LOWFLAGS | X86_PTE_NX);
+		flags_t new_flags = priv ? (current_flags & ~PAGE_WRITE) : current_flags;
 
 		/* Map into child */
 		irqf = spin_lock_irqsave(&src_vas->pgt_lock);
@@ -657,8 +650,7 @@ clean:
 		spin_unlock_irqrestore(&src_vas->pgt_lock, irqf);
 
 		if (snapshot & PAGE_PRESENT) {
-			flags_t original_flags = (snapshot & FLAGS_MASK) |
-						 PAGE_WRITE;
+			flags_t original_flags = (snapshot & FLAGS_MASK) | PAGE_WRITE;
 			// Restore parent write permissions if we removed them
 			if (protected[prot_idx]) {
 				vmm_protect_page(src_vas, v, original_flags);
@@ -679,12 +671,16 @@ clean:
 }
 
 /**
- * vmm_unmap_region - Remove all mappings within a region
- * @vas: Address space owning the mappings
- * @mr:  Region with [start,end) to unmap
- * Return: 0 or -errno from vmm_unmap_page()
- * Context: May sleep. Locks: acquires @vas->vma_lock (read) and @vas->pgt_lock.
- * Notes: Drops PTEs; underlying page freeing follows separate refcount policy.
+ * @brief Removes all mappings within a region.
+ *
+ * @param vas Address space that owns the mappings.
+ * @param mr Region with a [start, end) range to unmap.
+ *
+ * @return 0 or -errno from vmm_unmap_page().
+ *
+ * @note May sleep. Acquires @p vas->vma_lock for read and @p vas->pgt_lock.
+ *
+ * Drops PTEs. Underlying page freeing follows separate refcount policy.
  */
 int vmm_unmap_region(struct address_space* vas, struct memory_region* mr)
 {
@@ -706,8 +702,7 @@ int vmm_unmap_region(struct address_space* vas, struct memory_region* mr)
 		} else {
 			int err = vmm_unmap_page(vas->pml4, v);
 			if (err < 0) {
-				spin_unlock_irqrestore(&vas->pgt_lock,
-						       spinflags);
+				spin_unlock_irqrestore(&vas->pgt_lock, spinflags);
 				up_read(&vas->vma_lock);
 				return err;
 			}
@@ -720,13 +715,19 @@ int vmm_unmap_region(struct address_space* vas, struct memory_region* mr)
 }
 
 /**
- * vmm_protect_page - Replace PTE permission bits for one page
- * @vas:      Address space
- * @vaddr:    Page-aligned virtual address
- * @new_prot: New flags (include PRESENT/USER as appropriate)
- * Return: 0 or -errno (-EINVAL bad @vas, -EFAULT unmapped/not present)
- * Context: Does not sleep. Locks: takes @vas->pgt_lock (IRQs disabled inside).
- * Notes: Preserves frame address; updates only flags and invalidates local TLB.
+ * @brief Replaces the PTE permission bits for one page.
+ *
+ * @param vas Address space.
+ * @param vaddr Page-aligned virtual address.
+ * @param new_prot New flags. Include PRESENT and USER as appropriate.
+ *
+ * @return 0 or -errno. -EINVAL for a bad @p vas. -EFAULT if unmapped or
+ * not present.
+ *
+ * @note Does not sleep. Takes @p vas->pgt_lock, with IRQs disabled inside.
+ *
+ * Preserves the frame address. Updates only the flags and invalidates the
+ * local TLB.
  */
 int vmm_protect_page(struct address_space* vas, vaddr_t vaddr, flags_t new_prot)
 {
@@ -751,30 +752,28 @@ int vmm_protect_page(struct address_space* vas, vaddr_t vaddr, flags_t new_prot)
 }
 
 /**
- * vmm_install_page - Finalize mapping of a prepared page into a VMA
- * @vas:    target address space (owns @mr)
- * @mr:     covering memory_region in @vas
- * @vaddr:  page-aligned virtual address within @mr
- * @page:   page with a build ref (ref > 0); content already prepared
+ * @brief Finalizes the mapping of a prepared page into a VMA.
  *
- * Acquires @vas->vma_lock (read) and @vas->pgt_lock, then installs a PRESENT
- * PTE for @vaddr. For MR_FILE|MAP_PRIVATE, WRITE is cleared to arm CoW.
- * If a mapping already exists, succeeds iff it maps the same frame.
+ * @param vas Target address space that owns @p mr.
+ * @param mr Covering memory_region in @p vas.
+ * @param vaddr Page-aligned virtual address within @p mr.
+ * @param page Page with a build ref (ref > 0). Content already prepared.
  *
- * Return: 0 on success or identical existing mapping; -EEXIST if mapped to a
- *         different frame; -ENOTSUP for MR_DEVICE; -EFAULT if @vaddr not in
- *         @mr; -EINVAL on bad args; other errors from vmm_map_page().
+ * @return 0 on success or on an identical existing mapping. -EEXIST if
+ * mapped to a different frame. -ENOTSUP for MR_DEVICE. -EFAULT if @p vaddr
+ * is not in @p mr. -EINVAL on bad arguments. Other errors come from
+ * vmm_map_page().
  *
- * Refcounting: Does NOT touch the caller’s build ref. vmm_map_page() takes
- *              the mapping pin on success; caller should put_page(@page) after.
+ * Acquires @p vas->vma_lock for read and @p vas->pgt_lock, then installs a
+ * PRESENT PTE for @p vaddr. For MR_FILE with MAP_PRIVATE, clears WRITE to
+ * arm copy-on-write.
+ *
+ * @note Does not touch the caller's build ref. vmm_map_page() takes the
+ * mapping pin on success. The caller should call put_page(@p page) after.
  */
-int vmm_install_page(struct address_space* vas,
-		     struct memory_region* mr,
-		     vaddr_t vaddr,
-		     struct page* page)
+int vmm_install_page(struct address_space* vas, struct memory_region* mr, vaddr_t vaddr, struct page* page)
 {
-	if (!vas || !mr || !page || mr->owner != vas ||
-	    !is_page_aligned(vaddr)) {
+	if (!vas || !mr || !page || mr->owner != vas || !is_page_aligned(vaddr)) {
 		return -EINVAL;
 	}
 
@@ -825,21 +824,21 @@ int vmm_install_page(struct address_space* vas,
 }
 
 /**
- * __vmm_populate_one_anon - Prepare and map one anonymous page
- * @vas:    target address space
- * @mr:     anonymous memory region covering @vaddr
- * @vaddr:  virtual address (any offset within the page)
+ * @brief Prepares and maps one anonymous page.
  *
- * Allocates a zeroed page (build ref), then calls vmm_install_page() to map it.
- * Always drops the build ref before returning.
+ * @param vas Target address space.
+ * @param mr Anonymous memory region that covers @p vaddr.
+ * @param vaddr Virtual address, at any offset within the page.
  *
- * Return: 0 on success; -ENOMEM on OOM; <0 on install failure.
+ * @return 0 on success. -ENOMEM on out-of-memory. Negative on install
+ * failure.
  *
- * Context: may sleep; no I/O.
+ * @note May sleep. Performs no I/O.
+ *
+ * Allocates a zeroed page with a build ref, then calls vmm_install_page()
+ * to map it. Always drops the build ref before returning.
  */
-int __vmm_populate_one_anon(struct address_space* vas,
-			    struct memory_region* mr,
-			    vaddr_t vaddr)
+int __vmm_populate_one_anon(struct address_space* vas, struct memory_region* mr, vaddr_t vaddr)
 {
 	if (!vas || !mr) return -EINVAL;
 
@@ -847,8 +846,7 @@ int __vmm_populate_one_anon(struct address_space* vas,
 
 	struct page* page = alloc_zeroed_page(AF_NORMAL);
 	if (!page) {
-		log_error("OOM allocating anon page for vaddr=0x%lx",
-			  (unsigned long)vaddr);
+		log_error("OOM allocating anon page for vaddr=0x%lx", (unsigned long)vaddr);
 		return -ENOMEM;
 	}
 
@@ -861,23 +859,22 @@ int __vmm_populate_one_anon(struct address_space* vas,
 }
 
 /**
- * __vmm_populate_one_file - Prepare and map one file-backed page
- * @vas:    target address space
- * @mr:     file-backed region covering @vaddr
- * @vaddr:  virtual address (any offset within the page)
+ * @brief Prepares and maps one file-backed page.
  *
- * Ensures the pagecache page for @vaddr is present and uptodate (reading at
- * most @to_read bytes and zeroing the tail), then installs it via
- * vmm_install_page(). Drops the page’s build ref before returning.
+ * @param vas Target address space.
+ * @param mr File-backed region that covers @p vaddr.
+ * @param vaddr Virtual address, at any offset within the page.
  *
- * Return: 0 on success; -ENOMEM on OOM; -EIO on readpage failure; <0 on
- *         install failure (e.g., -EEXIST).
+ * @return 0 on success. -ENOMEM on out-of-memory. -EIO on readpage
+ * failure. Negative on install failure, for example -EEXIST.
  *
- * Context: may sleep and perform I/O.
+ * @note May sleep and perform I/O.
+ *
+ * Ensures the pagecache page for @p vaddr is present and up to date, then
+ * installs it with vmm_install_page(). Drops the page's build ref before
+ * returning.
  */
-int __vmm_populate_one_file(struct address_space* vas,
-			    struct memory_region* mr,
-			    vaddr_t vaddr)
+int __vmm_populate_one_file(struct address_space* vas, struct memory_region* mr, vaddr_t vaddr)
 {
 	/*
 	 * File math
@@ -886,35 +883,31 @@ int __vmm_populate_one_file(struct address_space* vas,
 	struct inode_mapping* map = inode->mapping;
 
 	// Compute file geometry for this faulting page
-	size_t page_off = (size_t)(vaddr - mr->start); // offset within VMA
-	off_t file_off =
-		mr->file.file_lo + (off_t)page_off;    // absolute file offset
-	off_t init_left = mr->file.file_hi - file_off; // may be <= 0
+	size_t page_off = (size_t)(vaddr - mr->start);	     // offset within VMA
+	off_t file_off = mr->file.file_lo + (off_t)page_off; // absolute file offset
+	off_t init_left = mr->file.file_hi - file_off;	     // may be <= 0
 	size_t to_read = (size_t)CLAMP(init_left, 0, (off_t)PAGE_SIZE);
 
 	pgoff_t index = (pgoff_t)(file_off >> PAGE_SHIFT);
 	size_t tail = PAGE_SIZE - to_read;
 
-	log_debug(
-		"FILE: vaddr=0x%lx page_off=0x%zx file_off=0x%llx "
-		"file_lo=0x%llx file_hi=0x%llx index=%llu to_read=%zu tail_zero=%zu",
-		(unsigned long)vaddr,
-		page_off,
-		(unsigned long long)file_off,
-		(unsigned long long)mr->file.file_lo,
-		(unsigned long long)mr->file.file_hi,
-		(unsigned long long)index,
-		to_read,
-		tail);
+	log_debug("FILE: vaddr=0x%lx page_off=0x%zx file_off=0x%llx "
+		  "file_lo=0x%llx file_hi=0x%llx index=%llu to_read=%zu tail_zero=%zu",
+		  (unsigned long)vaddr,
+		  page_off,
+		  (unsigned long long)file_off,
+		  (unsigned long long)mr->file.file_lo,
+		  (unsigned long long)mr->file.file_hi,
+		  (unsigned long long)index,
+		  to_read,
+		  tail);
 
 	/*
 	 * This returns a locked page with a build ref.
 	 */
 	struct page* page = imap_lookup_or_create(map, index);
 	if (!page) {
-		log_error("OOM creating cache page (index=%llu) for inode=%p",
-			  (unsigned long long)index,
-			  (void*)inode);
+		log_error("OOM creating cache page (index=%llu) for inode=%p", (unsigned long long)index, (void*)inode);
 		return -ENOMEM;
 	}
 
@@ -922,37 +915,32 @@ int __vmm_populate_one_file(struct address_space* vas,
 		// Entire page is beyond file_hi within the FILE-VMA → pure BSS page
 		void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
 		memset(kvaddr, 0, PAGE_SIZE);
-		log_debug("FILE: BSS page zeroed (index=%llu)",
-			  (unsigned long long)index);
+		log_debug("FILE: BSS page zeroed (index=%llu)", (unsigned long long)index);
 		page->flags |= PG_UPTODATE;
 	} else if (!(page->flags & PG_UPTODATE)) {
 		// Cache miss: populate front bytes from disk, then zero the tail
 		if (map->imops && map->imops->readpage) {
 			int res = map->imops->readpage(inode, page);
 			if (res < 0) {
-				log_error(
-					"Readpage failed (index=%llu, file_off=0x%llx) err=%d",
-					(unsigned long long)index,
-					(unsigned long long)file_off,
-					res);
+				log_error("Readpage failed (index=%llu, file_off=0x%llx) err=%d",
+					  (unsigned long long)index,
+					  (unsigned long long)file_off,
+					  res);
 				put_page(page);
 				imap_remove(map, page);
 				return -EIO;
 			}
 			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
 			memset((char*)kvaddr + to_read, 0, tail);
-			log_debug(
-				"FILE: readpage filled %zu bytes, zeroed %zu (index=%llu)",
-				to_read,
-				tail,
-				(unsigned long long)index);
+			log_debug("FILE: readpage filled %zu bytes, zeroed %zu (index=%llu)",
+				  to_read,
+				  tail,
+				  (unsigned long long)index);
 		} else {
 			// No readpage -> we must synthesize the page (rare)
 			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
 			memset(kvaddr, 0, PAGE_SIZE);
-			log_warn(
-				"FILE: no readpage op; zeroed whole page (index=%llu)",
-				(unsigned long long)index);
+			log_warn("FILE: no readpage op; zeroed whole page (index=%llu)", (unsigned long long)index);
 		}
 		page->flags |= PG_UPTODATE;
 
@@ -961,14 +949,11 @@ int __vmm_populate_one_file(struct address_space* vas,
 		if (to_read < PAGE_SIZE) {
 			void* kvaddr = (void*)PHYS_TO_HHDM(page_to_phys(page));
 			memset((char*)kvaddr + to_read, 0, tail);
-			log_debug(
-				"FILE: cache hit; ensured tail-zero %zu bytes (index=%llu)",
-				tail,
-				(unsigned long long)index);
+			log_debug("FILE: cache hit; ensured tail-zero %zu bytes (index=%llu)",
+				  tail,
+				  (unsigned long long)index);
 		} else {
-			log_debug(
-				"FILE: cache hit; full page content present (index=%llu)",
-				(unsigned long long)index);
+			log_debug("FILE: cache hit; full page content present (index=%llu)", (unsigned long long)index);
 		}
 	}
 
@@ -982,7 +967,7 @@ int __vmm_populate_one_file(struct address_space* vas,
 	unlock_page(page);
 
 	/*
- 	 * Drop build ref from imap_lookup_or_create; if vmm_install_page
+	 * Drop build ref from imap_lookup_or_create; if vmm_install_page
 	 * failed, this frees the page.
 	 */
 	put_page(page);
@@ -990,18 +975,21 @@ int __vmm_populate_one_file(struct address_space* vas,
 }
 
 /**
- * vmm_populate_one - Populate a single page according to its VMA policy
- * @vas:    target address space
- * @vaddr:  virtual address (any offset within the page)
+ * @brief Populates a single page according to its VMA policy.
  *
- * No-op if already mapped. Otherwise locates the covering VMA and delegates to
- * the appropriate populate helper (anon/file). PTE permissions derive from the
- * VMA; private file mappings are armed for CoW on first write.
+ * @param vas Target address space.
+ * @param vaddr Virtual address, at any offset within the page.
  *
- * Return: 0 on success or already present; -EFAULT if no VMA; -EINVAL on bad
- *         args; other negative errors from helpers.
+ * @return 0 on success or if already present. -EFAULT if no VMA covers
+ * @p vaddr. -EINVAL on bad arguments. Other negative errors come from
+ * helper functions.
  *
- * Context: may sleep; may perform I/O for file-backed regions.
+ * @note May sleep. May perform I/O for file-backed regions.
+ *
+ * Does nothing if already mapped. Otherwise, locates the covering VMA and
+ * delegates to the matching populate helper for anonymous or file-backed
+ * pages. PTE permissions derive from the VMA. Private file mappings are
+ * armed for copy-on-write on first write.
  */
 int vmm_populate_one(struct address_space* vas, vaddr_t vaddr)
 {
@@ -1023,21 +1011,18 @@ int vmm_populate_one(struct address_space* vas, vaddr_t vaddr)
 		return -EFAULT;
 	}
 
-	const char* kind = (mr->kind == MR_FILE) ? "FILE" :
-			   (mr->kind == MR_ANON) ? "ANON" :
-						   "DEVICE";
+	const char* kind = (mr->kind == MR_FILE) ? "FILE" : (mr->kind == MR_ANON) ? "ANON" : "DEVICE";
 	char prot_str[4] = { (mr->prot & PROT_READ) ? 'r' : '-',
 			     (mr->prot & PROT_WRITE) ? 'w' : '-',
 			     (mr->prot & PROT_EXEC) ? 'x' : '-',
 			     '\0' };
-	log_debug(
-		"VMA: [%016lx..%016lx) kind=%s prot=%s flags=0x%lx private=%d",
-		(unsigned long)mr->start,
-		(unsigned long)mr->end,
-		kind,
-		prot_str,
-		(unsigned long)mr->flags,
-		(int)mr->is_private);
+	log_debug("VMA: [%016lx..%016lx) kind=%s prot=%s flags=0x%lx private=%d",
+		  (unsigned long)mr->start,
+		  (unsigned long)mr->end,
+		  kind,
+		  prot_str,
+		  (unsigned long)mr->flags,
+		  (int)mr->is_private);
 
 	if (mr->kind == MR_ANON) {
 		up_read(&vas->vma_lock);
@@ -1055,23 +1040,20 @@ int vmm_populate_one(struct address_space* vas, vaddr_t vaddr)
 }
 
 /**
- * vmm_write_region - Write data to a virtual memory region
- * @vas: Address space containing the target virtual memory
- * @vaddr: Starting virtual address to write to
- * @data: Source data buffer to copy from
- * @len: Number of bytes to write
+ * @brief Writes data to a virtual memory region.
  *
- * Writes data to a virtual memory region by translating virtual addresses
- * to physical addresses page by page. Handles writes that span multiple
- * pages by breaking them into page-aligned chunks.
+ * @param vas Address space that contains the target virtual memory.
+ * @param vaddr Starting virtual address to write to.
+ * @param data Source data buffer to copy from.
+ * @param len Number of bytes to write.
  *
- * Note: This function assumes all target virtual pages are already mapped
- * and accessible. No page fault handling is performed.
+ * Translates virtual addresses to physical addresses page by page. Splits
+ * writes that span multiple pages into page-aligned chunks.
+ *
+ * @note Assumes all target virtual pages are already mapped and
+ * accessible. Performs no page-fault handling.
  */
-void vmm_write_region(struct address_space* vas,
-		      vaddr_t vaddr,
-		      const void* data,
-		      size_t len)
+void vmm_write_region(struct address_space* vas, vaddr_t vaddr, const void* data, size_t len)
 {
 	// NOTE: Maybe we should use a memory_region like the name suggests :)
 	// Doesn't really change anything though.
@@ -1085,8 +1067,7 @@ void vmm_write_region(struct address_space* vas,
 
 		// Calculate how much we can write in this page
 		size_t bytes_in_page = PAGE_SIZE - page_offset;
-		size_t bytes_to_copy = (len < bytes_in_page) ? len :
-							       bytes_in_page;
+		size_t bytes_to_copy = (len < bytes_in_page) ? len : bytes_in_page;
 
 		// Translate virtual to physical address
 		// TODO: Make sure this returns correct address
@@ -1095,25 +1076,16 @@ void vmm_write_region(struct address_space* vas,
 		if (paddr == 0) {
 			int rc = vmm_populate_one(vas, vaddr);
 			if (rc < 0) {
-				log_error(
-					"vmm_populate_one failed for vaddr 0x%lx: %d",
-					vaddr,
-					rc);
+				log_error("vmm_populate_one failed for vaddr 0x%lx: %d", vaddr, rc);
 				return;
 			}
 			paddr = get_phys_addr(vas->pml4, vaddr);
-			log_debug(
-				"Populated page for vaddr 0x%lx, got paddr 0x%lx",
-				vaddr,
-				paddr);
+			log_debug("Populated page for vaddr 0x%lx, got paddr 0x%lx", vaddr, paddr);
 		}
 
 		vaddr_t kernel_vaddr = PHYS_TO_HHDM(paddr);
 
-		log_debug("Writing %zu bytes to vaddr 0x%lx (phys 0x%lx)",
-			  bytes_to_copy,
-			  vaddr,
-			  paddr);
+		log_debug("Writing %zu bytes to vaddr 0x%lx (phys 0x%lx)", bytes_to_copy, vaddr, paddr);
 		if (!data_bytes) {
 			memset((char*)kernel_vaddr, 0, bytes_to_copy);
 		} else {
@@ -1127,8 +1099,8 @@ void vmm_write_region(struct address_space* vas,
 }
 
 /*******************************************************************************
-* Private Function Definitions
-*******************************************************************************/
+ * Private Function Definitions
+ *******************************************************************************/
 
 static bool is_table_empty(pgd_t* table)
 {
@@ -1140,20 +1112,22 @@ static bool is_table_empty(pgd_t* table)
 }
 
 /**
- * prune_page_table_recursive - Drop empty page-table nodes under @vaddr
- * @table: Page-table at the current walk level
- * @level: 0=PML4, 1=PDPT, 2=PD, 3=PT (leaf)
- * @vaddr: Virtual address anchoring the walk
- * Return: true if @table is empty after pruning, false otherwise
- * Context: May sleep (frees tables). Locks: none; caller must synchronize
- *          page-table access and TLB shootdowns as needed.
+ * @brief Drops empty page-table nodes under a virtual address.
  *
- * Recurses toward the leaf for @vaddr; if a child becomes empty, clears the
- * parent entry and frees the child table. Only prunes non-present subtrees;
- * does not handle huge-page mappings.
+ * @param table Page-table at the current walk level.
+ * @param level Walk level. 0 is PML4, 1 is PDPT, 2 is PD, 3 is PT (leaf).
+ * @param vaddr Virtual address that anchors the walk.
+ *
+ * @return True if @p table is empty after pruning. False otherwise.
+ *
+ * @note May sleep, since it frees tables. Takes no locks. The caller must
+ * synchronize page-table access and any needed TLB shootdowns.
+ *
+ * Recurses toward the leaf for @p vaddr. If a child becomes empty, clears
+ * the parent entry and frees the child table. Prunes only non-present
+ * subtrees and does not handle huge-page mappings.
  */
-static bool
-prune_page_table_recursive(uint64_t* table, int level, uintptr_t vaddr)
+static bool prune_page_table_recursive(uint64_t* table, int level, uintptr_t vaddr)
 {
 	// TODO: Locking and such
 	size_t index = get_table_index(level, vaddr);
@@ -1166,15 +1140,11 @@ prune_page_table_recursive(uint64_t* table, int level, uintptr_t vaddr)
 
 	// If we are not at the leaf, we need to recurse
 	if (level < 3) {
-		uint64_t* child_table =
-			(uint64_t*)PHYS_TO_HHDM(entry & PAGE_FRAME_MASK);
+		uint64_t* child_table = (uint64_t*)PHYS_TO_HHDM(entry & PAGE_FRAME_MASK);
 		if (prune_page_table_recursive(child_table, level + 1, vaddr)) {
-			table[index] =
-				0; // Clear the entry if child table was pruned
+			table[index] = 0; // Clear the entry if child table was pruned
 			_free_page_table(child_table);
-			log_debug("Freed PT at level %d (vaddr: 0x%lx)",
-				  level,
-				  vaddr);
+			log_debug("Freed PT at level %d (vaddr: 0x%lx)", level, vaddr);
 		}
 	}
 
@@ -1182,22 +1152,25 @@ prune_page_table_recursive(uint64_t* table, int level, uintptr_t vaddr)
 }
 
 /**
- * walk_page_table - Return leaf PTE for @vaddr, optionally creating tables
- * @pml4:  Top-level page table
- * @vaddr: Virtual address to walk (must be canonical)
- * @create: Allocate intermediate tables if missing
- * @flags:  Flags to apply to newly created non-leaf entries (include PRESENT)
- * Return: Pointer to leaf PTE, or NULL if absent and @create==false
- * Context: May sleep if @create and allocator sleeps. No locks taken; caller
- *          must hold page-table lock and manage IRQ state. Huge pages not set.
+ * @brief Returns the leaf PTE for a virtual address, optionally creating
+ * tables.
+ *
+ * @param pml4 Top-level page table.
+ * @param vaddr Virtual address to walk. Must be canonical.
+ * @param create Allocates intermediate tables if missing.
+ * @param flags Flags to apply to newly created non-leaf entries. Include
+ * PRESENT.
+ *
+ * @return Pointer to the leaf PTE, or NULL if absent and @p create is false.
+ *
+ * @note May sleep if @p create is set and the allocator sleeps. Takes no
+ * locks. The caller must hold the page-table lock and manage IRQ state.
+ * Does not set huge pages.
  */
-static pte_t*
-walk_page_table(pgd_t* pml4, uptr vaddr, bool create, flags_t flags)
+static pte_t* walk_page_table(pgd_t* pml4, uptr vaddr, bool create, flags_t flags)
 {
 	if (create && (flags & PAGE_PRESENT) == 0) {
-		log_warn(
-			"walk_page_table creating an entry WITHOUT PAGE_PRESENT! flags: 0x%lx",
-			flags);
+		log_warn("walk_page_table creating an entry WITHOUT PAGE_PRESENT! flags: 0x%lx", flags);
 	}
 	// Ensure the virtual address is canonical
 	if ((vaddr >> 48) != 0 && (vaddr >> 48) != 0xFFFF) return nullptr;
@@ -1210,28 +1183,23 @@ walk_page_table(pgd_t* pml4, uptr vaddr, bool create, flags_t flags)
 	if ((pml4[pml4_i].pgd & PAGE_PRESENT) == 0) {
 		if (!create) return NULL;
 		// NOTE: We are casting to a u64 here because that is what the HHDM_TO_PHYS macro expects
-		pml4[pml4_i].pgd =
-			(u64)HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
+		pml4[pml4_i].pgd = (u64)HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
 	}
 
 	// Get the PDPT from the PML4 entry
-	pud_t* pdpt = (pud_t*)PHYS_TO_HHDM(pml4[pml4_i].pgd &
-					   ~FLAGS_MASK); // Mask off flags
+	pud_t* pdpt = (pud_t*)PHYS_TO_HHDM(pml4[pml4_i].pgd & ~FLAGS_MASK); // Mask off flags
 	uint64_t pdpt_i = _pdpt_index(vaddr);
 	if ((pdpt[pdpt_i].pud & PAGE_PRESENT) == 0) {
 		if (!create) return NULL;
-		pdpt[pdpt_i].pud =
-			(u64)HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
+		pdpt[pdpt_i].pud = (u64)HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
 	}
 
 	// Get the PD from the PDPT entry
-	pmd_t* pd = (pmd_t*)PHYS_TO_HHDM(pdpt[pdpt_i].pud &
-					 ~FLAGS_MASK); // Mask off flags
+	pmd_t* pd = (pmd_t*)PHYS_TO_HHDM(pdpt[pdpt_i].pud & ~FLAGS_MASK); // Mask off flags
 	uint64_t pd_i = _pd_index(vaddr);
 	if ((pd[pd_i].pmd & PAGE_PRESENT) == 0) {
 		if (!create) return NULL;
-		pd[pd_i].pmd = (u64)HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) |
-			       flags;
+		pd[pd_i].pmd = (u64)HHDM_TO_PHYS(_alloc_page_table(AF_KERNEL)) | flags;
 	}
 
 	// Get the PT from the PD entry
@@ -1243,33 +1211,31 @@ walk_page_table(pgd_t* pml4, uptr vaddr, bool create, flags_t flags)
 }
 
 /**
- * map_memmap_entry - Map a bootloader memmap span into kernel space
- * @pml4:          Top-level page table
- * @entry:         Boot info memory-map entry to mirror
- * @k_vstart:     Kernel virtual start
- * @k_pstart:     Kernel physical start
- * @k_size:       Kernel size
- * Context: Early boot mapping helper; assumes single-CPU init. No locks.
- * Notes: Maps the span into HHDM; for EXECUTABLE/MODULES also maps an
- *        executable alias at @exe_virt_base + offset.
+ * @brief Maps a bootloader memmap span into kernel space.
+ *
+ * @param pml4 Top-level page table.
+ * @param entry Boot info memory-map entry to mirror.
+ * @param k_vstart Kernel virtual start.
+ * @param k_pstart Kernel physical start.
+ * @param k_size Kernel size.
+ *
+ * @note Early-boot mapping helper. Assumes single-CPU init. Takes no locks.
+ *
+ * Maps the span into the HHDM. For EXECUTABLE and MODULES entries, also
+ * maps an executable alias at the kernel virtual base plus offset.
  */
-static void map_memmap_entry(pgd_t* pml4,
-			     struct bootinfo_memmap_entry* entry,
-			     uptr k_vstart,
-			     uptr k_pstart,
-			     size_t k_size)
+static void
+map_memmap_entry(pgd_t* pml4, struct bootinfo_memmap_entry* entry, uptr k_vstart, uptr k_pstart, size_t k_size)
 {
 	flags_t flags;
 	switch (entry->type) {
 	case LIMINE_MEMMAP_USABLE:
 	case LIMINE_MEMMAP_EXECUTABLE_AND_MODULES:
 	case LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE:
-		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK |
-			PAGE_NO_EXECUTE;
+		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK | PAGE_NO_EXECUTE;
 		break;
 	case LIMINE_MEMMAP_FRAMEBUFFER:
-		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_COMBINING |
-			PAGE_NO_EXECUTE;
+		flags = PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_COMBINING | PAGE_NO_EXECUTE;
 		break;
 	default: return;
 	}
@@ -1300,11 +1266,15 @@ static void map_memmap_entry(pgd_t* pml4,
 }
 
 /**
- * log_page_table_walk - Dump PML4→PT entries for @vaddr
- * @pml4:  Top-level page table (virtual, via HHDM)
- * @vaddr: Address to trace
- * Context: Debug-only; read-only walk; IRQ-safe; no locks. Races tolerated.
- * Notes: Prints each level and notes huge-page stops or not-present entries.
+ * @brief Dumps the PML4 through PT entries for a virtual address.
+ *
+ * @param pml4 Top-level page table (virtual, through the HHDM).
+ * @param vaddr Address to trace.
+ *
+ * @note Debug-only. Read-only walk. IRQ-safe. Takes no locks. Tolerates
+ * races.
+ *
+ * Prints each level and notes huge-page stops or not-present entries.
  */
 static void log_page_table_walk(u64* pml4, vaddr_t vaddr)
 {
@@ -1354,12 +1324,17 @@ static void log_page_table_walk(u64* pml4, vaddr_t vaddr)
 }
 
 /**
- * do_demand_paging - Handle a not-present page fault for current task
- * @r: Fault frame registers
- * Return: 0 on success or -errno from population
- * Context: Page-fault path; must not sleep beyond what the handler allows.
- * Notes: Derives access type from PF errcode, checks VMA permissions, and
- *        populates a single page via vmm_populate_one().
+ * @brief Handles a not-present page fault for the current task.
+ *
+ * @param r Fault frame registers.
+ *
+ * @return 0 on success, or -errno from page population.
+ *
+ * @note Runs on the page-fault path. Must not sleep beyond what the
+ * handler allows.
+ *
+ * Derives the access type from the page-fault error code, checks VMA
+ * permissions, and populates a single page with vmm_populate_one().
  */
 static int do_demand_paging(struct registers* r)
 {
@@ -1381,11 +1356,15 @@ static int do_demand_paging(struct registers* r)
 }
 
 /**
- * page_fault - x86-64 page-fault top-half
- * @r: Fault frame registers
- * Context: Fault handler; IRQ state per entry; reentrancy not expected.
- * Notes: Routes not-present faults to demand paging, handles CoW on write
- *        faults, and calls page_fault_fail() on irrecoverable errors.
+ * @brief x86-64 page-fault top-half handler.
+ *
+ * @param r Fault frame registers.
+ *
+ * @note Runs as a fault handler. IRQ state depends on entry. Reentrancy is
+ * not expected.
+ *
+ * Routes not-present faults to demand paging, handles copy-on-write on
+ * write faults, and calls page_fault_fail() on irrecoverable errors.
  */
 static void page_fault(struct registers* r)
 {
@@ -1408,19 +1387,18 @@ static void page_fault(struct registers* r)
 	bool pf_rsvd = r->err_code & 0x8;
 	bool pf_exec = r->err_code & 0x10; // instruction fetch (NX)
 
-	log_debug(
-		"PF: cr2=0x%lx rip=0x%lx ec=0x%lx [P=%d W=%d U=%d I=%d RSVD=%d] "
-		"vas.PML4=0x%lx pid=%d",
-		(unsigned long)fault_addr,
-		(unsigned long)r->rip,
-		(unsigned long)r->err_code,
-		pf_present,
-		pf_write,
-		pf_user,
-		pf_exec,
-		pf_rsvd,
-		(unsigned long)vas->pml4_phys,
-		task->pid);
+	log_debug("PF: cr2=0x%lx rip=0x%lx ec=0x%lx [P=%d W=%d U=%d I=%d RSVD=%d] "
+		  "vas.PML4=0x%lx pid=%d",
+		  (unsigned long)fault_addr,
+		  (unsigned long)r->rip,
+		  (unsigned long)r->err_code,
+		  pf_present,
+		  pf_write,
+		  pf_user,
+		  pf_exec,
+		  pf_rsvd,
+		  (unsigned long)vas->pml4_phys,
+		  task->pid);
 
 	bool is_write_fault = r->err_code & 0x2;
 	bool is_present_fault = r->err_code & 0x1;
@@ -1472,8 +1450,7 @@ static void page_fault(struct registers* r)
 		if (mr->is_private) {
 			// Fork-style CoW only when physically shared
 			// TODO: Check for zero page
-			bool phys_shared = atomic_read(&shared_page->mapcount) >
-					   1;
+			bool phys_shared = atomic_read(&shared_page->mapcount) > 1;
 			want_cow = phys_shared;
 		} else {
 			// Shared anon/shmem: write-through, no CoW.
@@ -1520,10 +1497,13 @@ static void page_fault(struct registers* r)
 }
 
 /**
- * page_fault_fail - Fatal page fault handler (no return)
- * @r: Fault frame registers
- * Context: Fault handler; logs synchronously and panics.
- * Notes: Dumps task, registers, and a page-table walk before halting.
+ * @brief Fatal page-fault handler. Does not return.
+ *
+ * @param r Fault frame registers.
+ *
+ * @note Logs synchronously and panics.
+ *
+ * Dumps the faulting task, registers, and a page-table walk before halting.
  */
 [[noreturn]]
 static void page_fault_fail(struct registers* r)
@@ -1571,8 +1551,7 @@ static void page_fault_fail(struct registers* r)
 		log_error("Reason: The page was not present in memory.");
 	}
 	if (rw) {
-		log_error(
-			"Violation: This was a write operation to a read-only page.");
+		log_error("Violation: This was a write operation to a read-only page.");
 	} else {
 		log_error("Violation: This was a read operation.");
 	}
@@ -1582,37 +1561,19 @@ static void page_fault_fail(struct registers* r)
 		log_error("Context: The fault occurred in kernel-mode.");
 	}
 	if (reserved) {
-		log_error(
-			"Details: A reserved bit was set in a page directory entry.");
+		log_error("Details: A reserved bit was set in a page directory entry.");
 	}
 	if (id) {
-		log_error(
-			"Details: The fault was caused by an instruction fetch.");
+		log_error("Details: The fault was caused by an instruction fetch.");
 	}
 
 	log_error("General registers:");
 	log_error("RIP: %lx, RSP: %lx, RBP: %lx", r->rip, r->rsp, r->rbp);
-	log_error("RAX: %lx, RBX: %lx, RCX: %lx, RDX: %lx",
-		  r->rax,
-		  r->rbx,
-		  r->rcx,
-		  r->rdx);
-	log_error("RDI: %lx, RSI: %lx, RFLAGS: %lx, DS: %lx",
-		  r->rdi,
-		  r->rsi,
-		  r->rflags,
-		  r->ds);
+	log_error("RAX: %lx, RBX: %lx, RCX: %lx, RDX: %lx", r->rax, r->rbx, r->rcx, r->rdx);
+	log_error("RDI: %lx, RSI: %lx, RFLAGS: %lx, DS: %lx", r->rdi, r->rsi, r->rflags, r->ds);
 	log_error("CS: %lx, SS: %lx", r->cs, r->ss);
-	log_error("R8: %lx, R9: %lx, R10: %lx, R11: %lx",
-		  r->r8,
-		  r->r9,
-		  r->r10,
-		  r->r11);
-	log_error("R12: %lx, R13: %lx, R14: %lx, R15: %lx",
-		  r->r12,
-		  r->r13,
-		  r->r14,
-		  r->r15);
+	log_error("R8: %lx, R9: %lx, R10: %lx, R11: %lx", r->r8, r->r9, r->r10, r->r11);
+	log_error("R12: %lx, R13: %lx, R14: %lx, R15: %lx", r->r12, r->r13, r->r14, r->r15);
 
 	log_page_table_walk((uint64_t*)PHYS_TO_HHDM(cr3), fault_addr);
 
@@ -1623,18 +1584,9 @@ static void page_fault_fail(struct registers* r)
 #if defined(HELIOS_TESTS)
 #include "kernel/ktest.h"
 /**
- * Test function to validate the pruning of a single mapping in the page table.
+ * @brief Tests pruning of a single mapping in the page table.
  *
- * Steps:
- * 1. Allocates a fresh address space (PML4 table).
- * 2. Maps a test virtual address to a physical page.
- * 3. Unmaps the virtual address.
- * 4. Prunes the page tables to remove unused entries.
- * 5. Verifies that the PML4 entry is cleared after pruning.
- * 6. Cleans up allocated resources.
- *
- * This function logs the success or failure of each step and ensures that
- * the page table pruning logic works as expected.
+ * @return 0 on success, or 1 on failure.
  */
 KTEST(test_prune_single_mapping)
 {
@@ -1649,18 +1601,12 @@ KTEST(test_prune_single_mapping)
 	uintptr_t paddr = (uintptr_t)HHDM_TO_PHYS(page);
 
 	log_info("Mapping page: virt=0x%lx -> phys=0x%lx", vaddr, paddr);
-	KTEST_ASSERT_EQ_GOTO(vmm_map_page((pgd_t*)pml4,
-					  vaddr,
-					  paddr,
-					  PAGE_PRESENT | PAGE_WRITE |
-						  CACHE_WRITE_BACK),
+	KTEST_ASSERT_EQ_GOTO(vmm_map_page((pgd_t*)pml4, vaddr, paddr, PAGE_PRESENT | PAGE_WRITE | CACHE_WRITE_BACK),
 			     0,
 			     err_free_table);
 
 	log_info("Unmapping page: 0x%lx", vaddr);
-	KTEST_ASSERT_EQ_GOTO(vmm_unmap_page((pgd_t*)pml4, vaddr),
-			     0,
-			     err_free_page);
+	KTEST_ASSERT_EQ_GOTO(vmm_unmap_page((pgd_t*)pml4, vaddr), 0, err_free_page);
 
 	log_info("Pruning page tables for vaddr 0x%lx", vaddr);
 	prune_page_tables(pml4, vaddr);
@@ -1698,14 +1644,10 @@ KTEST(test_device_region_unmap_no_page_touch)
 	int ref_before = atomic_read(&pg->ref_count);
 
 	uintptr_t vaddr = 0x00007FFFFFFFE000;
-	KTEST_ASSERT_EQ_GOTO(map_device_region(&vas,
-					       vaddr,
-					       vaddr + PAGE_SIZE,
-					       paddr,
-					       PROT_READ | PROT_WRITE,
-					       MAP_SHARED),
-			     0,
-			     err_free_page);
+	KTEST_ASSERT_EQ_GOTO(
+		map_device_region(&vas, vaddr, vaddr + PAGE_SIZE, paddr, PROT_READ | PROT_WRITE, MAP_SHARED),
+		0,
+		err_free_page);
 
 	struct memory_region* mr = get_region(&vas, vaddr);
 	KTEST_ASSERT_NE_GOTO(mr, nullptr, err_free_page);
@@ -1713,24 +1655,15 @@ KTEST(test_device_region_unmap_no_page_touch)
 	pte_t* pte = walk_page_table((pgd_t*)pml4, vaddr, false, 0);
 	KTEST_ASSERT_NE_GOTO(pte, nullptr, err_unmap);
 	KTEST_ASSERT_EQ_GOTO(pte->pte & PAGE_PRESENT, PAGE_PRESENT, err_unmap);
-	KTEST_ASSERT_EQ_GOTO(pte->pte & (PTE_PAT | PAGE_PWT),
-			     (PTE_PAT | PAGE_PWT),
-			     err_unmap);
-	KTEST_ASSERT_EQ_GOTO(pte->pte & PAGE_NO_EXECUTE,
-			     PAGE_NO_EXECUTE,
-			     err_unmap);
-	KTEST_ASSERT_EQ_GOTO(atomic_read(&pg->ref_count),
-			     ref_before,
-			     err_unmap);
+	KTEST_ASSERT_EQ_GOTO(pte->pte & (PTE_PAT | PAGE_PWT), (PTE_PAT | PAGE_PWT), err_unmap);
+	KTEST_ASSERT_EQ_GOTO(pte->pte & PAGE_NO_EXECUTE, PAGE_NO_EXECUTE, err_unmap);
+	KTEST_ASSERT_EQ_GOTO(atomic_read(&pg->ref_count), ref_before, err_unmap);
 
 	unmap_region(&vas, mr);
 
 	pte = walk_page_table((pgd_t*)pml4, vaddr, false, 0);
-	KTEST_ASSERT_TRUE_GOTO(!pte || !(pte->pte & PAGE_PRESENT),
-			       err_free_page);
-	KTEST_ASSERT_EQ_GOTO(atomic_read(&pg->ref_count),
-			     ref_before,
-			     err_free_page);
+	KTEST_ASSERT_TRUE_GOTO(!pte || !(pte->pte & PAGE_PRESENT), err_free_page);
+	KTEST_ASSERT_EQ_GOTO(atomic_read(&pg->ref_count), ref_before, err_free_page);
 
 	rc = 0;
 	goto err_free_page;
@@ -1744,3 +1677,5 @@ err_free_table:
 	return rc;
 }
 #endif
+
+/** @} */

@@ -5,6 +5,11 @@
 #include <kernel/types.h>
 #include <stddef.h>
 
+/**
+ * @addtogroup drivers
+ * @{
+ */
+
 static constexpr u16 COM1_PORT = 0x3f8;
 
 /**
@@ -16,7 +21,7 @@ static constexpr u16 COM1_PORT = 0x3f8;
 int serial_port_init();
 
 /**
- * serial_tty_init - Initialize the serial port TTY device
+ * @brief Creates and registers the serial port TTY device.
  */
 void serial_tty_init();
 
@@ -33,9 +38,17 @@ void write_serial(char a);
 void write_serial_string(const char* s);
 
 /**
- * serial_tty_write - Drain the TTY output buffer to the serial port
- * @tty: Pointer to the TTY device whose output buffer to drain
+ * @brief Drains the TTY output buffer to the serial port.
+ *
+ * @param tty Pointer to the TTY device whose output buffer to drain.
+ *
+ * @return Number of characters written to the serial port.
+ *
+ * @note Typically called as a work item to process buffered output.
+ * Holds the TTY's write_lock semaphore.
  */
 ssize_t serial_tty_write(struct tty* tty);
 
 void write_serial_n(const char* s, size_t len);
+
+/** @} */

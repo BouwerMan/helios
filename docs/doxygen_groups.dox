@@ -1,0 +1,44 @@
+/**
+ * @defgroup arch_x86_64 Architecture (x86-64)
+ * @brief CPU and platform setup: GDT, IDT, paging, and timers.
+ */
+
+/**
+ * @defgroup drivers Device Drivers
+ * @brief Character devices: TTYs, the console, the serial port, and
+ * storage.
+ */
+
+/**
+ * @defgroup fs Filesystem
+ * @brief The VFS layer and filesystem drivers: devfs, FAT, and ramfs.
+ */
+
+/**
+ * @defgroup kernel Kernel Core
+ * @brief Boot, logging, process creation, synchronization primitives,
+ * and work queues.
+ */
+
+/**
+ * @defgroup sched Task Scheduling
+ * @ingroup kernel
+ * @brief The scheduler, kernel threads, and task lifecycle.
+ */
+
+/**
+ * @defgroup lib Utility Library
+ * @brief Generic data structures and helpers shared across the kernel:
+ * lists, hashtables, and string routines.
+ */
+
+/**
+ * @defgroup mm Memory Management
+ * @brief Physical and virtual memory allocation: bootmem, the buddy
+ * allocator, the slab allocator, and address spaces.
+ */
+
+/**
+ * @defgroup libc C Library
+ * @brief The freestanding libc used by userspace programs.
+ */

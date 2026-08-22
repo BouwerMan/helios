@@ -31,6 +31,11 @@
 #include "lib/log.h"
 #include "lib/string.h"
 
+/**
+ * @addtogroup drivers
+ * @{
+ */
+
 /*******************************************************************************
  * Global Variable Definitions
  *******************************************************************************/
@@ -53,28 +58,27 @@ struct inode_ops tty_device_ops = {
  *******************************************************************************/
 
 /**
- * tty_fill_buffer - Fill a ring buffer with data from a source buffer
- * @rb: Pointer to the ring buffer to fill
- * @buffer: Source buffer containing data to copy
- * @count: Number of bytes to copy from the source buffer
+ * @brief Fills a ring buffer with data from a source buffer.
  *
- * Return: Number of bytes successfully copied to the ring buffer
+ * @param rb Pointer to the ring buffer to fill.
+ * @param buffer Source buffer containing the data to copy.
+ * @param count Number of bytes to copy from the source buffer.
+ *
+ * @return Number of bytes copied to the ring buffer.
  */
-static ssize_t
-tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_t count);
+static ssize_t tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_t count);
 
 /*******************************************************************************
  * Public Function Definitions
  *******************************************************************************/
 
 /**
- * tty_init - Initialize the TTY subsystem
+ * @brief Initializes the TTY subsystem.
  *
- * Initializes all TTY drivers and registers their devices with the VFS.
- * This function sets up the serial and VGA console TTY devices, then
- * registers each TTY as a character device so applications can access
- * them through the filesystem. This is the main entry point for TTY
- * subsystem initialization during kernel boot.
+ * Sets up the serial and VGA console TTY devices, then registers each TTY
+ * as a character device so applications can access them through the
+ * filesystem. This is the entry point for TTY subsystem initialization
+ * during kernel boot.
  */
 void tty_init()
 {
@@ -94,9 +98,7 @@ void tty_init()
 		dev_t base;
 		int e = alloc_chrdev_region(&base, 1, tty->name);
 		if (e < 0) {
-			log_error(
-				"Failed to allocate chrdev region for tty: %d",
-				e);
+			log_error("Failed to allocate chrdev region for tty: %d", e);
 			panic("Cannot continue without console");
 		}
 
@@ -115,47 +117,19 @@ void tty_init()
 
 		chrdev_add(c, c->base, c->count);
 
-		devfs_map_name(devfs_sb,
-			       c->name,
-			       c->base,
-			       FILETYPE_CHAR_DEV,
-			       0666,
-			       0);
+		devfs_map_name(devfs_sb, c->name, c->base, FILETYPE_CHAR_DEV, 0666, 0);
 
-		log_debug("Console chrdev major: %u minor: %u",
-			  MAJOR(c->base),
-			  MINOR(c->base));
+		log_debug("Console chrdev major: %u minor: %u", MAJOR(c->base), MINOR(c->base));
 		log_debug("Mounted at %s/%s", devfs_sb->mount_point, c->name);
 	}
 }
 
-/**
- * register_tty - Register a TTY device with the system
- * @tty: Pointer to the TTY device structure to register
- *
- * Adds the specified TTY device to the global list of available TTY devices.
- * This makes the TTY accessible for use by the system and applications.
- * The TTY structure must be properly initialized before calling this function.
- */
 void register_tty(struct tty* tty)
 {
 	log_debug("Registered tty: '%s'", tty->name);
 	list_add(&g_ttys, &tty->list);
 }
 
-/**
- * __write_to_tty - Write data to a TTY device's output buffer
- * @tty: Pointer to the TTY device to write to
- * @buffer: Source buffer containing data to write
- * @count: Number of bytes to write from the buffer
- *
- * Writes data to the TTY's output buffer and schedules the buffer to be
- * drained (transmitted to the actual output device). This is an internal
- * function that handles the core TTY write operation by filling the output
- * ring buffer and queuing work to process the buffered data.
- *
- * Return: Number of bytes successfully written to the output buffer
- */
 ssize_t __write_to_tty(struct tty* tty, const char* buffer, size_t count)
 {
 	sem_wait(&tty->write_lock);
@@ -171,18 +145,7 @@ ssize_t __write_to_tty(struct tty* tty, const char* buffer, size_t count)
 	return written;
 }
 
-/**
- * tty_write - Write data to a TTY device through the VFS interface
- * @file: VFS file handle containing the TTY device in private_data
- * @buffer: Source buffer containing data to write
- * @count: Number of bytes to write from the buffer
- *
- * Return: Number of bytes successfully written to the TTY
- */
-ssize_t tty_write(struct vfs_file* file,
-		  const char* buffer,
-		  size_t count,
-		  off_t* offset)
+ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count, off_t* offset)
 {
 	(void)offset;
 	struct tty* tty = file->private_data;
@@ -201,8 +164,7 @@ void tty_add_input_char(struct tty* tty, char c)
 		rb->buffer[rb->head] = c;
 		rb->head = (rb->head + 1) % rb->size;
 		if (rb->head == rb->tail) {
-			rb->tail =
-				(rb->tail + 1) % rb->size; // Overwrite old data
+			rb->tail = (rb->tail + 1) % rb->size; // Overwrite old data
 		}
 	}
 
@@ -237,8 +199,7 @@ ssize_t __read_from_tty(struct tty* tty, char* buffer, size_t count)
 	return (ssize_t)bytes_read;
 }
 
-ssize_t
-tty_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
+ssize_t tty_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
 {
 	(void)offset;
 	struct tty* tty = file->private_data;
@@ -246,11 +207,12 @@ tty_read(struct vfs_file* file, char* buffer, size_t count, off_t* offset)
 }
 
 /**
- * tty_open - Open a TTY device through the VFS interface
- * @inode: VFS inode representing the TTY device (unused)
- * @file: VFS file structure to initialize for TTY access
+ * @brief Opens a TTY device through the VFS interface.
  *
- * Return: VFS_OK on success
+ * @param inode VFS inode for the TTY device. Unused.
+ * @param file VFS file structure to initialize for TTY access.
+ *
+ * @return VFS_OK on success.
  */
 int tty_open(struct vfs_inode* inode, struct vfs_file* file)
 {
@@ -260,10 +222,11 @@ int tty_open(struct vfs_inode* inode, struct vfs_file* file)
 }
 
 /**
- * find_tty_by_name - Find a TTY device by its name
- * @name: The name of the TTY device to search for
+ * @brief Finds a TTY device by its name.
  *
- * Return: Pointer to the TTY device if found, nullptr otherwise
+ * @param name The name of the TTY device to search for.
+ *
+ * @return Pointer to the TTY device if found, nullptr otherwise.
  */
 struct tty* find_tty_by_name(const char* name)
 {
@@ -276,22 +239,11 @@ struct tty* find_tty_by_name(const char* name)
 	return nullptr;
 }
 
-/**
- * tty_drain_output_buffer - Work item function to drain TTY output buffer
- * @data: Void pointer to the TTY device structure to drain
- *
- * This function is executed as a work item to process buffered output data
- * for a TTY device. It verifies the TTY has a valid driver with a write
- * function, then calls the driver-specific write implementation (e.g.,
- * serial_write or vconsole_write) to transmit the buffered data to the
- * actual output device.
- */
 void tty_drain_output_buffer(void* data)
 {
 	struct tty* tty_to_drain = (struct tty*)data;
 
-	if (tty_to_drain && tty_to_drain->driver &&
-	    tty_to_drain->driver->write) {
+	if (tty_to_drain && tty_to_drain->driver && tty_to_drain->driver->write) {
 		tty_to_drain->driver->write(tty_to_drain);
 	}
 }
@@ -301,15 +253,15 @@ void tty_drain_output_buffer(void* data)
  *******************************************************************************/
 
 /**
- * tty_fill_buffer - Fill a ring buffer with data from a source buffer
- * @rb: Pointer to the ring buffer to fill
- * @buffer: Source buffer containing data to copy
- * @count: Number of bytes to copy from the source buffer
+ * @brief Fills a ring buffer with data from a source buffer.
  *
- * Return: Number of bytes successfully copied to the ring buffer
+ * @param rb Pointer to the ring buffer to fill.
+ * @param buffer Source buffer containing the data to copy.
+ * @param count Number of bytes to copy from the source buffer.
+ *
+ * @return Number of bytes copied to the ring buffer.
  */
-static ssize_t
-tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_t count)
+static ssize_t tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_t count)
 {
 	size_t i = 0;
 	spin_guard(&rb->lock);
@@ -327,3 +279,5 @@ tty_fill_buffer(struct ring_buffer* rb, const char* buffer, size_t count)
 
 	return (ssize_t)i;
 }
+
+/** @} */

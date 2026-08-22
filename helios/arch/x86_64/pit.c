@@ -25,14 +25,20 @@
 #include "kernel/timer.h"
 #include "lib/log.h"
 
+/**
+ * @addtogroup arch_x86_64
+ * @{
+ */
+
 // Some IBM employee had a very fun time when designing this fucker.
 static constexpr u32 PIT_CLK = 1193180;
 
 u32 __pit_phase = 18;
 
 /**
- * pit_handler() - Interrupt handler for the Programmable Interval Timer (PIT)
- * @r: Pointer to the CPU registers at the time of the interrupt
+ * @brief Handles a Programmable Interval Timer (PIT) interrupt.
+ *
+ * @param r Pointer to the CPU registers at the time of the interrupt.
  */
 void pit_handler(struct registers* r)
 {
@@ -41,8 +47,9 @@ void pit_handler(struct registers* r)
 }
 
 /**
- * pit_phase() - Set the frequency of the PIT and initialize it
- * @hz: Desired frequency in Hertz
+ * @brief Sets the PIT frequency and initializes it.
+ *
+ * @param hz Desired frequency in Hertz.
  */
 static void pit_phase(u32 hz)
 {
@@ -61,3 +68,5 @@ void pit_init(void)
 	pit_phase(TIMER_HERTZ);
 	isr_install_handler(IRQ0, pit_handler);
 }
+
+/** @} */

@@ -51,6 +51,85 @@ The following directories were made before switching to manpage style, but still
 
 ---
 
+## API reference (Doxygen)
+
+Alongside the manual pages above, HeliOS also generates a browsable API
+reference straight from source comments, using
+[Doxygen](https://www.doxygen.nl/). The two are complementary, not
+redundant:
+
+* **Man pages** (this directory) are curated, narrative, and cover
+  cross-cutting concerns — locking rules, error models, design
+  rationale — that don't belong crammed into a source comment.
+* **Doxygen** is generated, always in sync with the code, and gives
+  you cross-linked browsing (search, "Files", "Data Structures",
+  "Modules") straight from the `@brief`/`@param`/`@return` comments
+  above each declaration.
+
+### Generating it
+
+```sh
+make docs-doxygen   # Doxygen output only
+make docs           # man pages + Doxygen
+```
+
+Output lands in `docs/build/doxygen/html/index.html`. Configuration is
+in the `Doxyfile` at the repo root; run `doxygen -u Doxyfile` after a
+Doxygen upgrade to pick up any new config keys.
+
+### Writing doc comments
+
+* Use Doxygen syntax: `@brief`, `@param`, `@return`, `@note`. Not
+  kerneldoc (`func() - brief` / `@name:` / `Return:`).
+* Write in [ASD-STE100](https://en.wikipedia.org/wiki/Simplified_Technical_English)
+  Simplified Technical English: short sentences, active voice, one
+  idea per sentence, consistent terminology.
+* Keep it concise — describe what a function does, its parameters,
+  and its return value. If a function genuinely needs a longer
+  explanation (an algorithm, a multi-step protocol, locking rules
+  spanning several functions), that belongs in a man9 page, not a
+  wall of text in the comment.
+* For a struct or type with several free functions that operate on
+  it (common in C, since they aren't methods), tag each one with
+  `@relates <type>` so they show up together on that type's page
+  instead of scattered across the flat "Globals" list. See
+  `spinlock_t` in `kernel/spinlock.h` for an example.
+
+### Subsystem groups
+
+Every file with Doxygen content is wrapped in an `@addtogroup <name>`
+/ `@{ ... @}` block, matching its top-level source directory. This
+gives the generated docs a "Modules" tab organized by subsystem
+instead of raw file paths. The groups themselves are declared once in
+`docs/doxygen_groups.dox`:
+
+| Directory                  | Group          |
+|-----------------------------|----------------|
+| `helios/arch/`              | `arch_x86_64`  |
+| `helios/drivers/`           | `drivers`      |
+| `helios/fs/`                | `fs`           |
+| `helios/kernel/` (excl. `tasks/`) | `kernel`  |
+| `helios/kernel/tasks/`      | `sched` (subgroup of `kernel`) |
+| `helios/lib/`                | `lib`          |
+| `helios/mm/`                 | `mm`           |
+| `libc/`                      | `libc`         |
+
+When adding Doxygen comments to a new file, wrap it in the matching
+`@addtogroup` block. If it's a genuinely new subsystem, add a
+`@defgroup` for it in `docs/doxygen_groups.dox` first.
+
+### Vendored code
+
+Third-party code we didn't write — currently the `printf` (eyalroz)
+and `liballoc` (blanham) implementations — is excluded from the
+generated docs via `EXCLUDE` in the `Doxyfile`, and shouldn't be
+annotated with our own doc comments. Their upstream sources are
+already documented; ours would just drift. The adaptation/glue layers
+around them (`printf_config.h`, `liballoc_hooks.c`, `kmalloc.h`) are
+our code and stay documented normally.
+
+---
+
 ## House style (keep it boring and consistent)
 
 ### File naming

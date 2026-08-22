@@ -3,15 +3,23 @@
 
 #include <kernel/helios.h>
 
+/**
+ * @addtogroup arch_x86_64
+ * @{
+ */
+
 /*
  * Atomic operations on the atomic_t type
  */
 
 /**
- * atomic_read - read atomic variable
- * @v: pointer of type atomic_t
+ * @brief Reads the value of an atomic variable.
  *
- * Atomically reads the value of @v.
+ * @param v Pointer to the atomic variable.
+ *
+ * @return The current value of the variable.
+ *
+ * @relates atomic_t
  */
 static inline int atomic_read(const atomic_t* v)
 {
@@ -19,11 +27,12 @@ static inline int atomic_read(const atomic_t* v)
 }
 
 /**
- * atomic_set - set atomic variable
- * @v: pointer of type atomic_t
- * @i: required value
+ * @brief Sets the value of an atomic variable.
  *
- * Atomically sets the value of @v to @i.
+ * @param v Pointer to the atomic variable.
+ * @param i Value to set.
+ *
+ * @relates atomic_t
  */
 static inline void atomic_set(atomic_t* v, int i)
 {
@@ -31,11 +40,12 @@ static inline void atomic_set(atomic_t* v, int i)
 }
 
 /**
- * atomic_add - add integer to atomic variable
- * @i: integer value to add
- * @v: pointer of type atomic_t
+ * @brief Adds an integer to an atomic variable.
  *
- * Atomically adds @i to @v.
+ * @param i Value to add.
+ * @param v Pointer to the atomic variable.
+ *
+ * @relates atomic_t
  */
 static inline void atomic_add(int i, atomic_t* v)
 {
@@ -43,11 +53,12 @@ static inline void atomic_add(int i, atomic_t* v)
 }
 
 /**
- * atomic_sub - subtract integer from atomic variable
- * @i: integer value to subtract
- * @v: pointer of type atomic_t
+ * @brief Subtracts an integer from an atomic variable.
  *
- * Atomically subtracts @i from @v.
+ * @param i Value to subtract.
+ * @param v Pointer to the atomic variable.
+ *
+ * @relates atomic_t
  */
 static inline void atomic_sub(int i, atomic_t* v)
 {
@@ -55,30 +66,29 @@ static inline void atomic_sub(int i, atomic_t* v)
 }
 
 /**
- * atomic_sub_and_test - subtract value from variable and test result
- * @i: integer value to subtract
- * @v: pointer of type atomic_t
+ * @brief Subtracts an integer from an atomic variable and tests the result.
  *
- * Atomically subtracts @i from @v and returns
- * true if the result is zero, or false for all
- * other cases.
+ * @param i Value to subtract.
+ * @param v Pointer to the atomic variable.
+ *
+ * @return True if the result is zero. False otherwise.
+ *
+ * @relates atomic_t
  */
 static inline int atomic_sub_and_test(int i, atomic_t* v)
 {
 	unsigned char c;
 
-	__asm__ volatile("subl %2,%0; sete %1"
-			 : "+m"(v->counter), "=qm"(c)
-			 : "ir"(i)
-			 : "memory");
+	__asm__ volatile("subl %2,%0; sete %1" : "+m"(v->counter), "=qm"(c) : "ir"(i) : "memory");
 	return c;
 }
 
 /**
- * atomic_inc - increment atomic variable
- * @v: pointer of type atomic_t
+ * @brief Increments an atomic variable by 1.
  *
- * Atomically increments @v by 1.
+ * @param v Pointer to the atomic variable.
+ *
+ * @relates atomic_t
  */
 static inline void atomic_inc(atomic_t* v)
 {
@@ -86,30 +96,30 @@ static inline void atomic_inc(atomic_t* v)
 }
 
 /**
- * atomic_dec - decrement atomic variable
- * @v: pointer of type atomic_t
+ * @brief Decrements an atomic variable by 1.
  *
- * Atomically decrements @v by 1.
+ * @param v Pointer to the atomic variable.
+ *
+ * @relates atomic_t
  */
 static inline void atomic_dec(atomic_t* v)
 {
 	__asm__ volatile("decl %0" : "+m"(v->counter));
 }
 
-/**
- * Atomic operations on raw integers
+/*
+ * Atomic operations on raw integers.
  */
 
 /**
- * try_set_bit - atomically set a bit if it was clear
- * @addr: pointer to the word containing the bit
- * @bit:  bit index (0..63 for 64-bit words)
+ * @brief Atomically sets a bit if it was clear.
  *
- * Returns true if this call changed the bit 0->1 (you "won").
- * Returns false if the bit was already set by someone else.
+ * @param addr Pointer to the word that contains the bit.
+ * @param bit Bit index, 0 to 63 for a 64-bit word.
  *
- * Ordering: 'lock' gives full acquire+release semantics on x86.
- * The "memory" clobber is a compiler barrier around the RMW.
+ * @return True if the bit changed from 0 to 1. False if it was already set.
+ *
+ * @note Uses 'lock' for full acquire and release ordering on x86.
  */
 static inline bool try_set_bit(volatile unsigned long* addr, unsigned bit)
 {
@@ -123,49 +133,44 @@ static inline bool try_set_bit(volatile unsigned long* addr, unsigned bit)
 }
 
 // Returns true iff we transitioned 0->1 (you "won").
-static inline bool try_set_flag_mask(volatile unsigned long* addr,
-				     unsigned long mask)
+static inline bool try_set_flag_mask(volatile unsigned long* addr, unsigned long mask)
 {
 	unsigned char won;
-	__asm__ __volatile__(
-		"bsf %2, %%rcx\n\t"	 // RCX = index of the set bit in mask
-		"lock bts %%rcx, %1\n\t" // CF := old_bit; set bit
-		"setnc %0"		 // won = (CF == 0)
-		: "=q"(won), "+m"(*addr)
-		: "r"(mask)
-		: "rcx", "cc", "memory");
+	__asm__ __volatile__("bsf %2, %%rcx\n\t"      // RCX = index of the set bit in mask
+			     "lock bts %%rcx, %1\n\t" // CF := old_bit; set bit
+			     "setnc %0"		      // won = (CF == 0)
+			     : "=q"(won), "+m"(*addr)
+			     : "r"(mask)
+			     : "rcx", "cc", "memory");
 	return won;
 }
 
-static inline bool try_clear_flag_mask(volatile unsigned long* addr,
-				       unsigned long mask)
+static inline bool try_clear_flag_mask(volatile unsigned long* addr, unsigned long mask)
 {
 	unsigned char cleared;
-	__asm__ __volatile__(
-		"bsf %2, %%rcx\n\t"
-		"lock btr %%rcx, %1\n\t" // CF := old_bit; clear bit
-		"setc %0"		 // cleared = (CF == 1)
-		: "=q"(cleared), "+m"(*addr)
-		: "r"(mask)
-		: "rcx", "cc", "memory");
+	__asm__ __volatile__("bsf %2, %%rcx\n\t"
+			     "lock btr %%rcx, %1\n\t" // CF := old_bit; clear bit
+			     "setc %0"		      // cleared = (CF == 1)
+			     : "=q"(cleared), "+m"(*addr)
+			     : "r"(mask)
+			     : "rcx", "cc", "memory");
 	return cleared;
 }
 
-static inline void clear_flag_mask(volatile unsigned long* addr,
-				   unsigned long mask)
+static inline void clear_flag_mask(volatile unsigned long* addr, unsigned long mask)
 {
-	__asm__ __volatile__(
-		"bsf %1, %%rcx\n\t"	 /* RCX = bit index from one-hot mask */
-		"lock btr %%rcx, %0\n\t" /* clear bit */
-		: "+m"(*addr) /* %0: RMW memory operand (output list!) */
-		: "r"(mask)   /* %1: input mask */
-		: "rcx", "cc", "memory");
+	__asm__ __volatile__("bsf %1, %%rcx\n\t"      /* RCX = bit index from one-hot mask */
+			     "lock btr %%rcx, %0\n\t" /* clear bit */
+			     : "+m"(*addr)	      /* %0: RMW memory operand (output list!) */
+			     : "r"(mask)	      /* %1: input mask */
+			     : "rcx", "cc", "memory");
 }
 
 // TODO: Make READ_ONCE() macro
-static inline bool flags_test_acquire(const volatile unsigned long* addr,
-				      unsigned long mask)
+static inline bool flags_test_acquire(const volatile unsigned long* addr, unsigned long mask)
 {
 	unsigned long v = __atomic_load_n(addr, __ATOMIC_ACQUIRE);
 	return (v & mask) != 0;
 }
+
+/** @} */

@@ -7,7 +7,21 @@
 #include "mm/page.h"
 
 /**
- * returns locked page, also expects already locked mapping
+ * @addtogroup fs
+ * @{
+ */
+
+/**
+ * @brief Finds the cached page at the given index.
+ *
+ * @param mapping The page cache to search.
+ * @param index Page index within the file.
+ *
+ * @return The page, locked. Or nullptr if no page is cached at index.
+ *
+ * @note The caller must hold mapping->lock.
+ *
+ * @relates inode_mapping
  */
 struct page* __imap_lookup(struct inode_mapping* mapping, pgoff_t index)
 {
@@ -22,7 +36,15 @@ struct page* __imap_lookup(struct inode_mapping* mapping, pgoff_t index)
 }
 
 /**
- * returns locked page
+ * @brief Finds the cached page at the given index.
+ *
+ * @param mapping The page cache to search.
+ * @param index Page index within the file.
+ *
+ * @return The page, locked, with a reference held for the caller. Or
+ * nullptr if no page is cached at index, or if mapping is nullptr.
+ *
+ * @relates inode_mapping
  */
 struct page* imap_lookup(struct inode_mapping* mapping, pgoff_t index)
 {
@@ -97,9 +119,6 @@ struct page* imap_lookup_or_create(struct inode_mapping* mapping, pgoff_t index)
 	return page;
 }
 
-/**
- * Expects locked page
- */
 int imap_insert(struct inode_mapping* mapping, struct page* page)
 {
 	if (!mapping) {
@@ -121,9 +140,7 @@ void imap_remove(struct inode_mapping* mapping, struct page* page)
 		return;
 	}
 
-	log_debug("Removing page index %lu from mapping (ino: %zu)",
-		  page->index,
-		  mapping->owner->id);
+	log_debug("Removing page index %lu from mapping (ino: %zu)", page->index, mapping->owner->id);
 
 	spin_guard(&mapping->lock);
 
@@ -132,3 +149,5 @@ void imap_remove(struct inode_mapping* mapping, struct page* page)
 
 	put_page(page);
 }
+
+/** @} */

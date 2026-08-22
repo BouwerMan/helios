@@ -36,9 +36,13 @@
 #include "mm/bootmem.h"
 #include "mm/page_alloc.h"
 
+/**
+ * @addtogroup arch_x86_64
+ * @{
+ */
+
 [[noreturn]]
-extern void __switch_to_new_stack(void* new_stack_top,
-				  void (*entrypoint)(void));
+extern void __switch_to_new_stack(void* new_stack_top, void (*entrypoint)(void));
 
 void* g_entry_new_stack = nullptr;
 
@@ -109,8 +113,9 @@ void __arch_entry()
 
 	// Bottom of stack
 	void* new_stack = get_free_pages(AF_KERNEL, STACK_SIZE_PAGES);
-	g_entry_new_stack =
-		(void*)((uptr)new_stack + STACK_SIZE_PAGES * PAGE_SIZE);
+	g_entry_new_stack = (void*)((uptr)new_stack + STACK_SIZE_PAGES * PAGE_SIZE);
 	__switch_to_new_stack(g_entry_new_stack, kernel_main);
 	__builtin_unreachable();
 }
+
+/** @} */

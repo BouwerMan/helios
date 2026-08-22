@@ -187,14 +187,10 @@ void term_init()
 		list_init(&g_terminal.cursor.timer.list);
 		g_terminal.cursor.visible = true;
 
-		size_t pages = CEIL_DIV(g_terminal.rows * g_terminal.cols *
-						sizeof(struct screen_cell),
-					PAGE_SIZE);
+		size_t pages = CEIL_DIV(g_terminal.rows * g_terminal.cols * sizeof(struct screen_cell), PAGE_SIZE);
 		g_terminal.screen_buffer = get_free_pages(AF_KERNEL, pages);
 
-		memset(g_terminal.screen_buffer,
-		       ' ',
-		       g_terminal.rows * g_terminal.cols * sizeof(char));
+		memset(g_terminal.screen_buffer, ' ', g_terminal.rows * g_terminal.cols * sizeof(char));
 	}
 
 	timer_schedule(&g_terminal.cursor.timer, 500, cursor_callback, nullptr);
@@ -312,10 +308,7 @@ static void screen_buffer_scroll()
 		       &g_terminal.screen_buffer[(row + 1) * g_terminal.cols],
 		       g_terminal.cols);
 	}
-	memset(&g_terminal
-			.screen_buffer[(g_terminal.rows - 1) * g_terminal.cols],
-	       ' ',
-	       g_terminal.cols);
+	memset(&g_terminal.screen_buffer[(g_terminal.rows - 1) * g_terminal.cols], ' ', g_terminal.cols);
 }
 
 void __screen_buffer_putchar_at(char c, size_t x, size_t y)
@@ -379,9 +372,7 @@ void __term_putchar(char c)
 		--g_terminal.write_x;
 		__putchar_at(' ', g_terminal.write_x, g_terminal.write_y);
 		break;
-	case '\t':
-		g_terminal.write_x = (g_terminal.write_x + 4) & (int)(~3ULL);
-		break;
+	case '\t': g_terminal.write_x = (g_terminal.write_x + 4) & (int)(~3ULL); break;
 	default:
 		__putchar_at(c, g_terminal.write_x, g_terminal.write_y);
 		g_terminal.write_x++;
@@ -455,8 +446,7 @@ static size_t parse_csi_param()
 
 static int get_csi_param(size_t index, int default_val)
 {
-	return (index < g_terminal.param_count) ? g_terminal.params[index] :
-						  default_val;
+	return (index < g_terminal.param_count) ? g_terminal.params[index] : default_val;
 }
 
 static void process_sgr_param(int param)
@@ -470,15 +460,9 @@ static void process_sgr_param(int param)
 		g_terminal.current_attrs.flags |= ATTR_BOLD;
 		return;
 		// Figure I may as well handle these here as well
-	case DEFAULT_FG:
-		g_terminal.current_attrs.fg_color =
-			g_terminal.default_attrs.fg_color;
-		return;
-	case DEFAULT_BG:
-		g_terminal.current_attrs.bg_color =
-			g_terminal.default_attrs.bg_color;
-		return;
-	default: break;
+	case DEFAULT_FG: g_terminal.current_attrs.fg_color = g_terminal.default_attrs.fg_color; return;
+	case DEFAULT_BG: g_terminal.current_attrs.bg_color = g_terminal.default_attrs.bg_color; return;
+	default:	 break;
 	}
 
 	// Handle foreground colors (30-37)
@@ -496,15 +480,11 @@ static void process_sgr_param(int param)
 static void handle_erase_seq()
 {
 	if (g_terminal.param_len == 0) {
-		erase_to_end_of_screen((size_t)g_terminal.cursor.x,
-				       (size_t)g_terminal.cursor.y);
+		erase_to_end_of_screen((size_t)g_terminal.cursor.x, (size_t)g_terminal.cursor.y);
 	}
 
 	switch (g_terminal.param_buffer[0]) {
-	case '0':
-		erase_to_end_of_screen((size_t)g_terminal.cursor.x,
-				       (size_t)g_terminal.cursor.y);
-		break;
+	case '0': erase_to_end_of_screen((size_t)g_terminal.cursor.x, (size_t)g_terminal.cursor.y); break;
 	case '2': erase_to_end_of_screen(0, 0); break;
 	default:  break;
 	}
@@ -618,8 +598,7 @@ static void handle_csi_char(char c)
 		break;
 	}
 	default: {
-		if (g_terminal.param_len >=
-		    sizeof(g_terminal.param_buffer) - 1) {
+		if (g_terminal.param_len >= sizeof(g_terminal.param_buffer) - 1) {
 			// Buffer overflow, reset state
 			g_terminal.state = PARSER_NORMAL;
 			log_error("CSI parameter buffer overflow");

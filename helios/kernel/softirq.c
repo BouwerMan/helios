@@ -37,7 +37,7 @@ struct task* ksoftirqd = nullptr;
 static void ksoftirqd_entry()
 {
 	log_debug("ksoftirqd started");
-	yield_blocked(); // Yield once to let init finish
+	yield_blocked();						 // Yield once to let init finish
 	while (true) {
 		static constexpr size_t item_budget = 1024;
 		static constexpr u64 ns_budget = 10UL * 1000UL * 1000UL; // 10ms
@@ -74,8 +74,7 @@ void do_softirq(size_t item_budget, u64 ns_budget)
 			if (!CHECK_BIT(pending, i)) continue;
 			if (!g_softirqs[i].fn) continue;
 
-			softirq_ret_t res =
-				g_softirqs[i].fn(&item_budget, ns_budget);
+			softirq_ret_t res = g_softirqs[i].fn(&item_budget, ns_budget);
 
 			switch (res) {
 			case SOFTIRQ_DONE: break;
@@ -88,8 +87,7 @@ void do_softirq(size_t item_budget, u64 ns_budget)
 		}
 
 		if (requeue != 0) {
-			atomic64_fetch_or_release(&g_pending_bits,
-						  (long)requeue);
+			atomic64_fetch_or_release(&g_pending_bits, (long)requeue);
 		}
 	} while (item_budget > 0 && clock_now_ns() < deadline);
 

@@ -22,8 +22,7 @@ static inline struct devfs_sb_info* DEVFS_SB_INFO(struct vfs_superblock* sb)
 
 void devfs_init();
 struct vfs_superblock* devfs_mount(const char* source, int flags);
-struct vfs_dentry* devfs_lookup(struct vfs_inode* dir_inode,
-				struct vfs_dentry* child);
+struct vfs_dentry* devfs_lookup(struct vfs_inode* dir_inode, struct vfs_dentry* child);
 
 struct vfs_inode* devfs_alloc_inode(struct vfs_superblock* sb);
 
@@ -52,12 +51,7 @@ struct devfs_entry {
 };
 
 // For now, we map name to dev_t. Must switch to devfs_create_node later
-int devfs_map_name(struct vfs_superblock* sb,
-		   const char* name,
-		   dev_t rdev,
-		   u16 type,
-		   u16 mode,
-		   unsigned flags);
+int devfs_map_name(struct vfs_superblock* sb, const char* name, dev_t rdev, u16 type, u16 mode, unsigned flags);
 
 int devfs_unmap_name(struct vfs_superblock* sb, const char* name);
 

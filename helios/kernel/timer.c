@@ -30,6 +30,11 @@
 #include <kernel/types.h>
 #include <lib/log.h>
 
+/**
+ * @addtogroup kernel
+ * @{
+ */
+
 static struct timer_subsystem ts = {
 	.active_timers = LIST_HEAD_INIT(ts.active_timers),
 	.lock = SPINLOCK_INIT,
@@ -41,7 +46,7 @@ static struct timer_subsystem ts = {
 static uint32_t ts_phase = 18;
 
 /**
- * timer_create() - Create and initialize a new timer
+ * @brief Creates and initializes a new timer.
  */
 struct timer* timer_create()
 {
@@ -53,16 +58,14 @@ struct timer* timer_create()
 }
 
 /**
- * timer_schedule() - Schedule a timer to expire after a delay
- * @timer:    Pointer to the timer to schedule
- * @delay_ms: Delay in milliseconds before the timer expires
- * @callback: Function to call when the timer expires
- * @data:     Data to pass to the callback function
+ * @brief Schedules a timer to expire after a delay.
+ *
+ * @param timer Pointer to the timer to schedule.
+ * @param delay_ms Delay in milliseconds before the timer expires.
+ * @param callback Function to call when the timer expires.
+ * @param data Data to pass to the callback function.
  */
-void timer_schedule(struct timer* timer,
-		    u64 delay_ms,
-		    timer_callback_t callback,
-		    void* data)
+void timer_schedule(struct timer* timer, u64 delay_ms, timer_callback_t callback, void* data)
 {
 	if (timer->active) {
 		return; // Already scheduled
@@ -96,9 +99,10 @@ void timer_cancel(struct timer* timer)
 }
 
 /**
- * timer_reschedule() - Reschedule an existing timer with a new delay
- * @timer: Pointer to the timer to reschedule
- * @new_delay_ms: New delay in milliseconds
+ * @brief Reschedules an existing timer with a new delay.
+ *
+ * @param timer Pointer to the timer to reschedule.
+ * @param new_delay_ms New delay in milliseconds.
  */
 void timer_reschedule(struct timer* timer, u64 new_delay_ms)
 {
@@ -112,7 +116,7 @@ void timer_destroy(struct timer* timer)
 }
 
 /**
- * timer_tick() - Check for expired timers and call their callbacks
+ * @brief Checks for expired timers and calls their callbacks.
  */
 static void timer_tick(void)
 {
@@ -139,7 +143,7 @@ static void timer_tick(void)
 }
 
 /**
- * timer_handler() - Called on each timer tick (from IRQ context)
+ * @brief Runs on each timer tick, from IRQ context.
  */
 void timer_handler(void)
 {
@@ -150,8 +154,7 @@ void timer_handler(void)
 
 		ts.current_ticks++;
 		if (ts.current_ticks % ts_phase == 0) ts.seconds_since_start++;
-		if (ts.current_ticks % SCHEDULER_TIME == 0)
-			squeue->need_reschedule = true;
+		if (ts.current_ticks % SCHEDULER_TIME == 0) squeue->need_reschedule = true;
 	}
 
 	timer_tick();
@@ -162,3 +165,5 @@ void timer_init(u32 phase)
 {
 	ts_phase = phase;
 }
+
+/** @} */

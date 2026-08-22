@@ -1,6 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #pragma once
 
+/**
+ * @addtogroup mm
+ * @{
+ */
+
 // TODO: Use these
 
 /** @brief An entry in the Page Global Directory (PGD), the top-level page table. */
@@ -30,3 +35,4 @@ typedef struct {
 typedef struct {
 	unsigned long pte;
 } pte_t;
+/** @} */

@@ -16,11 +16,11 @@ struct bootinfo {
 	struct bootinfo_memmap_entry* memmap;
 	size_t memmap_entry_count;
 
-	uint64_t hhdm_offset; // Offset for HHDM (High Half Direct Mapping)
+	uint64_t hhdm_offset;		 // Offset for HHDM (High Half Direct Mapping)
 
 	struct {
 		uintptr_t physical_base; // Physical base address of the executable
-		uintptr_t virtual_base; // Virtual base address of the executable
+		uintptr_t virtual_base;	 // Virtual base address of the executable
 	} executable;
 };
 

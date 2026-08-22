@@ -27,6 +27,11 @@
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 
+/**
+ * @addtogroup drivers
+ * @{
+ */
+
 /*******************************************************************************
  * Global Variable Definitions
  *******************************************************************************/
@@ -70,11 +75,11 @@ int serial_port_init()
 	outb(COM1_PORT + 1, 0x00); //                  (hi byte)
 	outb(COM1_PORT + 3, 0x03); // 8 bits, no parity, one stop bit
 	outb(COM1_PORT + 2,
-	     0xC7); // Enable FIFO, clear them, with 14-byte threshold
+	     0xC7);		   // Enable FIFO, clear them, with 14-byte threshold
 	outb(COM1_PORT + 4, 0x0B); // IRQs enabled, RTS/DSR set
 	outb(COM1_PORT + 4, 0x1E); // Set in loopback mode, test the serial chip
 	outb(COM1_PORT + 0,
-	     0xAE); // Test serial chip (send byte 0xAE and check if serial returns same byte)
+	     0xAE);		   // Test serial chip (send byte 0xAE and check if serial returns same byte)
 
 	// Check if serial is faulty (i.e: not same byte as sent)
 	if (inb(COM1_PORT + 0) != 0xAE) {
@@ -88,15 +93,13 @@ int serial_port_init()
 }
 
 /**
- * serial_tty_init - Initialize the serial port TTY device
+ * @brief Creates and registers the serial port TTY device.
  *
- * Creates and registers a TTY device named "ttyS0" that outputs to the
- * serial port. Allocates memory for the output ring buffer and initializes
- * all necessary data structures. This TTY provides serial console access
- * for debugging and remote system administration.
+ * Creates a TTY device named "ttyS0" that outputs to the serial port. It
+ * allocates the output ring buffer and sets up the TTY structures.
  *
- * Panics if memory allocation for the ring buffer fails, as the serial
- * TTY is essential for system debugging and logging.
+ * @note Panics if the ring buffer allocation fails. The serial TTY is
+ * essential for system debugging and logging.
  */
 void serial_tty_init()
 {
@@ -131,14 +134,6 @@ static inline void __write_debugcon(char a)
 	outb(0xE9, (u8)a);
 }
 
-/**
- * @brief Writes a character to the serial port.
- *
- * This function waits until the serial port is ready to transmit data,
- * then sends the specified character.
- *
- * @param a The character to write to the serial port.
- */
 void write_serial(char a)
 {
 #ifdef DEBUGCON
@@ -148,14 +143,6 @@ void write_serial(char a)
 #endif /* DEBUGCON */
 }
 
-/**
- * @brief Writes a null-terminated string to the serial port.
- *
- * This function iterates through each character in the provided string
- * and writes it to the serial port using `write_serial`.
- *
- * @param s The null-terminated string to write to the serial port.
- */
 void write_serial_string(const char* s)
 {
 	while (*s) {
@@ -181,17 +168,6 @@ void write_serial_n(const char* s, size_t len)
 	}
 }
 
-/**
- * serial_tty_write - Drain the TTY output buffer to the serial port
- * @tty: Pointer to the TTY device whose output buffer to drain
- *
- * Reads all available characters from the TTY's output ring buffer and
- * transmits them through the serial port. This function is typically called
- * as a work item to process buffered output. The operation is atomic and
- * protected by the ring buffer's spinlock to ensure thread safety.
- *
- * Return: Number of characters written to the serial port
- */
 ssize_t serial_tty_write(struct tty* tty)
 {
 	struct ring_buffer* rb = &tty->output_buffer;
@@ -209,3 +185,5 @@ ssize_t serial_tty_write(struct tty* tty)
 
 	return bytes_written;
 }
+
+/** @} */

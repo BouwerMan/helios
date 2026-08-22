@@ -25,10 +25,7 @@
 
 // Cold + noreturn helps code layout and optimization on the fail path.
 [[gnu::cold, noreturn, maybe_unused]]
-static void __kassert_fail_base(const char* expr,
-				const char* file,
-				int line,
-				const char* func)
+static void __kassert_fail_base(const char* expr, const char* file, int line, const char* func)
 {
 	set_log_mode(LOG_DIRECT);
 	// Keep the core record structured and minimal; no allocation.
@@ -43,15 +40,12 @@ static void __kassert_fail_base(const char* expr,
 // - In debug: logs the failure site and optional message, then panics.
 // - In release (NDEBUG or KASSERT_DISABLE): compiles away to nothing.
 #if __KASSERT_ENABLED
-#define kassert(expr, ...)                                  \
-	do {                                                \
-		if (unlikely(!(expr))) {                    \
-			__VA_OPT__(log_error(__VA_ARGS__);) \
-			__kassert_fail_base(#expr,          \
-					    __FILE__,       \
-					    __LINE__,       \
-					    __func__);      \
-		}                                           \
+#define kassert(expr, ...)                                                        \
+	do {                                                                      \
+		if (unlikely(!(expr))) {                                          \
+			__VA_OPT__(log_error(__VA_ARGS__);)                       \
+			__kassert_fail_base(#expr, __FILE__, __LINE__, __func__); \
+		}                                                                 \
 	} while (0)
 #else
 #define kassert(expr, ...) ((void)0)
@@ -59,8 +53,7 @@ static void __kassert_fail_base(const char* expr,
 
 // kunreachable(): like libc's __builtin_unreachable(), but safe in debug.
 #if __KASSERT_ENABLED
-#define kunreachable() \
-	__kassert_fail_base("unreachable", __FILE__, __LINE__, __func__)
+#define kunreachable() __kassert_fail_base("unreachable", __FILE__, __LINE__, __func__)
 #else
 #if __has_builtin(__builtin_unreachable)
 #define kunreachable() __builtin_unreachable()
@@ -93,12 +86,7 @@ static void __kassert_fail_base(const char* expr,
 #define STRINGIFY(x) __stringify(x)
 
 #if __KASSERT_ENABLED
-#define kunimpl(name)                               \
-	__kassert_fail_base("Unimplemented: " name, \
-			    __FILE__,               \
-			    __LINE__,               \
-			    __func__)
+#define kunimpl(name) __kassert_fail_base("Unimplemented: " name, __FILE__, __LINE__, __func__)
 #else
-#define kunimpl(name) \
-	panic("Unimplemented: " name " at " __FILE__ ":" STRINGIFY(__LINE__))
+#define kunimpl(name) panic("Unimplemented: " name " at " __FILE__ ":" STRINGIFY(__LINE__))
 #endif

@@ -20,21 +20,15 @@ static inline void* choose_base_addr(void* addr)
 	return addr;
 }
 
-void* mmap_sys(void* addr,
-	       size_t length,
-	       int prot,
-	       int flags,
-	       int fd,
-	       off_t offset)
+void* mmap_sys(void* addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
-	log_debug(
-		"mmap called with parameters: addr=%p, length=%zu, prot=%d, flags=%d, fd=%d, offset=%zu",
-		addr,
-		length,
-		prot,
-		flags,
-		fd,
-		offset);
+	log_debug("mmap called with parameters: addr=%p, length=%zu, prot=%d, flags=%d, fd=%d, offset=%zu",
+		  addr,
+		  length,
+		  prot,
+		  flags,
+		  fd,
+		  offset);
 	if (length == 0) {
 		log_error("mmap: length cannot be zero");
 		return nullptr;
@@ -72,12 +66,7 @@ void* mmap_sys(void* addr,
 
 	if (file->fops && file->fops->mmap) {
 		addr = choose_base_addr(addr);
-		int res = file->fops->mmap(file,
-					   addr,
-					   length,
-					   prot,
-					   flags,
-					   offset);
+		int res = file->fops->mmap(file, addr, length, prot, flags, offset);
 		if (res < 0) {
 			log_error("mmap failed: %d", res);
 			return nullptr;

@@ -13,8 +13,8 @@
  * @param op the operation: OP_READ, OP_WRITE or OP_PACKET
  * @param buffer the buffer to write to
  * @param lba the block-address to start at
- * @param secSize the size of a sector
- * @param secCount number of sectors
+ * @param sec_size the size of a sector
+ * @param sec_count number of sectors
  * @return true on success
  */
 bool ata_read_write(sATADevice* device, u16 op, void* buffer, u32 lba, size_t sec_size, size_t sec_count);

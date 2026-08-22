@@ -34,7 +34,7 @@ QEMU_UEFI := -drive if=pflash,format=raw,unit=0,file=$(OVMF_CODE),readonly=on \
 	     -net none
 
 
-.PHONY: all libc helios qemu headers iso todolist limine userspace compile_commands tidy ovmf docs
+.PHONY: all libc helios qemu headers iso todolist limine userspace compile_commands tidy ovmf docs docs-man docs-doxygen
 
 all: headers helios libc userspace
 
@@ -56,9 +56,17 @@ headers:
 	@DESTDIR=$(SYSROOT) $(MAKE) -C ./helios install-headers
 	@DESTDIR=$(SYSROOT) $(MAKE) -C ./libc install-headers
 
-docs:
-	@echo "Generating documentation..."
+docs: docs-man docs-doxygen
+
+docs-man:
+	@echo "Generating man page documentation..."
 	@$(MAKE) -C ./docs
+
+docs-doxygen:
+	@echo "Generating Doxygen API documentation..."
+	@command -v doxygen >/dev/null 2>&1 || (echo "doxygen not found; install it, or run 'make docs-man' alone" && exit 1)
+	@mkdir -p docs/build/doxygen
+	@doxygen Doxyfile
 
 docs-index:
 	@$(MAKE) -C ./docs index

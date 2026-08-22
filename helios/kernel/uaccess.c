@@ -30,11 +30,19 @@
 #include <uapi/helios/mman.h>
 
 /**
- * validate_args - Reject NULL, overflowing, or kernel-half args cheaply
- * @k:   Kernel-side pointer of the copy
- * @u:   User-side pointer of the copy
- * @len: Length of the range in bytes
- * Return: true if worth walking with check_access(), false to reject outright.
+ * @addtogroup kernel
+ * @{
+ */
+
+/**
+ * @brief Rejects NULL, overflowing, or kernel-half arguments cheaply.
+ *
+ * @param k Kernel-side pointer of the copy.
+ * @param u User-side pointer of the copy.
+ * @param len Length of the range in bytes.
+ *
+ * @return true if the range is worth checking with check_access(), false
+ * to reject it outright.
  */
 static bool validate_args(const void* k, const void __user* u, size_t len)
 {
@@ -60,17 +68,20 @@ static bool validate_args(const void* k, const void __user* u, size_t len)
 }
 
 /**
- * copy_from_user - Validate and copy a range out of userspace
- * @dst: Kernel destination buffer
- * @src: User source pointer
- * @len: Number of bytes to copy
- * Return: 0 on success, -EFAULT if @src/@len is rejected.
- * Context: Task context only, must not be called from an IRQ handler.
+ * @brief Validates and copies a range out of userspace.
+ *
+ * @param dst Kernel destination buffer.
+ * @param src User source pointer.
+ * @param len Number of bytes to copy.
+ *
+ * @return 0 on success, or -EFAULT if the source or length is rejected.
+ *
+ * @note Call this function from task context only. Do not call it from
+ * an IRQ handler.
  */
 long copy_from_user(void* dst, const void __user* src, size_t len)
 {
-	kassert(!is_in_interrupt_context(),
-		"copy_from_user called from interrupt context");
+	kassert(!is_in_interrupt_context(), "copy_from_user called from interrupt context");
 
 	if (len == 0) {
 		return 0;
@@ -98,17 +109,21 @@ long copy_from_user(void* dst, const void __user* src, size_t len)
 }
 
 /**
- * copy_to_user - Validate and copy a range into userspace
- * @dst: User destination pointer
- * @src: Kernel source buffer
- * @len: Number of bytes to copy
- * Return: 0 on success, -EFAULT if @dst/@len is rejected.
- * Context: Task context only, must not be called from an IRQ handler.
+ * @brief Validates and copies a range into userspace.
+ *
+ * @param dst User destination pointer.
+ * @param src Kernel source buffer.
+ * @param len Number of bytes to copy.
+ *
+ * @return 0 on success, or -EFAULT if the destination or length is
+ * rejected.
+ *
+ * @note Call this function from task context only. Do not call it from
+ * an IRQ handler.
  */
 long copy_to_user(void __user* dst, const void* src, size_t len)
 {
-	kassert(!is_in_interrupt_context(),
-		"copy_to_user called from interrupt context");
+	kassert(!is_in_interrupt_context(), "copy_to_user called from interrupt context");
 
 	if (len == 0) {
 		return 0;
@@ -148,12 +163,10 @@ KTEST(test_uaccess_address_validation)
 	KTEST_ASSERT_FALSE(validate_args(valid_k, NULL, len));
 
 	// kernel pointer overflow: k + len wraps past UINTPTR_MAX
-	KTEST_ASSERT_FALSE(
-		validate_args((void*)(UINTPTR_MAX - 10), valid_u, 20));
+	KTEST_ASSERT_FALSE(validate_args((void*)(UINTPTR_MAX - 10), valid_u, 20));
 
 	// user range overflows into the kernel half without u itself being there
-	KTEST_ASSERT_FALSE(
-		validate_args(valid_k, (void*)(HHDM_OFFSET - 5), 10));
+	KTEST_ASSERT_FALSE(validate_args(valid_k, (void*)(HHDM_OFFSET - 5), 10));
 
 	// user pointer already at/above the kernel half
 	KTEST_ASSERT_FALSE(validate_args(valid_k, (void*)HHDM_OFFSET, len));
@@ -184,9 +197,7 @@ KTEST(test_copy_from_user)
 
 	char dst[len];
 	memset(dst, 0, len);
-	KTEST_ASSERT_EQ_GOTO(copy_from_user(dst, (void*)ustart, len),
-			     0,
-			     err_unmap_region);
+	KTEST_ASSERT_EQ_GOTO(copy_from_user(dst, (void*)ustart, len), 0, err_unmap_region);
 	KTEST_ASSERT_EQ_GOTO(memcmp(dst, msg, len), 0, err_unmap_region);
 
 	rc = 0;
@@ -218,13 +229,9 @@ KTEST(test_copy_to_user)
 	char dst[len];
 	memset(dst, 0, len);
 
-	KTEST_ASSERT_EQ_GOTO(copy_to_user((void*)ustart, msg, len),
-			     0,
-			     err_unmap_region);
+	KTEST_ASSERT_EQ_GOTO(copy_to_user((void*)ustart, msg, len), 0, err_unmap_region);
 
-	KTEST_ASSERT_EQ_GOTO(copy_from_user(dst, (void*)ustart, len),
-			     0,
-			     err_unmap_region);
+	KTEST_ASSERT_EQ_GOTO(copy_from_user(dst, (void*)ustart, len), 0, err_unmap_region);
 	KTEST_ASSERT_EQ_GOTO(memcmp(dst, msg, len), 0, err_unmap_region);
 
 	rc = 0;
@@ -243,18 +250,11 @@ KTEST(test_copy_to_user_readonly_rejected)
 	uptr ustart = 0x10001000;
 	uptr uend = ustart + PAGE_SIZE;
 
-	KTEST_ASSERT_EQ(map_region(vas,
-				   (struct mr_file) { 0 },
-				   ustart,
-				   uend,
-				   PROT_READ,
-				   MAP_PRIVATE | MAP_ANONYMOUS),
+	KTEST_ASSERT_EQ(map_region(vas, (struct mr_file) { 0 }, ustart, uend, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS),
 			0);
 
 	char msg[] = "should not land";
-	KTEST_ASSERT_EQ_GOTO(copy_to_user((void*)ustart, msg, ARRAY_SIZE(msg)),
-			     -EFAULT,
-			     err_unmap_region);
+	KTEST_ASSERT_EQ_GOTO(copy_to_user((void*)ustart, msg, ARRAY_SIZE(msg)), -EFAULT, err_unmap_region);
 
 	rc = 0;
 
@@ -265,3 +265,5 @@ err_unmap_region:
 }
 
 #endif
+
+/** @} */

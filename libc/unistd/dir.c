@@ -11,8 +11,7 @@
 ssize_t __getdents(int fd, struct dirent* dirp, size_t count)
 {
 	// return (ssize_t)__syscall3(SYS_GETDENTS, fd, (long)dirp, (long)count);
-	ssize_t res = (ssize_t)__syscall3(
-		SYS_GETDENTS, (long)fd, (long)dirp, (long)count);
+	ssize_t res = (ssize_t)__syscall3(SYS_GETDENTS, (long)fd, (long)dirp, (long)count);
 	if (res < 0) {
 		errno = (int)-res;
 	}
@@ -24,8 +23,7 @@ struct dirent* readdir(DIR* dirp)
 {
 	if (dirp->buf_pos >= (size_t)dirp->buf_valid) {
 		// Need to read more data
-		dirp->buf_valid = __getdents(
-			dirp->fd, (struct dirent*)dirp->buffer, dirp->buf_size);
+		dirp->buf_valid = __getdents(dirp->fd, (struct dirent*)dirp->buffer, dirp->buf_size);
 		if (dirp->buf_valid <= 0) {
 			// Error or end of directory
 			if (dirp->buf_valid < 0) {
