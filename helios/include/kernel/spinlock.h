@@ -15,6 +15,10 @@
  * @{
  */
 
+/**
+ * @brief A test-and-set spinlock. See spinlock(9) for semantics and
+ * lock ordering rules.
+ */
 typedef struct {
 	int val;
 } spinlock_t;
@@ -29,6 +33,8 @@ typedef struct {
  * @brief Initializes a spinlock to the unlocked state.
  *
  * @param lock Pointer to the spinlock to initialize.
+ *
+ * @relates spinlock_t
  */
 static inline void spin_init(spinlock_t* lock)
 {
@@ -52,6 +58,8 @@ static inline void __spinlock_raw_release(spinlock_t* lock)
  * @brief Acquires a spinlock. The interrupt state does not change.
  *
  * @param lock Pointer to the spinlock to acquire.
+ *
+ * @relates spinlock_t
  */
 static inline void spin_lock(spinlock_t* lock)
 {
@@ -62,6 +70,8 @@ static inline void spin_lock(spinlock_t* lock)
  * @brief Releases a spinlock. The interrupt state does not change.
  *
  * @param lock Pointer to the spinlock to release.
+ *
+ * @relates spinlock_t
  */
 static inline void spin_unlock(spinlock_t* lock)
 {
@@ -74,6 +84,8 @@ static inline void spin_unlock(spinlock_t* lock)
  * @param lock Pointer to the spinlock to acquire.
  *
  * @return True if the spinlock was acquired. False if it was already held.
+ *
+ * @relates spinlock_t
  */
 static inline bool spin_trylock(spinlock_t* lock)
 {
@@ -84,6 +96,8 @@ static inline bool spin_trylock(spinlock_t* lock)
  * @brief Disables interrupts, then acquires a spinlock.
  *
  * @param lock Pointer to the spinlock to acquire.
+ *
+ * @relates spinlock_t
  */
 static inline void spin_lock_irq(spinlock_t* lock)
 {
@@ -95,6 +109,8 @@ static inline void spin_lock_irq(spinlock_t* lock)
  * @brief Releases a spinlock, then enables interrupts.
  *
  * @param lock Pointer to the spinlock to release.
+ *
+ * @relates spinlock_t
  */
 static inline void spin_unlock_irq(spinlock_t* lock)
 {
@@ -112,6 +128,8 @@ static constexpr ulong EFLAGS_IF = 1UL << 9;
  * @param lock Pointer to the spinlock to acquire.
  *
  * @return The interrupt state to restore on unlock.
+ *
+ * @relates spinlock_t
  */
 static inline ulong spin_lock_irqsave(spinlock_t* lock)
 {
@@ -128,6 +146,8 @@ static inline ulong spin_lock_irqsave(spinlock_t* lock)
  *
  * @param lock Pointer to the spinlock to release.
  * @param flags The value returned by the matching spin_lock_irqsave().
+ *
+ * @relates spinlock_t
  */
 static inline void spin_unlock_irqrestore(spinlock_t* lock, ulong flags)
 {
@@ -136,6 +156,12 @@ static inline void spin_unlock_irqrestore(spinlock_t* lock, ulong flags)
 	if (likely(flags & EFLAGS_IF)) __asm__ volatile("sti" : : : "memory");
 }
 
+/**
+ * @brief Holds a spinlock and its saved interrupt state for the
+ * lifetime of the guard. Used by spin_guard() and scoped_spin_guard().
+ *
+ * @relates spinlock_t
+ */
 typedef struct {
 	spinlock_t* lock;
 	ulong flags;
@@ -155,6 +181,8 @@ static inline void __spin_guard_fini(spinlock_guard_t* guard)
  * @brief Holds a spinlock until the end of the current block.
  *
  * @param lockp Pointer to the spinlock to acquire.
+ *
+ * @relates spinlock_t
  */
 #define spin_guard(lockp) spinlock_guard_t __UNIQUE_ID(g) __cleanup(__spin_guard_fini) = __spin_guard_init(lockp)
 
@@ -165,6 +193,8 @@ static inline void __spin_guard_fini(spinlock_guard_t* guard)
  *
  * This macro expands to a loop. See spinlock(9) for a warning about
  * break and continue.
+ *
+ * @relates spinlock_t
  */
 #define scoped_spin_guard(lockp) __scoped_spin_guard(lockp, __COUNTER__)
 

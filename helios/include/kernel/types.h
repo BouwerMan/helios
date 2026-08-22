@@ -38,10 +38,18 @@ typedef int pid_t;
 typedef size_t pfn_t;
 typedef long pgoff_t;
 
+/**
+ * @brief A 32-bit integer that supports atomic read-modify-write
+ * operations.
+ */
 typedef struct {
 	int counter;
 } atomic_t;
 
+/**
+ * @brief A 64-bit integer that supports atomic read-modify-write
+ * operations.
+ */
 typedef struct {
 	long counter;
 } atomic64_t;

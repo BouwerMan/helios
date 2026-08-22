@@ -18,6 +18,8 @@
  * @param v Pointer to the atomic variable.
  *
  * @return The current value of the variable.
+ *
+ * @relates atomic_t
  */
 static inline int atomic_read(const atomic_t* v)
 {
@@ -29,6 +31,8 @@ static inline int atomic_read(const atomic_t* v)
  *
  * @param v Pointer to the atomic variable.
  * @param i Value to set.
+ *
+ * @relates atomic_t
  */
 static inline void atomic_set(atomic_t* v, int i)
 {
@@ -40,6 +44,8 @@ static inline void atomic_set(atomic_t* v, int i)
  *
  * @param i Value to add.
  * @param v Pointer to the atomic variable.
+ *
+ * @relates atomic_t
  */
 static inline void atomic_add(int i, atomic_t* v)
 {
@@ -51,6 +57,8 @@ static inline void atomic_add(int i, atomic_t* v)
  *
  * @param i Value to subtract.
  * @param v Pointer to the atomic variable.
+ *
+ * @relates atomic_t
  */
 static inline void atomic_sub(int i, atomic_t* v)
 {
@@ -64,6 +72,8 @@ static inline void atomic_sub(int i, atomic_t* v)
  * @param v Pointer to the atomic variable.
  *
  * @return True if the result is zero. False otherwise.
+ *
+ * @relates atomic_t
  */
 static inline int atomic_sub_and_test(int i, atomic_t* v)
 {
@@ -77,6 +87,8 @@ static inline int atomic_sub_and_test(int i, atomic_t* v)
  * @brief Increments an atomic variable by 1.
  *
  * @param v Pointer to the atomic variable.
+ *
+ * @relates atomic_t
  */
 static inline void atomic_inc(atomic_t* v)
 {
@@ -87,6 +99,8 @@ static inline void atomic_inc(atomic_t* v)
  * @brief Decrements an atomic variable by 1.
  *
  * @param v Pointer to the atomic variable.
+ *
+ * @relates atomic_t
  */
 static inline void atomic_dec(atomic_t* v)
 {

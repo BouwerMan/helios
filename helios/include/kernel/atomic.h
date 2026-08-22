@@ -14,41 +14,49 @@
 #define barrier()   asm volatile("" ::: "memory")
 #define cpu_relax() __builtin_ia32_pause();
 
+/** @relates atomic64_t */
 static inline long atomic64_fetch_add_relaxed(atomic64_t* v, long delta)
 {
 	return __atomic_fetch_add(&v->counter, delta, __ATOMIC_RELAXED);
 }
 
+/** @relates atomic64_t */
 static inline long atomic64_load_relaxed(const atomic64_t* v)
 {
 	return __atomic_load_n(&v->counter, __ATOMIC_RELAXED);
 }
 
+/** @relates atomic64_t */
 static inline long atomic64_load_acquire(const atomic64_t* v)
 {
 	return __atomic_load_n(&v->counter, __ATOMIC_ACQUIRE);
 }
 
+/** @relates atomic64_t */
 static inline long atomic64_xchg_acq_rel(atomic64_t* v, long new)
 {
 	return __atomic_exchange_n(&v->counter, new, __ATOMIC_ACQ_REL);
 }
 
+/** @relates atomic64_t */
 static inline void atomic64_store_release(atomic64_t* v, long new)
 {
 	__atomic_store_n(&v->counter, new, __ATOMIC_RELEASE);
 }
 
+/** @relates atomic64_t */
 static inline void atomic64_fetch_or_release(atomic64_t* v, long mask)
 {
 	__atomic_fetch_or(&v->counter, mask, __ATOMIC_RELEASE);
 }
 
+/** @relates atomic_t */
 static inline void atomic_store_release(atomic_t* v, int i)
 {
 	__atomic_store_n(&v->counter, i, __ATOMIC_RELEASE);
 }
 
+/** @relates atomic_t */
 static inline int atomic_load_acquire(const atomic_t* v)
 {
 	return __atomic_load_n(&v->counter, __ATOMIC_ACQUIRE);
@@ -69,6 +77,7 @@ static inline void smp_mb(void)
 	__atomic_thread_fence(__ATOMIC_SEQ_CST);
 }
 
+/** @relates atomic64_t */
 static inline long atomic64_compare_and_swap(atomic64_t* v, long old, long new)
 {
 	return __atomic_compare_exchange_n(&v->counter, &old, new, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
@@ -83,6 +92,8 @@ static inline long atomic64_compare_and_swap(atomic64_t* v, long old, long new)
  * @param new Desired value if the variable equals @p old.
  *
  * @return True if the exchange took place. False otherwise.
+ *
+ * @relates atomic64_t
  */
 static inline bool a64_cas_relaxed(atomic64_t* v, long* old, long new)
 {
