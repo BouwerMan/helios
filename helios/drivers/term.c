@@ -88,6 +88,7 @@ struct terminal_attrs {
 // Represents the actual box where the cursor is drawn.
 // Not where the next character will be written.
 struct term_cursor {
+	bool active;
 	bool visible;
 	struct timer timer;
 
@@ -152,6 +153,7 @@ static void handle_escape_char(char c);
 static void process_sgr_param(int param);
 static void handle_csi_char(char c);
 static void handle_sgr_seq();
+static void __screen_buffer_putchar_at(char c, size_t x, size_t y);
 
 static void cursor_callback(void* data);
 
@@ -190,9 +192,14 @@ void term_init()
 		size_t pages = CEIL_DIV(g_terminal.rows * g_terminal.cols * sizeof(struct screen_cell), PAGE_SIZE);
 		g_terminal.screen_buffer = get_free_pages(AF_KERNEL, pages);
 
-		memset(g_terminal.screen_buffer, ' ', g_terminal.rows * g_terminal.cols * sizeof(char));
+		for (size_t r = 0; r < g_terminal.rows; r++) {
+			for (size_t c = 0; c < g_terminal.cols; c++) {
+				__screen_buffer_putchar_at(' ', c, r);
+			}
+		}
 	}
 
+	g_terminal.cursor.active = true;
 	timer_schedule(&g_terminal.cursor.timer, 500, cursor_callback, nullptr);
 }
 
@@ -306,12 +313,14 @@ static void screen_buffer_scroll()
 	for (size_t row = 0; row < g_terminal.rows - 1; row++) {
 		memcpy(&g_terminal.screen_buffer[row * g_terminal.cols],
 		       &g_terminal.screen_buffer[(row + 1) * g_terminal.cols],
-		       g_terminal.cols);
+		       g_terminal.cols * sizeof(struct screen_cell));
 	}
-	memset(&g_terminal.screen_buffer[(g_terminal.rows - 1) * g_terminal.cols], ' ', g_terminal.cols);
+	for (size_t c = 0; c < g_terminal.cols; c++) {
+		__screen_buffer_putchar_at(' ', c, g_terminal.rows - 1);
+	}
 }
 
-void __screen_buffer_putchar_at(char c, size_t x, size_t y)
+static void __screen_buffer_putchar_at(char c, size_t x, size_t y)
 {
 	if (x >= g_terminal.cols || y >= g_terminal.rows) return;
 
@@ -391,6 +400,45 @@ void __term_putchar(char c)
 	}
 
 	__place_cursor_block(g_terminal.write_x, g_terminal.write_y);
+}
+
+/**
+ * term_resume_text - Changes term to text mode
+ */
+void term_resume_text()
+{
+	for (size_t row = 0; row < g_terminal.rows; row++) {
+		for (size_t col = 0; col < g_terminal.cols; col++) {
+			size_t index = row * g_terminal.cols + col;
+			char c = g_terminal.screen_buffer[index].character;
+			struct terminal_attrs* attrs = &g_terminal.screen_buffer[index].attrs;
+			screen_putchar_at((u16)c, col, row, attrs->fg_color, attrs->bg_color);
+		}
+	}
+	term_resume_cursor();
+}
+
+/**
+ * term_pause_text - Basically pauses all term output
+ */
+void term_pause_text()
+{
+	term_pause_cursor();
+}
+
+void term_pause_cursor()
+{
+	spin_guard(&g_terminal.lock);
+	g_terminal.cursor.active = false;
+}
+
+void term_resume_cursor()
+{
+	spin_guard(&g_terminal.lock);
+	// Early return so we don't spuriously reschedule
+	if (g_terminal.cursor.active == true) return;
+	g_terminal.cursor.active = true;
+	timer_reschedule(&g_terminal.cursor.timer, 500);
 }
 
 static void handle_escape_char(char c)
@@ -619,12 +667,19 @@ static void cursor_callback(void* data)
 	{
 		struct term_cursor* cursor = &g_terminal.cursor;
 
-		if (cursor->visible) {
-			__hide_cursor();
+		if (cursor->active) {
+
+			if (cursor->visible) {
+				__hide_cursor();
+			} else {
+				__show_cursor(g_terminal.write_x, g_terminal.write_y);
+			}
 		} else {
-			__show_cursor(g_terminal.write_x, g_terminal.write_y);
+			__hide_cursor();
+		}
+
+		if (cursor->active) {
+			timer_reschedule(&cursor->timer, 500);
 		}
 	}
-
-	timer_reschedule(&g_terminal.cursor.timer, 500);
 }

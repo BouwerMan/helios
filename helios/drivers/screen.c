@@ -109,7 +109,18 @@ void screen_init(uint32_t fg_color, uint32_t bg_color)
 	sc.char_width = sc.font->width + CHAR_SPACING; // +1 for spacing
 	sc.char_height = sc.font->height;
 	sc.bytesperline = (sc.font->width + 7) / 8;
+	sc.fb_enabled = true;
 	spin_init(&sc.lock);
+}
+
+void screen_enable()
+{
+	sc.fb_enabled = true;
+}
+
+void screen_disable()
+{
+	sc.fb_enabled = false;
 }
 
 struct screen_info* get_screen_info()
@@ -119,7 +130,7 @@ struct screen_info* get_screen_info()
 
 void __screen_clear()
 {
-	// spinlock_acquire(&sc.lock);
+	if (sc.fb_enabled == false) return;
 
 	uintptr_t addr = (uintptr_t)sc.fb->address;
 	uint64_t char_height = sc.char_height;
@@ -158,6 +169,7 @@ void set_color(uint32_t fg, uint32_t bg)
  */
 void screen_putstring(const char* s)
 {
+	if (sc.fb_enabled == false) return;
 	while (*s) {
 		screen_putchar(*s);
 		s++;
@@ -176,6 +188,7 @@ void screen_putstring(const char* s)
  */
 void screen_putchar(char c)
 {
+	if (sc.fb_enabled == false) return;
 	spin_guard(&sc.lock);
 
 	switch (c) {
@@ -204,6 +217,7 @@ void screen_putchar(char c)
 
 void scroll()
 {
+	if (sc.fb_enabled == false) return;
 	uintptr_t addr = (uintptr_t)sc.fb->address;
 	uint64_t char_height = sc.char_height;
 	uint64_t pitch = sc.fb->pitch;
@@ -231,6 +245,7 @@ void scroll()
 
 void screen_putchar_at(uint16_t c, size_t cx, size_t cy, uint32_t fg, uint32_t bg)
 {
+	if (sc.fb_enabled == false) return;
 	/* unicode translation */
 	if (unicode != NULL) {
 		c = unicode[c];
@@ -249,6 +264,7 @@ void screen_putchar_at(uint16_t c, size_t cx, size_t cy, uint32_t fg, uint32_t b
 
 void screen_draw_cursor_at(size_t cx, size_t cy)
 {
+	if (sc.fb_enabled == false) return;
 	for (size_t y = 0; y < sc.char_height; y++) {
 		PIXEL* dst_line = (PIXEL*)(sc.fb_buffer + (cy * sc.char_height + y) * sc.scanline +
 					   (cx * sc.char_width) * sizeof(PIXEL));

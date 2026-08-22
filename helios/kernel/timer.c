@@ -67,11 +67,10 @@ struct timer* timer_create()
  */
 void timer_schedule(struct timer* timer, u64 delay_ms, timer_callback_t callback, void* data)
 {
+	spin_guard(&ts.lock);
 	if (timer->active) {
 		return; // Already scheduled
 	}
-
-	spin_guard(&ts.lock);
 
 	timer->expires_at = ts.current_ticks + millis_to_ticks(delay_ms);
 	timer->callback = callback;
@@ -94,8 +93,10 @@ void timer_schedule(struct timer* timer, u64 delay_ms, timer_callback_t callback
 
 void timer_cancel(struct timer* timer)
 {
-	(void)timer;
-	kassert(false, "Not implemented");
+	spin_guard(&ts.lock);
+	if (!timer->active) return;
+	timer->active = false;
+	list_del(&timer->list);
 }
 
 /**
@@ -111,8 +112,8 @@ void timer_reschedule(struct timer* timer, u64 new_delay_ms)
 
 void timer_destroy(struct timer* timer)
 {
-	(void)timer;
-	kassert(false, "Not implemented");
+	if (timer->active) timer_cancel(timer);
+	kfree(timer);
 }
 
 /**

@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <fcntl.h>
 #include <helios/fb.h>
 #include <stdio.h>
@@ -17,20 +18,26 @@ int main(void)
 	int res = ioctl(fd, FBIOGET_SCREENINFO, &info);
 	if (res < 0) {
 		perror("ioctl");
-		return 1;
+		return errno;
+	}
+	enum fb_mode mode = FB_MODE_GRAPHICS;
+	res = ioctl(fd, FBIOSET_MODE, &mode);
+	if (res < 0) {
+		perror("ioctl");
+		return errno;
 	}
 
-	printf("FBIOGET_SCREENINFO:\n");
-	printf("    Width: %u\n", info.width);
-	printf("    Height: %u\n", info.height);
-	printf("    Pitch: %u\n", info.pitch);
-	printf("    BPP: %u\n", info.bpp);
-	printf("    Format: %s\n", __get_fb_format_name(info.format));
-	printf("    Capabilities: 0x%x\n", info.caps);
-	printf("    VRAM Length: %zu\n", info.vram_len);
+	// printf("FBIOGET_SCREENINFO:\n");
+	// printf("    Width: %u\n", info.width);
+	// printf("    Height: %u\n", info.height);
+	// printf("    Pitch: %u\n", info.pitch);
+	// printf("    BPP: %u\n", info.bpp);
+	// printf("    Format: %s\n", __get_fb_format_name(info.format));
+	// printf("    Capabilities: 0x%x\n", info.caps);
+	// printf("    VRAM Length: %zu\n", info.vram_len);
 
 	if (info.format != FB_FMT_XRGB8888) {
-		printf("Somehow not the right format");
+		// printf("Somehow not the right format");
 		return 1;
 	}
 
@@ -62,6 +69,14 @@ int main(void)
 		row_start += info.pitch;
 	}
 
+	mode = FB_MODE_TEXT;
+	res = ioctl(fd, FBIOSET_MODE, &mode);
+	if (res < 0) {
+		perror("ioctl");
+		close(fd);
+		return errno;
+	}
 	close(fd);
+
 	return 0;
 }

@@ -20,6 +20,8 @@ struct fb_device {
 
 	u32 caps; // capabilities bitmask (FB_CAP_*)
 
+	enum fb_mode mode;
+
 	semaphore_t sem;
 	struct chrdev cdev;
 	struct file_ops* fops;
