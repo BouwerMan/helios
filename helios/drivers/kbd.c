@@ -144,10 +144,7 @@ static key_result_t handle_special_keys(unsigned char scancode)
 
 key_result_t process_scancode()
 {
-	unsigned char scancode = 0;
-	if (i8042_read_data(&scancode) < 0) {
-		return make_no_result();
-	}
+	unsigned char scancode = inb(I8042_DATA);
 
 	if (handle_modifier_keys(scancode)) {
 		return make_no_result();
