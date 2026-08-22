@@ -428,11 +428,13 @@ void term_pause_text()
 
 void term_pause_cursor()
 {
+	spin_guard(&g_terminal.lock);
 	g_terminal.cursor.active = false;
 }
 
 void term_resume_cursor()
 {
+	spin_guard(&g_terminal.lock);
 	// Early return so we don't spuriously reschedule
 	if (g_terminal.cursor.active == true) return;
 	g_terminal.cursor.active = true;
