@@ -124,33 +124,12 @@ void tty_init()
 	}
 }
 
-/**
- * @brief Registers a TTY device with the system.
- *
- * @param tty Pointer to the TTY device structure to register.
- *
- * Adds @p tty to the global list of available TTY devices, making it
- * accessible to the system and applications. The caller must initialize
- * the TTY structure before calling this function.
- */
 void register_tty(struct tty* tty)
 {
 	log_debug("Registered tty: '%s'", tty->name);
 	list_add(&g_ttys, &tty->list);
 }
 
-/**
- * @brief Writes data to a TTY device's output buffer.
- *
- * @param tty Pointer to the TTY device to write to.
- * @param buffer Source buffer containing the data to write.
- * @param count Number of bytes to write from the buffer.
- *
- * @return Number of bytes written to the output buffer.
- *
- * This fills the output ring buffer and queues work to drain it,
- * transmitting the data to the actual output device.
- */
 ssize_t __write_to_tty(struct tty* tty, const char* buffer, size_t count)
 {
 	sem_wait(&tty->write_lock);
@@ -166,15 +145,6 @@ ssize_t __write_to_tty(struct tty* tty, const char* buffer, size_t count)
 	return written;
 }
 
-/**
- * @brief Writes data to a TTY device through the VFS interface.
- *
- * @param file VFS file handle with the TTY device in private_data.
- * @param buffer Source buffer containing the data to write.
- * @param count Number of bytes to write from the buffer.
- *
- * @return Number of bytes written to the TTY.
- */
 ssize_t tty_write(struct vfs_file* file, const char* buffer, size_t count, off_t* offset)
 {
 	(void)offset;
@@ -269,15 +239,6 @@ struct tty* find_tty_by_name(const char* name)
 	return nullptr;
 }
 
-/**
- * @brief Drains a TTY device's output buffer as a work item.
- *
- * @param data Void pointer to the TTY device structure to drain.
- *
- * Checks that the TTY has a valid driver with a write function, then calls
- * the driver-specific write implementation, e.g. serial_write or
- * vconsole_write, to transmit the buffered data to the output device.
- */
 void tty_drain_output_buffer(void* data)
 {
 	struct tty* tty_to_drain = (struct tty*)data;

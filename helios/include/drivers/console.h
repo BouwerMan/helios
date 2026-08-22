@@ -19,6 +19,7 @@ void console_init();
  * @param file VFS file handle. Unused.
  * @param buffer Source buffer containing the data to write.
  * @param count Number of bytes to write from the buffer.
+ * @param offset Unused. Consoles do not support seeking.
  */
 ssize_t console_write(struct vfs_file* file, const char* buffer, size_t count, off_t* offset);
 

@@ -225,20 +225,6 @@ size_t buddy_free_page_count()
 	return count;
 }
 
-/**
- * @brief Allocates a contiguous block of memory pages.
- *
- * @param flags Allocation flags specifying memory constraints.
- * @param order Number of pages to allocate as a power of two (2^order).
- *
- * This function attempts to allocate a block of memory pages from the
- * specified memory zone based on the provided flags. It iterates through
- * memory zones starting from the one specified by the flags and attempts
- * to allocate the requested pages. If successful, it returns a pointer
- * to the allocated page structure; otherwise, it returns NULL.
- *
- * @return Pointer to the first page in the allocated block, or NULL on failure.
- */
 [[nodiscard]]
 struct page* alloc_pages(aflags_t flags, size_t order)
 {
@@ -287,23 +273,6 @@ struct page* alloc_zeroed_page(aflags_t flags)
 	return pg;
 }
 
-/**
- * @brief Allocates a contiguous block of pages and returns their virtual address.
- *
- * This function attempts to allocate a block of contiguous memory pages based on
- * the specified allocation flags and order. The order determines the size of the
- * allocation as a power of two (2^order). If the allocation fails, an error is
- * logged, and the function returns 0.
- *
- * @param flags Allocation flags specifying memory constraints.
- * @param order Number of pages to allocate as a power of two (2^order).
- *
- * @note The allocated pages are not zeroed. The caller is responsible for
- *       initializing the memory if required.
- *
- * @return The virtual address of the first page in the allocated block, or 0
- *         if the allocation fails.
- */
 void* __get_free_pages(aflags_t flags, size_t order)
 {
 	struct page* pg = alloc_pages(flags, order);
@@ -316,18 +285,6 @@ void* __get_free_pages(aflags_t flags, size_t order)
 	return (void*)PHYS_TO_HHDM(page_phys);
 }
 
-/**
- * @brief Allocates a contiguous block of pages, zeros them, and returns their virtual address.
- *
- * This function allocates a block of contiguous memory pages based on the specified
- * allocation flags and the number of pages requested. The allocated memory is zeroed
- * before being returned to the caller. If the allocation fails, the function returns 0.
- *
- * @param flags Allocation flags specifying memory constraints.
- * @param pages Number of pages to allocate.
- *
- * @return The virtual address of the first zeroed page, or 0 on failure.
- */
 void* get_free_pages(aflags_t flags, size_t pages)
 {
 	size_t rounded_size = roundup_pow_of_two(pages);
@@ -340,19 +297,6 @@ void* get_free_pages(aflags_t flags, size_t pages)
 	return page_virt;
 }
 
-/**
- * @brief Frees a block of contiguous pages.
- *
- * This function releases a previously allocated block of contiguous memory pages
- * back to the memory allocator. The block is identified by the starting page and
- * the order, which determines the size of the block as a power of two (2^order).
- *
- * @param page Pointer to the starting page of the block to be freed.
- * @param order The order of the block to be freed (size is 2^order pages).
- *
- * @note If the page is null or belongs to an invalid memory zone, the function
- *       logs an error and returns without performing any action.
- */
 void __free_pages(struct page* page, size_t order)
 {
 	if (!page) return;
@@ -381,20 +325,6 @@ void __free_pages(struct page* page, size_t order)
 	free_pages_core(regions[zone], page, order);
 }
 
-/**
- * @brief Frees a specified number of pages starting at a given address.
- *
- * @param addr The virtual address of the first page to free.
- * @param pages The number of pages to free.
- *
- * This function releases memory pages back to the system. It calculates
- * the physical address corresponding to the virtual address, determines
- * the page structure, and computes the order of pages to free based on
- * the rounded size. The pages are then freed using the __free_pages function.
- *
- * If the provided address is NULL, the function returns immediately without
- * performing any operations.
- */
 void free_pages(void* addr, size_t pages)
 {
 	if (!addr) return;
@@ -431,20 +361,6 @@ static void allocator_init(struct buddy_allocator* allocator)
 	allocator->min_order = 0;
 }
 
-/**
- * @brief Recursively splits a memory block until it reaches the target order.
- *
- * @param allocator Pointer to the buddy allocator structure.
- * @param page Pointer to the page representing the current memory block.
- * @param current_order The current order of the memory block.
- * @param target_order The desired order to split the block down to.
- *
- * This function recursively splits a memory block into smaller blocks until the block
- * reaches the desired order. It updates the state and order of the parent and child blocks,
- * adds the right child to the free list, and always recurses with the left child.
- *
- * @return A pointer to the page representing the allocated block at the target order.
- */
 static struct page*
 split_until_order(struct buddy_allocator* allocator, struct page* page, size_t current_order, size_t target_order)
 {
@@ -489,20 +405,6 @@ split_until_order(struct buddy_allocator* allocator, struct page* page, size_t c
 	return split_until_order(allocator, left, left->order, target_order);
 }
 
-/**
- * @brief Allocates pages from the buddy allocator.
- *
- * @param allocator Pointer to the buddy allocator structure.
- * @param flags Allocation flags (currently unused).
- * @param order The order of the pages to allocate.
- *
- * This function attempts to allocate pages of the specified order from the buddy allocator.
- * It iterates through the free lists starting from the requested order up to the maximum order.
- * If a free block is found, it is either allocated directly or split recursively to match the
- * desired order. Invalid blocks are removed from the free list to maintain consistency.
- *
- * @return A pointer to the allocated page structure, or NULL if allocation fails.
- */
 static struct page* alloc_pages_core(struct buddy_allocator* allocator, aflags_t flags, size_t order)
 {
 	(void)flags;
@@ -560,23 +462,6 @@ static struct page* alloc_pages_core(struct buddy_allocator* allocator, aflags_t
 	return nullptr;
 }
 
-/**
- * @brief Coalesces free memory blocks into larger blocks.
- *
- * @param allocator Pointer to the buddy allocator structure.
- * @param page Pointer to the page structure representing the current block.
- * @param order The order of the current block.
- *
- * This function attempts to combine adjacent free blocks of the same order
- * into a larger block of the next order. It recursively continues this process
- * until no further coalescing is possible or the maximum order is reached.
- *
- * Steps:
- * 1. Mark the current block as free and add it to the free list.
- * 2. Check if the buddy block is free and of the same order.
- * 3. If coalescing is possible, remove both blocks from the free list,
- *    mark them as invalid, and recursively combine them into a parent block.
- */
 static void combine_blocks(struct buddy_allocator* allocator, struct page* page, size_t order)
 {
 	// Mark the block as free and initialize its state
@@ -613,17 +498,6 @@ static void combine_blocks(struct buddy_allocator* allocator, struct page* page,
 	}
 }
 
-/**
- * @brief Frees pages back to the buddy allocator.
- *
- * @param allocator Pointer to the buddy allocator structure.
- * @param page Pointer to the page structure representing the block to free.
- * @param order The order of the block being freed.
- *
- * This function frees a block of memory back to the buddy allocator. It acquires
- * the allocator's spinlock to ensure thread safety, combines adjacent free blocks
- * to maintain the buddy system's structure, and then releases the spinlock.
- */
 static void free_pages_core(struct buddy_allocator* allocator, struct page* page, size_t order)
 {
 	if (page->flags & PG_BUDDY) {

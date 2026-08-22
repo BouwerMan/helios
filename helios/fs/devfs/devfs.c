@@ -1,5 +1,5 @@
 /**
- * @file drivers/fs/devfs.c
+ * @file fs/devfs/devfs.c
  *
  * Copyright (C) 2025  Dylan Parks
  *
@@ -473,7 +473,7 @@ int devnode_open(struct vfs_inode* inode, struct vfs_file* file)
  *
  * @return 0 on success, or -ENOENT if not found.
  *
- * @note Caller must hold DEVFS_SB_INFO(@sb)->lock. Does not sleep.
+ * @note Caller must hold DEVFS_SB_INFO(sb)->lock. Does not sleep.
  */
 static int __resolve_name(struct vfs_superblock* sb,
 			  const char* name,

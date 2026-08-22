@@ -1,5 +1,5 @@
 /**
- * @file drivers/fs/vfs.c
+ * @file fs/vfs.c
  *
  * Copyright (C) 2026 Dylan Parks
  *

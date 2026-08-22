@@ -1,5 +1,5 @@
 /**
- * @file kernel/screen.c
+ * @file drivers/screen.c
  *
  * Copyright (C) 2025  Dylan Parks
  *
@@ -61,10 +61,11 @@ struct screen_info sc = {
  *
  * @param glyph_row     Pointer to the packed glyph row data (usually one row of the bitmap).
  * @param dst           Pointer to the framebuffer scanline to write to (one PIXEL per pixel).
- * @param width         Actual number of pixels to draw (may be < bytesperline * 8).
- * @param bytesperline  Number of bytes per glyph row in memory (usually (width + 7) / 8).
  * @param fg            Foreground color.
  * @param bg            Background color.
+ *
+ * @note Reads the glyph width (sc.char_width) and bytes per row
+ * (sc.bytesperline) from the global screen_info.
  */
 static inline void draw_glyph_scanline(const uint8_t* glyph_row, PIXEL* dst, uint32_t fg, uint32_t bg);
 
@@ -73,10 +74,11 @@ static inline void draw_glyph_scanline(const uint8_t* glyph_row, PIXEL* dst, uin
  *
  * @param glyph         Pointer to the glyph bitmap data (packed 1bpp format).
  * @param offset        Byte offset into the framebuffer where the top-left pixel of the glyph should be drawn.
- * @param width         Width of the glyph in pixels.
- * @param height        Height of the glyph in pixels.
  * @param fg            Foreground color (used for set bits).
  * @param bg            Background color (used for cleared bits).
+ *
+ * @note Reads the glyph height (sc.char_height) from the global
+ * screen_info.
  */
 static inline void draw_glyph(uint8_t* glyph, size_t offset, uint32_t fg, uint32_t bg);
 
@@ -165,7 +167,7 @@ void screen_putstring(const char* s)
 /**
  * @brief Writes a character to the screen at the current cursor position.
  *
- * This function handles special characters such as newline ('\n') and backspace ('\b').
+ * This function handles special characters such as newline ('\n') and backspace (`'\b'`).
  * For regular characters, it renders them at the current cursor position and advances
  * the cursor. If the cursor reaches the end of a line or the bottom of the screen,
  * it wraps to the next line or scrolls the screen, respectively.

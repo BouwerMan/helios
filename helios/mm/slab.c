@@ -1,5 +1,5 @@
 /**
- * @file kernel/memory/slab.c
+ * @file mm/slab.c
  *
  * Copyright (C) 2025  Dylan Parks
  *
@@ -147,24 +147,6 @@ static bool check_redzone(const void* obj_start, size_t size);
  * Public Function Definitions
  *******************************************************************************/
 
-/**
- * @brief Initialize a slab cache for fixed-size object allocations.
- *
- * This function sets up the metadata and free-list structures needed to manage
- * fixed-size object allocations. It ensures proper alignment, calculates the
- * number of objects per slab, and initializes the slab cache's internal lists.
- * Optional constructor and destructor callbacks can be registered for object
- * initialization and cleanup.
- *
- * @param cache         Pointer to an uninitialized slab_cache structure to set up.
- * @param name          Human-readable identifier for this cache (max length MAX_CACHE_NAME_LEN).
- * @param object_size   Desired size of each object; will be rounded up to object_align.
- * @param object_align  Alignment boundary for each object; must be power of two. Defaults to L1_CACHE_SIZE if 0 is
- * passed through.
- * @param constructor   Optional callback invoked on each object when a new slab is populated.
- * @param destructor    Optional callback invoked on each object before it’s recycled or cache is destroyed.
- * @return              0 on success, or a negative error code on failure.
- */
 [[nodiscard]]
 int slab_cache_init(struct slab_cache* cache,
 		    const char* name,
@@ -260,21 +242,6 @@ int slab_cache_init(struct slab_cache* cache,
 	return 0;
 }
 
-/**
- * @brief Allocates an object from the specified slab cache.
- *
- * This function attempts to allocate an object from a slab cache. It first tries
- * to allocate from a partially filled slab. If no partially filled slabs are
- * available, it attempts to allocate from an empty slab or grow the cache by
- * creating a new slab. If all attempts fail, the function returns NULL.
- *
- * The function ensures thread safety by acquiring a spinlock during the allocation
- * process. If a constructor is defined for the cache, it is invoked on the allocated
- * object before returning it to the caller.
- *
- * @param cache Pointer to the slab cache from which to allocate an object.
- * @return Pointer to the allocated object, or NULL if allocation fails.
- */
 [[nodiscard, gnu::malloc]]
 void* slab_alloc(struct slab_cache* cache)
 {
@@ -340,23 +307,6 @@ retry:
 	return obj_start;
 }
 
-/**
- * @brief Return an object back to its slab cache.
- *
- * This function deallocates an object previously allocated by `slab_alloc` and
- * returns it to the appropriate slab in the cache. It identifies the parent slab,
- * optionally invokes the destructor, updates the slab's free-list and free-count,
- * and moves the slab between the full, partial, and empty lists as its occupancy
- * changes. If a slab becomes completely empty, it may be freed back to the page
- * allocator based on the cache's policy.
- *
- * The function ensures thread safety by acquiring a spinlock during the deallocation
- * process. Debugging features, such as redzone checks and memory poisoning, are
- * optionally enabled with the `SLAB_DEBUG` flag.
- *
- * @param cache  Pointer to the slab_cache managing the object.
- * @param object Pointer to the object to free; must have originated from this cache.
- */
 void slab_free(struct slab_cache* cache, void* object)
 {
 	if (!cache) {
@@ -428,19 +378,6 @@ void slab_free(struct slab_cache* cache, void* object)
 		  cache->objects_per_slab);
 }
 
-/**
- * @brief Destroy a slab cache and release all its memory.
- *
- * This function walks through all slabs in the empty, partial, and full lists,
- * invoking the destructor on any remaining live objects. It returns each slab's
- * pages back to the underlying physical memory allocator and clears the cache's
- * metadata so it can be safely reinitialized or discarded.
- *
- * The function ensures thread safety by acquiring a spinlock during the destruction
- * process. It also logs debug information about the destruction process.
- *
- * @param cache Pointer to the slab_cache to destroy. Must be a valid, initialized cache.
- */
 void slab_cache_destroy(struct slab_cache* cache)
 {
 	if (!cache) {
@@ -483,21 +420,6 @@ void slab_cache_destroy(struct slab_cache* cache)
 	memset(cache, 0, sizeof(struct slab_cache));
 }
 
-/**
- * @brief Purge all corrupt slabs from the quarantine list of a slab cache.
- *
- * This function iterates through the quarantine list of a slab cache and destroys
- * all slabs marked as corrupt. It updates the cache's metadata to reflect the
- * removal of these slabs and logs detailed debug information during the process.
- *
- * The function performs the following steps:
- * 1. Iterates through the quarantine list of the cache.
- * 2. Destroys each slab in the quarantine list using `_slab_destroy`.
- * 3. Updates the `num_quarantine` and `total_objects` counters in the cache.
- * 4. Logs debug information about the purge process.
- *
- * @param cache Pointer to the slab_cache whose corrupt slabs are to be purged.
- */
 void slab_cache_purge_corrupt(struct slab_cache* cache)
 {
 	log_debug("Starting purge of corrupt slabs in cache '%s'", cache->name);
@@ -521,15 +443,6 @@ void slab_cache_purge_corrupt(struct slab_cache* cache)
 	log_debug("Completed purge of corrupt slabs in cache '%s'", cache->name);
 }
 
-/**
- * @brief Dump statistics of a slab cache for debugging purposes.
- *
- * This function logs detailed information about the state of a slab cache,
- * including its name, object size, alignment, slab size, and usage statistics.
- *
- * @param cache Pointer to the slab_cache whose statistics are to be dumped.
- *              If the cache is NULL or uninitialized, an error is logged.
- */
 void slab_dump_stats(struct slab_cache* cache)
 {
 	if (!cache || cache->flags == CACHE_UNINITIALIZED) {

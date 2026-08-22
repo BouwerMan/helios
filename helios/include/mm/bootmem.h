@@ -12,8 +12,6 @@
 
 /**
  * @brief Initializes the bootmem memmory manager and mem_map.
- *
- * @param mmap Pointer to the Limine memory map response structure.
  */
 void bootmem_init();
 

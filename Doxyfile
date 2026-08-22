@@ -24,6 +24,17 @@ FILE_PATTERNS           = *.c *.h *.dox
 EXCLUDE_PATTERNS        = */build/*
 USE_MDFILE_AS_MAINPAGE  = README.md
 
+# Vendored third-party code, documented upstream, not part of HeliOS's own
+# API surface. Their adaptation/glue layers (printf_config.h,
+# liballoc_hooks.c, kmalloc.h) are project code and stay included.
+EXCLUDE                 = helios/include/lib/printf.h \
+                          helios/lib/printf.c \
+                          libc/include/printf.h \
+                          libc/stdio/printf.c \
+                          libc/include/internal/liballoc.h \
+                          helios/mm/liballoc.c \
+                          libc/stdlib/liballoc.c
+
 #---------------------------------------------------------------------------
 # Build / extraction
 #---------------------------------------------------------------------------

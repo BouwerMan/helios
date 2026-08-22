@@ -134,14 +134,6 @@ static inline void __write_debugcon(char a)
 	outb(0xE9, (u8)a);
 }
 
-/**
- * @brief Writes a character to the serial port.
- *
- * This function waits until the serial port is ready to transmit data,
- * then sends the specified character.
- *
- * @param a The character to write to the serial port.
- */
 void write_serial(char a)
 {
 #ifdef DEBUGCON
@@ -151,14 +143,6 @@ void write_serial(char a)
 #endif /* DEBUGCON */
 }
 
-/**
- * @brief Writes a null-terminated string to the serial port.
- *
- * This function iterates through each character in the provided string
- * and writes it to the serial port using `write_serial`.
- *
- * @param s The null-terminated string to write to the serial port.
- */
 void write_serial_string(const char* s)
 {
 	while (*s) {
@@ -184,16 +168,6 @@ void write_serial_n(const char* s, size_t len)
 	}
 }
 
-/**
- * @brief Drains the TTY output buffer to the serial port.
- *
- * @param tty Pointer to the TTY device whose output buffer to drain.
- *
- * @return Number of characters written to the serial port.
- *
- * @note This function is typically called as a work item to process
- * buffered output. It holds the TTY's write_lock semaphore.
- */
 ssize_t serial_tty_write(struct tty* tty)
 {
 	struct ring_buffer* rb = &tty->output_buffer;

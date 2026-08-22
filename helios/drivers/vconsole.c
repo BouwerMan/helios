@@ -85,16 +85,6 @@ void vconsole_tty_init()
 	register_tty(tty);
 }
 
-/**
- * @brief Drains the TTY output buffer to the VGA console.
- *
- * @param tty Pointer to the TTY device whose output buffer to drain.
- *
- * @return Number of characters written to the console.
- *
- * @note This function is typically called as a work item to process
- * buffered output. It holds the TTY's write_lock semaphore.
- */
 ssize_t vconsole_tty_write(struct tty* tty)
 {
 	struct ring_buffer* rb = &tty->output_buffer;

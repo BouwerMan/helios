@@ -66,6 +66,7 @@ void register_tty(struct tty* tty);
  * @param file VFS file handle with the TTY device in private_data.
  * @param buffer Source buffer containing the data to write.
  * @param count Number of bytes to write from the buffer.
+ * @param offset Unused. TTYs do not support seeking.
  *
  * @return Number of bytes written to the TTY.
  */

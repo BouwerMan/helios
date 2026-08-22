@@ -1,5 +1,5 @@
 /**
- * @file util/ht.c
+ * @file lib/ht.c
  * @brief Implementation of a hash table for the HeliOS project.
  *
  * This file contains the implementation of a hash table, including functions
@@ -10,7 +10,7 @@
  *
  * @author Dylan Parks
  * @date 2025-04-05
- * @license GPL-3.0
+ * License: GPL-3.0
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -282,6 +282,7 @@ bool compare_key(const void* key1, const void* key2)
  * @param value     Pointer to the value to associate with the key.
  * @param plength   Pointer to the current length of the hash table, or NULL if
  *                  not needed.
+ * @param ops       Hash, compare, and destructor callbacks for this table.
  *
  * @return Pointer to the key in the hash table,
  *         or NULL if memory allocation fails.

@@ -143,18 +143,6 @@ static inline size_t get_bit_offset(uintptr_t phys_addr)
  * Public Function Definitions
  *******************************************************************************/
 
-/**
- * @brief Initializes the bootmem memmory manager and mem_map.
- *
- * @param mmap Pointer to the Limine memory map response structure.
- *
- * This function performs the following steps:
- * 1. Calculates the total usable memory and the highest physical address.
- * 2. Finds a suitable location for the PMM bitmap and maps it to virtual memory.
- * 3. Initializes the bitmap, marking all pages as allocated.
- * 4. Marks usable pages as free in the bitmap.
- * 5. Sets up the memory map structure to track page states.
- */
 void bootmem_init()
 {
 	struct limine_memmap_response* mmap = memmap_request.response;
@@ -338,15 +326,6 @@ void* bootmem_alloc_page(void)
 	return NULL;
 }
 
-/**
- * @brief Frees a single page of physical memory.
- *
- * This function marks the specified physical address as free in the bitmap
- * and increments the count of free pages. If the provided address is NULL,
- * the function returns immediately without performing any operation.
- *
- * @param addr A pointer to the physical address of the page to be freed.
- */
 void bootmem_free_page(void* addr)
 {
 	if (!boot_bitmap) {
@@ -363,18 +342,6 @@ void bootmem_free_page(void* addr)
 	free_page_count++;
 }
 
-/**
- * @brief Allocates a contiguous block of physical memory pages.
- *
- * This function searches the bitmap for a contiguous range of free pages
- * that matches the requested count. If such a range is found, it marks
- * the pages as allocated in the bitmap and returns the starting address
- * of the allocated block. If no suitable range is found, it returns NULL.
- *
- * @param count The number of contiguous pages to allocate. Must be greater than 0.
- * @return A pointer to the starting address of the allocated block, or NULL if
- *         no suitable range is found.
- */
 void* bootmem_alloc_contiguous(size_t count)
 {
 	if (!boot_bitmap) {
@@ -416,17 +383,6 @@ allocate_page:
 	return (void*)(cont_start * PAGE_SIZE);
 }
 
-/**
- * @brief Frees a contiguous block of physical memory pages.
- *
- * This function marks a range of pages as free in the bitmap, starting
- * from the given address and spanning the specified count of pages.
- * It ensures that the range being freed is within valid bounds and
- * updates the free page count accordingly.
- *
- * @param addr The starting address of the block to be freed. Must be page-aligned.
- * @param count The number of contiguous pages to free. Must be greater than 0.
- */
 void bootmem_free_contiguous(void* addr, size_t count)
 {
 	if (!boot_bitmap) {

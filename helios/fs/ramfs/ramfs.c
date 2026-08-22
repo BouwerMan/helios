@@ -1,5 +1,5 @@
 /**
- * @file drivers/fs/ramfs.c
+ * @file fs/ramfs/ramfs.c
  *
  * Copyright (C) 2025  Dylan Parks
  *

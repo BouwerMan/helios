@@ -41,6 +41,11 @@ void write_serial_string(const char* s);
  * @brief Drains the TTY output buffer to the serial port.
  *
  * @param tty Pointer to the TTY device whose output buffer to drain.
+ *
+ * @return Number of characters written to the serial port.
+ *
+ * @note Typically called as a work item to process buffered output.
+ * Holds the TTY's write_lock semaphore.
  */
 ssize_t serial_tty_write(struct tty* tty);
 

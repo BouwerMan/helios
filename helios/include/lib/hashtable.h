@@ -57,6 +57,7 @@ constexpr u64 GOLDEN_RATIO_64 = 0x61C8864680B583EB;
 /**
  * @brief Computes a 32-bit hash of a 32-bit value using multiplicative hashing.
  * @param val The 32-bit input value to hash.
+ * @param bits Number of hash bits to keep. The result fits in this many bits.
  * @return A 32-bit hash value.
  */
 [[gnu::const, gnu::always_inline]]

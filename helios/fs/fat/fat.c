@@ -1,5 +1,5 @@
 /**
- * @file drivers/fs/fat.c
+ * @file fs/fat/fat.c
  *
  * Copyright (C) 2025  Dylan Parks
  *
